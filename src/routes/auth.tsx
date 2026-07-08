@@ -1,0 +1,244 @@
+import { createFileRoute, useNavigate, useSearch, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { z } from "zod";
+import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
+import { useAuth } from "@/lib/auth";
+import { useApp } from "@/lib/i18n";
+import { Loader2, Mail, Lock, Phone, ArrowRight } from "lucide-react";
+import { toast } from "sonner";
+
+const searchSchema = z.object({ redirect: z.string().optional() });
+
+export const Route = createFileRoute("/auth")({
+  validateSearch: searchSchema,
+  head: () => ({
+    meta: [
+      { title: "登录 / Sign In — SinoCargo" },
+      { name: "description", content: "Sign in or create your SinoCargo account to manage orders and track shipments." },
+    ],
+  }),
+  component: AuthPage,
+});
+
+type Mode = "signin" | "signup";
+type Method = "email" | "phone";
+
+function AuthPage() {
+  const { lang } = useApp();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const search = useSearch({ from: "/auth" });
+  const [mode, setMode] = useState<Mode>("signin");
+  const [method, setMethod] = useState<Method>("email");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (user) navigate({ to: search.redirect || "/account" });
+  }, [user, navigate, search.redirect]);
+
+  const isZh = lang === "zh";
+  const tr = (zh: string, en: string) => (isZh ? zh : en);
+
+  const handleEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      if (mode === "signup") {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: { full_name: fullName },
+          },
+        });
+        if (error) throw error;
+        toast.success(tr("注册成功！请查收验证邮件", "Account created — check your email to verify"));
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        toast.success(tr("登录成功", "Signed in"));
+      }
+    } catch (err: any) {
+      toast.error(err.message ?? tr("操作失败", "Failed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setBusy(true);
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+      if (result.error) throw new Error(result.error.message || "Google sign-in failed");
+      if (result.redirected) return;
+    } catch (err: any) {
+      toast.error(err.message ?? "Google sign-in failed");
+      setBusy(false);
+    }
+  };
+
+  const handlePhoneSendOtp = async () => {
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({ phone });
+      if (error) throw error;
+      setOtpSent(true);
+      toast.success(tr("验证码已发送", "Code sent"));
+    } catch (err: any) {
+      toast.error(err.message ?? tr("发送失败（管理员需配置 SMS 服务）", "Send failed (admin must configure SMS provider)"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handlePhoneVerify = async () => {
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({ phone, token: otp, type: "sms" });
+      if (error) throw error;
+      toast.success(tr("登录成功", "Signed in"));
+    } catch (err: any) {
+      toast.error(err.message ?? tr("验证失败", "Verification failed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="min-h-[80vh] bg-gradient-to-br from-background via-accent/30 to-background px-4 py-12">
+      <div className="mx-auto w-full max-w-md">
+        <Link to="/" className="mb-8 flex items-center justify-center gap-2 font-display text-xl font-bold">
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand-gradient text-brand-foreground shadow-glow">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M3 12h13l-3-3M16 12l-3 3M19 6l2 6-2 6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          SinoCargo
+        </Link>
+
+        <div className="rounded-3xl border border-border bg-surface p-6 shadow-elevated sm:p-8">
+          <div className="mb-6 grid grid-cols-2 gap-1 rounded-full bg-accent p-1 text-sm font-medium">
+            <button
+              onClick={() => setMode("signin")}
+              className={`rounded-full py-2 transition ${mode === "signin" ? "bg-background text-foreground shadow-sm" : "text-ink-soft"}`}
+            >{tr("登录", "Sign in")}</button>
+            <button
+              onClick={() => setMode("signup")}
+              className={`rounded-full py-2 transition ${mode === "signup" ? "bg-background text-foreground shadow-sm" : "text-ink-soft"}`}
+            >{tr("注册", "Sign up")}</button>
+          </div>
+
+          <button
+            onClick={handleGoogle}
+            disabled={busy}
+            className="mb-3 flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium transition hover:bg-accent disabled:opacity-50"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.3 35.1 26.8 36 24 36c-5.2 0-9.6-3.1-11.3-7.5l-6.5 5C9.6 39.6 16.3 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.3 4.1-4.1 5.5l6.2 5.2c-.4.4 6.6-4.8 6.6-14.7 0-1.3-.1-2.4-.4-3.5z"/></svg>
+            {tr("使用 Google 继续", "Continue with Google")}
+          </button>
+
+          <button
+            onClick={() => toast.info(tr("微信登录即将开放：管理员需在微信开放平台申请网页应用并填入 AppID/AppSecret", "WeChat sign-in coming soon — admin must register a WeChat Open Platform web app and add AppID/AppSecret"))}
+            disabled={busy}
+            className="mb-3 flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium transition hover:bg-accent disabled:opacity-50"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="#07C160"><path d="M8.5 4C4.36 4 1 6.91 1 10.5c0 2.08 1.13 3.92 2.88 5.12L3 18l2.5-1.32c.79.21 1.63.32 2.5.32.2 0 .4-.01.6-.02-.06-.32-.1-.65-.1-.98 0-3.31 3.13-6 7-6 .27 0 .53.01.79.04C15.92 6.97 12.55 4 8.5 4zM6 8.5a1 1 0 110 2 1 1 0 010-2zm5 0a1 1 0 110 2 1 1 0 010-2zM16 10c-3.31 0-6 2.24-6 5s2.69 5 6 5c.74 0 1.45-.11 2.1-.32L20 21l-.5-1.8C21.07 18.27 22 16.74 22 15c0-2.76-2.69-5-6-5zm-2 4a.75.75 0 110 1.5.75.75 0 010-1.5zm4 0a.75.75 0 110 1.5.75.75 0 010-1.5z"/></svg>
+            {tr("使用微信登录", "Continue with WeChat")}
+          </button>
+
+          <div className="mb-5 grid grid-cols-2 gap-1 rounded-lg bg-accent/60 p-1 text-xs font-medium">
+            <button
+              onClick={() => setMethod("email")}
+              className={`rounded-md py-1.5 transition ${method === "email" ? "bg-background text-foreground" : "text-ink-soft"}`}
+            ><Mail className="mr-1 inline h-3 w-3" />{tr("邮箱", "Email")}</button>
+            <button
+              onClick={() => setMethod("phone")}
+              className={`rounded-md py-1.5 transition ${method === "phone" ? "bg-background text-foreground" : "text-ink-soft"}`}
+            ><Phone className="mr-1 inline h-3 w-3" />{tr("手机号", "Phone")}</button>
+          </div>
+
+          {method === "email" ? (
+            <form onSubmit={handleEmail} className="space-y-3">
+              {mode === "signup" && (
+                <input
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder={tr("姓名", "Full name")}
+                  className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+                />
+              )}
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
+                <input
+                  required type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  placeholder={tr("邮箱", "Email")}
+                  className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+                />
+              </div>
+              <div className="relative">
+                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
+                <input
+                  required type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
+                  placeholder={tr("密码（至少6位）", "Password (min 6)")}
+                  className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+                />
+              </div>
+              <button
+                type="submit" disabled={busy}
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-cta-gradient text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50"
+              >
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                {mode === "signin" ? tr("登录", "Sign in") : tr("创建账户", "Create account")}
+              </button>
+            </form>
+          ) : (
+            <div className="space-y-3">
+              <div className="relative">
+                <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
+                <input
+                  type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+                  placeholder={tr("手机号（含国家码，如 +1...）", "Phone (with country code, e.g. +1...)")}
+                  className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+                />
+              </div>
+              {otpSent && (
+                <input
+                  value={otp} onChange={(e) => setOtp(e.target.value)} inputMode="numeric"
+                  placeholder={tr("6 位验证码", "6-digit code")}
+                  className="h-11 w-full rounded-xl border border-border bg-background px-4 text-center text-lg tracking-[0.5em] outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+                />
+              )}
+              <button
+                onClick={otpSent ? handlePhoneVerify : handlePhoneSendOtp}
+                disabled={busy || !phone}
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-cta-gradient text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50"
+              >
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                {otpSent ? tr("验证并登录", "Verify & sign in") : tr("发送验证码", "Send code")}
+              </button>
+              <p className="text-center text-[11px] text-ink-soft">
+                {tr("⚠️ 短信登录需管理员先在后台配置 SMS 服务商", "⚠️ SMS sign-in requires an SMS provider configured by admin")}
+              </p>
+            </div>
+          )}
+
+          <p className="mt-6 text-center text-xs text-ink-soft">
+            {tr("继续即表示同意我们的", "By continuing you agree to our")}{" "}
+            <Link to="/about" className="underline">{tr("服务条款", "Terms")}</Link>
+            {" · "}
+            <Link to="/contact" className="underline">{tr("帮助", "Help")}</Link>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
