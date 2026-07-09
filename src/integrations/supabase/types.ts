@@ -1272,6 +1272,54 @@ export type Database = {
         }
         Relationships: []
       }
+      my_items: {
+        Row: {
+          created_at: string
+          declared_value_cad: number
+          gst_rate: number
+          hs_code: string
+          id: string
+          inner_qty: number | null
+          mfn_rate: number
+          name: string
+          sima_involved: boolean
+          sku: string | null
+          unit: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          declared_value_cad?: number
+          gst_rate?: number
+          hs_code: string
+          id?: string
+          inner_qty?: number | null
+          mfn_rate?: number
+          name: string
+          sima_involved?: boolean
+          sku?: string | null
+          unit?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          declared_value_cad?: number
+          gst_rate?: number
+          hs_code?: string
+          id?: string
+          inner_qty?: number | null
+          mfn_rate?: number
+          name?: string
+          sima_involved?: boolean
+          sku?: string | null
+          unit?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       offline_payments: {
         Row: {
           amount_cad: number
@@ -2076,6 +2124,7 @@ export type Database = {
           reg_postal_code: string | null
           reg_province: string | null
           updated_at: string
+          username: string | null
           vip_level: Database["public"]["Enums"]["vip_level"]
         }
         Insert: {
@@ -2099,6 +2148,7 @@ export type Database = {
           reg_postal_code?: string | null
           reg_province?: string | null
           updated_at?: string
+          username?: string | null
           vip_level?: Database["public"]["Enums"]["vip_level"]
         }
         Update: {
@@ -2122,6 +2172,7 @@ export type Database = {
           reg_postal_code?: string | null
           reg_province?: string | null
           updated_at?: string
+          username?: string | null
           vip_level?: Database["public"]["Enums"]["vip_level"]
         }
         Relationships: []
@@ -2999,6 +3050,14 @@ export type Database = {
         }
         Returns: string
       }
+      check_username_available: {
+        Args: { p_username: string }
+        Returns: boolean
+      }
+      resolve_login_email: {
+        Args: { p_identifier: string }
+        Returns: string
+      }
       admin_change_route: {
         Args: {
           _entity_id: string
@@ -3011,6 +3070,17 @@ export type Database = {
       }
       admin_ship_shop_order: { Args: { _order_id: string }; Returns: Json }
       batch_payment_status: { Args: { _batch_id: string }; Returns: string }
+      resolve_hs_code_rates: {
+        Args: {
+          p_gst_rate: number
+          p_hs_code: string
+          p_mfn_rate: number
+          p_name_zh: string
+          p_sima_involved: boolean
+          p_unit: string
+        }
+        Returns: Json
+      }
       carton_payment_status: { Args: { _carton_id: string }; Returns: string }
       find_by_any_no: { Args: { _input: string }; Returns: Json }
       gen_customer_code: { Args: never; Returns: string }

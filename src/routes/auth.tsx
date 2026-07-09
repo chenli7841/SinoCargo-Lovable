@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/lib/auth";
 import { useApp } from "@/lib/i18n";
-import { Loader2, Mail, Lock, Phone, ArrowRight } from "lucide-react";
+import { Loader2, User, Mail, Lock, Phone, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
 const searchSchema = z.object({ redirect: z.string().optional() });
@@ -22,7 +22,6 @@ export const Route = createFileRoute("/auth")({
 });
 
 type Mode = "signin" | "signup";
-type Method = "email" | "phone";
 
 function AuthPage() {
   const { lang } = useApp();
@@ -30,13 +29,12 @@ function AuthPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: "/auth" });
   const [mode, setMode] = useState<Mode>("signin");
-  const [method, setMethod] = useState<Method>("email");
+  const [identifier, setIdentifier] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -46,23 +44,29 @@ function AuthPage() {
   const isZh = lang === "zh";
   const tr = (zh: string, en: string) => (isZh ? zh : en);
 
-  const handleEmail = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
       if (mode === "signup") {
+        const { data: available, error: availError } = await supabase.rpc("check_username_available", {
+          p_username: username,
+        });
+        if (availError) throw availError;
+        if (!available) throw new Error(tr("登录名已被占用", "Login name is already taken"));
+
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: window.location.origin,
-            data: { full_name: fullName },
+            data: { full_name: fullName, username, phone },
           },
         });
         if (error) throw error;
         toast.success(tr("注册成功！请查收验证邮件", "Account created — check your email to verify"));
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({ email: identifier, password });
         if (error) throw error;
         toast.success(tr("登录成功", "Signed in"));
       }
@@ -81,33 +85,6 @@ function AuthPage() {
       if (result.redirected) return;
     } catch (err: any) {
       toast.error(err.message ?? "Google sign-in failed");
-      setBusy(false);
-    }
-  };
-
-  const handlePhoneSendOtp = async () => {
-    setBusy(true);
-    try {
-      const { error } = await supabase.auth.signInWithOtp({ phone });
-      if (error) throw error;
-      setOtpSent(true);
-      toast.success(tr("验证码已发送", "Code sent"));
-    } catch (err: any) {
-      toast.error(err.message ?? tr("发送失败（管理员需配置 SMS 服务）", "Send failed (admin must configure SMS provider)"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handlePhoneVerify = async () => {
-    setBusy(true);
-    try {
-      const { error } = await supabase.auth.verifyOtp({ phone, token: otp, type: "sms" });
-      if (error) throw error;
-      toast.success(tr("登录成功", "Signed in"));
-    } catch (err: any) {
-      toast.error(err.message ?? tr("验证失败", "Verification failed"));
-    } finally {
       setBusy(false);
     }
   };
@@ -154,20 +131,9 @@ function AuthPage() {
             {tr("使用微信登录", "Continue with WeChat")}
           </button>
 
-          <div className="mb-5 grid grid-cols-2 gap-1 rounded-lg bg-accent/60 p-1 text-xs font-medium">
-            <button
-              onClick={() => setMethod("email")}
-              className={`rounded-md py-1.5 transition ${method === "email" ? "bg-background text-foreground" : "text-ink-soft"}`}
-            ><Mail className="mr-1 inline h-3 w-3" />{tr("邮箱", "Email")}</button>
-            <button
-              onClick={() => setMethod("phone")}
-              className={`rounded-md py-1.5 transition ${method === "phone" ? "bg-background text-foreground" : "text-ink-soft"}`}
-            ><Phone className="mr-1 inline h-3 w-3" />{tr("手机号", "Phone")}</button>
-          </div>
-
-          {method === "email" ? (
-            <form onSubmit={handleEmail} className="space-y-3">
-              {mode === "signup" && (
+          <form onSubmit={handleSubmit} className="space-y-3">
+            {mode === "signup" ? (
+              <>
                 <input
                   required
                   value={fullName}
@@ -175,61 +141,57 @@ function AuthPage() {
                   placeholder={tr("姓名", "Full name")}
                   className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
                 />
-              )}
+                <div className="relative">
+                  <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
+                  <input
+                    required value={username} onChange={(e) => setUsername(e.target.value)}
+                    placeholder={tr("登录名", "Login name")}
+                    className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+                  />
+                </div>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
+                  <input
+                    required type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                    placeholder={tr("邮箱", "Email")}
+                    className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+                  />
+                </div>
+                <div className="relative">
+                  <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
+                  <input
+                    required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+                    placeholder={tr("手机号（含国家码，如 +1...）", "Phone (with country code, e.g. +1...)")}
+                    className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+                  />
+                </div>
+              </>
+            ) : (
               <div className="relative">
                 <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
                 <input
-                  required type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  required type="email" value={identifier} onChange={(e) => setIdentifier(e.target.value)}
                   placeholder={tr("邮箱", "Email")}
                   className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
                 />
               </div>
-              <div className="relative">
-                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
-                <input
-                  required type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
-                  placeholder={tr("密码（至少6位）", "Password (min 6)")}
-                  className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
-                />
-              </div>
-              <button
-                type="submit" disabled={busy}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-cta-gradient text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50"
-              >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                {mode === "signin" ? tr("登录", "Sign in") : tr("创建账户", "Create account")}
-              </button>
-            </form>
-          ) : (
-            <div className="space-y-3">
-              <div className="relative">
-                <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
-                <input
-                  type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-                  placeholder={tr("手机号（含国家码，如 +1...）", "Phone (with country code, e.g. +1...)")}
-                  className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
-                />
-              </div>
-              {otpSent && (
-                <input
-                  value={otp} onChange={(e) => setOtp(e.target.value)} inputMode="numeric"
-                  placeholder={tr("6 位验证码", "6-digit code")}
-                  className="h-11 w-full rounded-xl border border-border bg-background px-4 text-center text-lg tracking-[0.5em] outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
-                />
-              )}
-              <button
-                onClick={otpSent ? handlePhoneVerify : handlePhoneSendOtp}
-                disabled={busy || !phone}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-cta-gradient text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50"
-              >
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                {otpSent ? tr("验证并登录", "Verify & sign in") : tr("发送验证码", "Send code")}
-              </button>
-              <p className="text-center text-[11px] text-ink-soft">
-                {tr("⚠️ 短信登录需管理员先在后台配置 SMS 服务商", "⚠️ SMS sign-in requires an SMS provider configured by admin")}
-              </p>
+            )}
+            <div className="relative">
+              <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
+              <input
+                required type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
+                placeholder={tr("密码（至少6位）", "Password (min 6)")}
+                className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+              />
             </div>
-          )}
+            <button
+              type="submit" disabled={busy}
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-cta-gradient text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+              {mode === "signin" ? tr("登录", "Sign in") : tr("创建账户", "Create account")}
+            </button>
+          </form>
 
           <p className="mt-6 text-center text-xs text-ink-soft">
             {tr("继续即表示同意我们的", "By continuing you agree to our")}{" "}

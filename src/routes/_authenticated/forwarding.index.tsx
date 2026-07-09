@@ -54,8 +54,23 @@ interface ItemDraft {
   hscode?: string; box_count?: number; inner_qty?: number;
   material?: string; origin?: string; brand?: string;
   length_cm?: number; width_cm?: number; height_cm?: number; weight_kg?: number;
+  locked?: boolean;
 }
 interface ParcelDraft { tracking_no: string; items: ItemDraft[] }
+
+// Shared with src/routes/_authenticated/account.tsx — key for handing off
+// locked item drafts (and the warehouse they must ship from) when shipping straight from My Inventory.
+const FORWARDING_PREFILL_KEY = "sc_forwarding_prefill";
+const LOCKED_FIELDS = new Set<ItemFieldKey>(["name", "quantity", "box_count", "inner_qty"]);
+
+interface ForwardingPrefill { warehouseId?: string; items?: ItemDraft[] }
+function readAndClearPrefill(): ForwardingPrefill | null {
+  if (typeof window === "undefined") return null;
+  const raw = sessionStorage.getItem(FORWARDING_PREFILL_KEY);
+  if (!raw) return null;
+  sessionStorage.removeItem(FORWARDING_PREFILL_KEY);
+  try { return JSON.parse(raw) as ForwardingPrefill; } catch { return null; }
+}
 
 const FIELD_META: Record<ItemFieldKey, { zh: string; en: string; type: "text" | "number"; w: string }> = {
   name:       { zh: "品名",         en: "Item name",   type: "text",   w: "min-w-[140px] flex-1" },
@@ -123,10 +138,15 @@ function ForwardingPage() {
   const [addresses, setAddresses] = useState<AddressRow[]>([]);
   const [destinations, setDestinations] = useState<DestinationRow[]>([]);
 
-  const [warehouseId, setWarehouseId] = useState<string>("");
+  const [prefill] = useState<ForwardingPrefill | null>(() => readAndClearPrefill());
+  const [warehouseId, setWarehouseId] = useState<string>(prefill?.warehouseId ?? "");
   const [routeCode, setRouteCode] = useState<string>("");
   const [addressId, setAddressId] = useState<string>("");
-  const [parcels, setParcels] = useState<ParcelDraft[]>([{ tracking_no: "", items: [newItem()] }]);
+  const [parcels, setParcels] = useState<ParcelDraft[]>(() =>
+    prefill?.items && prefill.items.length > 0 ? [{ tracking_no: "", items: prefill.items }] : [{ tracking_no: "", items: [newItem()] }]
+  );
+  const hasLockedItems = parcels.some((p) => p.items.some((it) => it.locked));
+  const lockedWarehouseId = prefill?.warehouseId ?? null;
   const [insured, setInsured] = useState(false);
   const [showAgreement, setShowAgreement] = useState(false);
   const [note, setNote] = useState("");
@@ -227,9 +247,12 @@ function ForwardingPage() {
     if (!selectedWarehouse) return toast.error(tr("请选择仓库", "Choose warehouse"));
     if (!selectedRoute) return toast.error(tr("请选择线路", "Choose route"));
     if (!addressId) return toast.error(tr("请选择收件地址", "Pick shipping address"));
-    const nos = parcels.map((p) => p.tracking_no.trim().replace(/\s+/g, "")).filter(Boolean);
-    if (nos.length === 0) return toast.error(tr("请至少填写一个国内单号", "Enter at least one tracking number"));
-    if (new Set(nos).size !== nos.length) return toast.error(tr("国内单号有重复", "Duplicate tracking numbers"));
+    const trackedParcels = parcels.filter((p) => !p.items.some((it) => it.locked));
+    const nos = trackedParcels.map((p) => p.tracking_no.trim().replace(/\s+/g, "")).filter(Boolean);
+    if (trackedParcels.length > 0) {
+      if (nos.length === 0) return toast.error(tr("请至少填写一个国内单号", "Enter at least one tracking number"));
+      if (new Set(nos).size !== nos.length) return toast.error(tr("国内单号有重复", "Duplicate tracking numbers"));
+    }
 
     // required-field validation per route
     const reqMap = (selectedRoute.item_field_required ?? {}) as Record<string, boolean>;
@@ -256,13 +279,14 @@ function ForwardingPage() {
     let created = 0;
     let totalWaybills = 0;
     for (const parcel of parcels) {
+      const isLocked = parcel.items.some((it) => it.locked);
       const t = parcel.tracking_no.trim().replace(/\s+/g, "");
-      if (!t) continue;
+      if (!t && !isLocked) continue;
       const payload = {
         warehouse: selectedWarehouse.code,
         route_code: selectedRoute.code,
         address_id: addressId,
-        domestic_tracking_no: t,
+        domestic_tracking_no: t || null,
         note: [insured ? (lang === "zh" ? "[已购买保险]" : "[Insured]") : null, note].filter(Boolean).join(" ") || null,
         insured,
         items: parcel.items
@@ -273,8 +297,12 @@ function ForwardingPage() {
             unit_price_cad: i.unit_price_cad ?? 0,
             extras: {
               hscode: i.hscode ?? null,
-              box_count: i.box_count ?? null,
-              inner_qty: i.inner_qty ?? null,
+              // place_forwarding() auto-creates one waybill per box when extras.box_count > 0.
+              // Items shipped from My Inventory already have real waybills in storage, so we
+              // withhold box_count/inner_qty here — this submission should only create the
+              // forwarding order, not spawn new waybills.
+              box_count: i.locked ? null : (i.box_count ?? null),
+              inner_qty: i.locked ? null : (i.inner_qty ?? null),
               material: i.material ?? null,
               origin: i.origin ?? null,
               brand: i.brand ?? null,
@@ -365,13 +393,20 @@ function ForwardingPage() {
       <div className="space-y-6">
         {/* 1. Warehouse */}
         <Step n={1} icon={<Warehouse className="h-4 w-4" />} title={tr("选择入库仓库", "Choose warehouse")}>
+          {lockedWarehouseId && (
+            <div className="mb-3 flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/5 p-3 text-xs text-brand">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              {tr("已根据库存货物所在仓库锁定，无法更改", "Locked to the warehouse your inventory items are stored in")}
+            </div>
+          )}
           {warehouses.length === 0 ? (
             <div className="text-xs text-ink-soft">{tr("后台暂未配置仓库", "No warehouses configured")}</div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {warehouses.map((w) => (
-                <button key={w.id} type="button" onClick={() => setWarehouseId(w.id)}
-                  className={`rounded-xl border p-4 text-left transition ${warehouseId === w.id ? "border-brand bg-brand/5" : "border-border bg-surface hover:border-brand/40"}`}>
+                <button key={w.id} type="button" disabled={!!lockedWarehouseId}
+                  onClick={() => setWarehouseId(w.id)}
+                  className={`rounded-xl border p-4 text-left transition ${warehouseId === w.id ? "border-brand bg-brand/5" : "border-border bg-surface hover:border-brand/40"} ${lockedWarehouseId ? "cursor-not-allowed opacity-60" : ""}`}>
                   <div className="font-semibold">{lang === "zh" ? w.name_zh : (w.name_en ?? w.name_zh)}</div>
                   <div className="mt-0.5 text-[10px] font-mono text-ink-soft">{w.code}</div>
                 </button>
@@ -499,11 +534,19 @@ function ForwardingPage() {
             const fields = ((selectedRoute?.item_fields && selectedRoute.item_fields.length > 0
               ? selectedRoute.item_fields
               : defaultFields) as ItemFieldKey[]);
-            const orderedFields: ItemFieldKey[] = ["name","hscode","box_count","inner_qty","material","origin","brand","quantity","unit_price","length_cm","width_cm","height_cm","weight_kg"].filter((f) => fields.includes(f as ItemFieldKey)) as ItemFieldKey[];
+            const fieldSet = new Set<ItemFieldKey>(fields);
+            if (hasLockedItems) { fieldSet.add("name"); fieldSet.add("quantity"); fieldSet.add("box_count"); fieldSet.add("inner_qty"); }
+            const orderedFields: ItemFieldKey[] = ["name","hscode","box_count","inner_qty","material","origin","brand","quantity","unit_price","length_cm","width_cm","height_cm","weight_kg"].filter((f) => fieldSet.has(f as ItemFieldKey)) as ItemFieldKey[];
             const reqMap = (selectedRoute?.item_field_required ?? {}) as Record<string, boolean>;
             const isReq = (f: ItemFieldKey) => f === "name" || !!reqMap[f];
             return (
               <>
+                {hasLockedItems && (
+                  <div className="mb-3 rounded-xl border border-brand/30 bg-brand/5 p-3 text-xs text-ink-soft">
+                    <div className="mb-1 inline-flex items-center gap-1.5 font-bold text-brand"><Package className="h-3.5 w-3.5" />{tr("已从「我的库存」带入", "Brought in from My Inventory")}</div>
+                    {tr("品名、数量、箱数、内件数已按库存自动填写并锁定，无法修改；请填写国内单号并确认其他信息。", "Item name, quantity, box count and units/box are auto-filled and locked from your inventory. Please add the domestic tracking number and confirm the rest.")}
+                  </div>
+                )}
                 {!selectedRoute && (
                   <div className="mb-3 rounded-xl border border-brand/30 bg-brand/5 p-3 text-xs text-ink-soft">
                     <div className="mb-1 inline-flex items-center gap-1.5 font-bold text-brand"><Info className="h-3.5 w-3.5" />{tr("填写说明", "How to fill")}</div>
@@ -513,14 +556,20 @@ function ForwardingPage() {
 
 
                 <div className="space-y-4">
-                  {parcels.map((p, pi) => (
+                  {parcels.map((p, pi) => {
+                    const parcelLocked = p.items.some((it) => it.locked);
+                    return (
                     <div key={pi} className="rounded-xl border border-border bg-surface p-4">
                       <div className="mb-3 flex items-center gap-2">
                         <span className="text-xs font-semibold text-ink-soft">#{pi + 1}</span>
-                        <input value={p.tracking_no} onChange={(e) => updateParcel(pi, { tracking_no: e.target.value })}
-                          placeholder={tr("国内快递单号", "Domestic tracking no.")}
-                          className="flex-1 h-9 rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-brand" />
-                        {parcels.length > 1 && (
+                        {parcelLocked ? (
+                          <span className="flex-1 text-xs text-ink-soft">{tr("库存发货 · 无需国内单号", "Shipped from inventory — no domestic tracking number needed")}</span>
+                        ) : (
+                          <input value={p.tracking_no} onChange={(e) => updateParcel(pi, { tracking_no: e.target.value })}
+                            placeholder={tr("国内快递单号", "Domestic tracking no.")}
+                            className="flex-1 h-9 rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-brand" />
+                        )}
+                        {parcels.length > 1 && !parcelLocked && (
                           <button onClick={() => removeParcel(pi)} className="text-rose-400 hover:text-rose-300"><Trash2 className="h-4 w-4" /></button>
                         )}
                       </div>
@@ -541,10 +590,14 @@ function ForwardingPage() {
                       <div className="space-y-2">
                         {p.items.map((it, ii) => (
                           <div key={ii} className="flex flex-wrap items-center gap-2">
+                            {it.locked && (
+                              <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[9px] font-semibold text-brand">{tr("已锁定", "Locked")}</span>
+                            )}
                             {orderedFields.map((f) => {
                               const meta = FIELD_META[f];
                               const valKey = f === "unit_price" ? "unit_price_cad" : f;
                               const v = (it as any)[valKey];
+                              const isLocked = !!it.locked && LOCKED_FIELDS.has(f);
                               const onChange = (raw: string) => {
                                 let val: any = raw;
                                 if (meta.type === "number") val = raw === "" ? undefined : Number(raw) || 0;
@@ -559,19 +612,22 @@ function ForwardingPage() {
                                   value={v ?? (meta.type === "number" ? "" : "")}
                                   placeholder={tr(meta.zh, meta.en)}
                                   onChange={(e) => onChange(e.target.value)}
-                                  className={`${meta.w} h-8 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-brand`}
+                                  disabled={isLocked}
+                                  className={`${meta.w} h-8 rounded-md border border-border px-2 text-xs outline-none focus:border-brand ${isLocked ? "cursor-not-allowed bg-accent/60 text-ink-soft" : "bg-background"}`}
                                 />
                               );
                             })}
-                            {p.items.length > 1 && (
+                            {p.items.length > 1 && !it.locked && (
                               <button onClick={() => removeItem(pi, ii)} className="text-rose-400 hover:text-rose-300"><Trash2 className="h-3.5 w-3.5" /></button>
                             )}
                           </div>
                         ))}
-                        <button onClick={() => addItem(pi)} className="inline-flex items-center gap-1 text-xs text-brand hover:underline"><Plus className="h-3 w-3" />{tr("再加一个物品", "Add another item")}</button>
+                        {!parcelLocked && (
+                          <button onClick={() => addItem(pi)} className="inline-flex items-center gap-1 text-xs text-brand hover:underline"><Plus className="h-3 w-3" />{tr("再加一个物品", "Add another item")}</button>
+                        )}
                       </div>
                     </div>
-                  ))}
+                  );})}
                 </div>
               </>
             );

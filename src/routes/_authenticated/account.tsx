@@ -1,5 +1,5 @@
 import React from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useApp, CNY_TO_CAD } from "@/lib/i18n";
@@ -9,7 +9,7 @@ import { TrackingTimeline } from "@/components/tracking-timeline";
 import {
   User, MapPin, Package, Truck, Wallet, LogOut, Plus, Trash2, Loader2,
   ArrowRight, ArrowDownCircle, ArrowUpCircle, LayoutDashboard, ShoppingBag,
-  Layers, Plane, Ship, Calendar, CreditCard, CheckCircle2, ShoppingCart,
+  Layers, Plane, Ship, Calendar, CreditCard, CheckCircle2, ShoppingCart, Warehouse, Send, Tags,
 } from "lucide-react";
 
 
@@ -17,14 +17,14 @@ export const Route = createFileRoute("/_authenticated/account")({
   head: () => ({ meta: [{ title: "我的账户 / My Account — SinoCargo" }] }),
   validateSearch: (s: Record<string, unknown>) => {
     const raw = typeof s.tab === "string" ? s.tab : "";
-    const allowed = ["overview","profile","addresses","batches","myOrders","wallet"] as const;
+    const allowed = ["overview","profile","addresses","batches","myOrders","wallet","inventory","myItems"] as const;
     const tab = (allowed as readonly string[]).includes(raw) ? (raw as (typeof allowed)[number]) : undefined;
     return { tab };
   },
   component: AccountPage,
 });
 
-type Tab = "overview" | "profile" | "addresses" | "batches" | "myOrders" | "wallet";
+type Tab = "overview" | "profile" | "addresses" | "batches" | "myOrders" | "wallet" | "inventory" | "myItems";
 
 
 const sb = supabase as any;
@@ -57,6 +57,8 @@ function AccountPage() {
   const nav: { k: Tab; l: string; i: React.ReactNode }[] = [
     { k: "overview", l: tr("概览", "Overview"), i: <LayoutDashboard className="h-4 w-4" /> },
     { k: "myOrders", l: tr("我的订单/运单", "My orders/waybills"), i: <Package className="h-4 w-4" /> },
+    { k: "inventory", l: tr("我的库存", "My inventory"), i: <Warehouse className="h-4 w-4" /> },
+    { k: "myItems", l: tr("我的物品", "My items"), i: <Tags className="h-4 w-4" /> },
     { k: "batches", l: tr("我的批次", "My batches"), i: <Layers className="h-4 w-4" /> },
     { k: "wallet", l: tr("我的钱包", "Wallet"), i: <Wallet className="h-4 w-4" /> },
     { k: "addresses", l: tr("收货地址", "Addresses"), i: <MapPin className="h-4 w-4" /> },
@@ -92,6 +94,8 @@ function AccountPage() {
           {tab === "addresses" && <AddressTab />}
           {tab === "batches" && <BatchesTab />}
           {tab === "myOrders" && <MyOrdersTab initialFilter={ordersFilter} />}
+          {tab === "inventory" && <InventoryTab />}
+          {tab === "myItems" && <MyItemsTab />}
           {tab === "wallet" && <WalletTab />}
         </section>
 
@@ -954,6 +958,371 @@ function BatchCard({ b, lang, tr, paying, onPay }: {
   );
 }
 
+
+// ===================== My Inventory (waybills in storage, grouped by SKU + warehouse) =====================
+interface InventoryBox { id: string; waybillNo: string; storedAt: string }
+interface InventoryWarehouse { id: string; code: string; name: string }
+interface InventoryGroup {
+  key: string;
+  productName: string;
+  sku: string;
+  qtyPerBox: number;
+  warehouse: InventoryWarehouse | null;
+  boxes: InventoryBox[];
+}
+
+const DAY_MS = 86_400_000;
+const storageDays = (isoDate: string) => Math.max(0, Math.floor((Date.now() - new Date(isoDate).getTime()) / DAY_MS));
+
+// Shared with src/routes/_authenticated/forwarding.index.tsx — key for handing off
+// locked item drafts (and the warehouse they must ship from) when shipping straight from My Inventory.
+const FORWARDING_PREFILL_KEY = "sc_forwarding_prefill";
+
+// Demo rows shown when there's no real "storage" waybill yet, so the layout can be reviewed.
+// Clearly marked in the UI as sample data — not written to the database. Warehouses are NOT
+// hardcoded: they're filled in from the real `warehouses` table (see buildDemoGroups) so that
+// shipping a demo group still points "/forwarding" at a warehouse id that actually exists —
+// otherwise the warehouse tile there can't match, routes never filter in, and the whole
+// downstream form breaks.
+const DEMO_GROUPS_TEMPLATE: Array<Omit<InventoryGroup, "warehouse"> & { warehouseSlot: 0 | 1 }> = [
+  { key: "demo-1", productName: "无线蓝牙耳机 Pro", sku: "SKU-EB-1029", qtyPerBox: 20, warehouseSlot: 0,
+    boxes: [
+      { id: "demo-1-a", waybillNo: "SC20260701000123", storedAt: "2026-06-20T00:00:00Z" },
+      { id: "demo-1-b", waybillNo: "SC20260701000124", storedAt: "2026-06-20T00:00:00Z" },
+      { id: "demo-1-c", waybillNo: "SC20260702000087", storedAt: "2026-06-29T00:00:00Z" },
+    ] },
+  { key: "demo-2", productName: "儿童保温杯 350ml", sku: "SKU-CUP-3350", qtyPerBox: 48, warehouseSlot: 0,
+    boxes: [
+      { id: "demo-2-a", waybillNo: "SC20260628000045", storedAt: "2026-06-25T00:00:00Z" },
+      { id: "demo-2-b", waybillNo: "SC20260628000046", storedAt: "2026-06-25T00:00:00Z" },
+    ] },
+  { key: "demo-3", productName: "便携充电宝 10000mAh", sku: "SKU-PB-1000A", qtyPerBox: 12, warehouseSlot: 1,
+    boxes: [{ id: "demo-3-a", waybillNo: "SC20260630000201", storedAt: "2026-07-03T00:00:00Z" }] },
+];
+
+function buildDemoGroups(realWarehouses: InventoryWarehouse[]): InventoryGroup[] {
+  const pick = (slot: 0 | 1): InventoryWarehouse | null => realWarehouses[slot] ?? realWarehouses[0] ?? null;
+  return DEMO_GROUPS_TEMPLATE.map(({ warehouseSlot, ...g }) => ({ ...g, warehouse: pick(warehouseSlot) }));
+}
+
+function buildInventoryGroups(rows: any[]): InventoryGroup[] {
+  const map = new Map<string, InventoryGroup>();
+  for (const wb of rows) {
+    const summary = Array.isArray(wb.items_summary) ? wb.items_summary : [];
+    const entries = summary.length > 0 ? summary : [{ name: null, sku: null, quantity: null }];
+    const warehouse: InventoryWarehouse | null = wb.warehouse ?? null;
+    for (const it of entries) {
+      const productName = it?.name || it?.name_zh || it?.name_en || "—";
+      const sku = it?.sku || "—";
+      const qtyPerBox = Number(it?.quantity ?? 0);
+      const k = `${productName}__${sku}__${qtyPerBox}__${warehouse?.id ?? "unknown"}`;
+      if (!map.has(k)) map.set(k, { key: k, productName, sku, qtyPerBox, warehouse, boxes: [] });
+      map.get(k)!.boxes.push({ id: wb.id, waybillNo: wb.waybill_no, storedAt: wb.updated_at });
+    }
+  }
+  return Array.from(map.values());
+}
+
+function InventoryTab() {
+  const { lang } = useApp();
+  const navigate = useNavigate();
+  const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
+  const [groups, setGroups] = useState<InventoryGroup[] | null>(null);
+  const [isDemo, setIsDemo] = useState(false);
+  const [shipBoxes, setShipBoxes] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: wbRows }, { data: whRows }] = await Promise.all([
+        sb.from("waybills")
+          .select("id,waybill_no,items_summary,updated_at,forwarding_id")
+          .eq("status", "storage")
+          .order("updated_at", { ascending: false }),
+        sb.from("warehouses").select("id,code,name_zh,name_en").eq("is_active", true),
+      ]);
+      const fwdIds = Array.from(new Set((wbRows ?? []).map((w: any) => w.forwarding_id).filter(Boolean)));
+      const { data: fwdRows } = fwdIds.length
+        ? await sb.from("forwarding_orders").select("id,warehouse").in("id", fwdIds)
+        : { data: [] as any[] };
+      const realWarehouses: InventoryWarehouse[] = (whRows ?? []).map((w: any) => ({ id: w.id, code: w.code, name: lang === "zh" ? w.name_zh : (w.name_en ?? w.name_zh) }));
+      const whByCode = new Map(realWarehouses.map((w) => [w.code, w]));
+      const warehouseByFwdId = new Map((fwdRows ?? []).map((f: any) => [f.id, whByCode.get(f.warehouse) ?? null]));
+      const withWarehouse = (wbRows ?? []).map((w: any) => ({ ...w, warehouse: warehouseByFwdId.get(w.forwarding_id) ?? null }));
+
+      const real = buildInventoryGroups(withWarehouse);
+      if (real.length > 0) { setGroups(real); setIsDemo(false); }
+      else { setGroups(buildDemoGroups(realWarehouses)); setIsDemo(true); }
+    })();
+  }, [lang]);
+
+  if (groups === null) return <Spinner />;
+
+  const totalBoxes = groups.reduce((s, g) => s + g.boxes.length, 0);
+  const toShip = groups.filter((g) => (shipBoxes[g.key] ?? 0) > 0);
+  const totalBoxesToShip = toShip.reduce((s, g) => s + (shipBoxes[g.key] ?? 0), 0);
+  const shipWarehouseIds = new Set(toShip.map((g) => g.warehouse?.id ?? "unknown"));
+
+  const setBoxesFor = (g: InventoryGroup, raw: number) => {
+    const n = Math.max(0, Math.min(g.boxes.length, Math.floor(raw) || 0));
+    setShipBoxes((s) => ({ ...s, [g.key]: n }));
+  };
+
+  const shipSelected = () => {
+    if (toShip.length === 0) return;
+    if (shipWarehouseIds.size > 1 || shipWarehouseIds.has("unknown")) {
+      toast.error(tr("请选择同一仓库的货物一起发货", "Please ship items from a single warehouse at a time"));
+      return;
+    }
+    const items = toShip.map((g) => {
+      const boxCount = shipBoxes[g.key] ?? 0;
+      return {
+        name: g.productName,
+        quantity: boxCount * g.qtyPerBox,
+        unit_price_cad: 0,
+        box_count: boxCount,
+        inner_qty: g.qtyPerBox,
+        locked: true,
+      };
+    });
+    sessionStorage.setItem(FORWARDING_PREFILL_KEY, JSON.stringify({ warehouseId: toShip[0].warehouse!.id, items }));
+    navigate({ to: "/forwarding" });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="font-display text-xl font-bold">{tr("我的库存", "My inventory")}</h2>
+          <p className="mt-1 text-xs text-ink-soft">{tr("按货物名称 + SKU + 内件数分组，当前在仓库中的箱数", "Grouped by product, SKU and units/box — box counts currently in the warehouse")}</p>
+        </div>
+        {isDemo && (
+          <span className="rounded-full bg-accent px-3 py-1 text-[11px] font-medium text-ink-soft">
+            {tr("暂无真实库存，以下为示例数据", "No real inventory yet — sample data shown below")}
+          </span>
+        )}
+      </div>
+
+      <StatCard
+        label={tr("库存总箱数", "Total boxes in storage")}
+        value={String(totalBoxes)}
+        sub={tr(`${groups.length} 种货物`, `${groups.length} product(s)`)}
+        icon={<Warehouse className="h-5 w-5" />}
+      />
+
+      {groups.length === 0 ? (
+        <Empty icon={<Warehouse />} text={tr("目前没有仓储中的运单", "No waybills in storage right now")} />
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+          <ul className="divide-y divide-border">
+            {groups.map((g) => {
+              const maxDays = Math.max(0, ...g.boxes.map((b) => storageDays(b.storedAt)));
+              return (
+                <li key={g.key} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-warning/10 text-warning">
+                    <Warehouse className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="font-semibold">{g.productName}</div>
+                    <div className="flex flex-wrap gap-2 text-[11px] text-ink-soft">
+                      <span className="rounded-full bg-brand/10 px-2 py-0.5 font-semibold text-brand">{g.warehouse?.name ?? tr("未知仓库", "Unknown warehouse")}</span>
+                      <span className="font-mono">SKU: {g.sku}</span>
+                      <span>· {tr("内件数", "Units/box")}: {g.qtyPerBox}</span>
+                      <span className={maxDays >= 30 ? "font-semibold text-warning" : ""}>· {tr("最长存储", "Longest stored")}: {maxDays} {tr("天", "d")}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-display text-lg font-bold text-foreground">{g.boxes.length}</div>
+                    <div className="text-[10px] uppercase tracking-wider text-ink-soft">{tr("箱", "box(es)")}</div>
+                  </div>
+                  <div className="ml-auto flex items-center gap-2">
+                    <label className="text-[11px] text-ink-soft">{tr("发货箱数", "Ship boxes")}</label>
+                    <input
+                      type="number" min={0} max={g.boxes.length} step={1}
+                      value={shipBoxes[g.key] ?? ""}
+                      onChange={(e) => setBoxesFor(g, Number(e.target.value))}
+                      placeholder="0"
+                      className="h-9 w-20 rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {totalBoxesToShip > 0 && (
+        <div className="sticky bottom-4 flex flex-wrap items-center gap-3 rounded-2xl border border-brand/30 bg-surface p-4 shadow-elevated">
+          <div>
+            <div className="text-sm">{tr(`已填 ${totalBoxesToShip} 箱待发货`, `${totalBoxesToShip} box(es) ready to ship`)}</div>
+            {shipWarehouseIds.size > 1 && (
+              <div className="text-[11px] text-destructive">{tr("所选货物分属不同仓库，请分开发货", "Selected items span multiple warehouses — ship them separately")}</div>
+            )}
+          </div>
+          <button
+            onClick={shipSelected}
+            disabled={shipWarehouseIds.size > 1}
+            className="ml-auto inline-flex items-center gap-2 rounded-full bg-cta-gradient px-5 py-2 text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-40"
+          >
+            <Send className="h-4 w-4" />{tr("发货，去申请集运单", "Ship — go to forwarding request")}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===================== My Items (personal catalog, synced into the HS code library) =====================
+interface MyItem {
+  id: string;
+  name: string;
+  hs_code: string;
+  sku: string | null;
+  declared_value_cad: number;
+  inner_qty: number | null;
+  mfn_rate: number;
+  gst_rate: number;
+  sima_involved: boolean;
+  unit: string | null;
+}
+
+function newMyItem(): Partial<MyItem> {
+  return { name: "", hs_code: "", sku: "", declared_value_cad: 0, inner_qty: undefined, mfn_rate: 0, gst_rate: 0.05, sima_involved: false, unit: "" };
+}
+
+function MyItemsTab() {
+  const { lang } = useApp();
+  const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
+  const [list, setList] = useState<MyItem[] | null>(null);
+  const [editing, setEditing] = useState<Partial<MyItem> | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => sb.from("my_items").select("*").order("created_at", { ascending: false }).then(({ data }: any) => setList(data ?? []));
+  useEffect(() => { load(); }, []);
+
+  const save = async () => {
+    if (!editing) return;
+    if (!editing.name?.trim()) return toast.error(tr("请填写物品名称", "Enter an item name"));
+    if (!editing.hs_code?.trim()) return toast.error(tr("请填写 HS 编码", "Enter an HS code"));
+    setBusy(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setBusy(false); return; }
+    const hsCode = editing.hs_code.trim().replace(/\s+/g, "");
+
+    // If this HS code already exists in the shared library, its (staff-curated) rates win
+    // over whatever the customer typed. Brand-new codes get inserted using their input.
+    const { data: resolved, error: resolveError } = await sb.rpc("resolve_hs_code_rates", {
+      p_hs_code: hsCode, p_name_zh: editing.name.trim(), p_unit: editing.unit?.trim() || null,
+      p_mfn_rate: editing.mfn_rate ?? 0, p_gst_rate: editing.gst_rate ?? 0.05, p_sima_involved: editing.sima_involved ?? false,
+    });
+    if (resolveError) { setBusy(false); return toast.error(resolveError.message); }
+
+    const payload = {
+      user_id: user.id,
+      name: editing.name.trim(),
+      hs_code: hsCode,
+      sku: editing.sku?.trim() || null,
+      declared_value_cad: editing.declared_value_cad ?? 0,
+      inner_qty: editing.inner_qty ?? null,
+      unit: resolved?.unit ?? (editing.unit?.trim() || null),
+      mfn_rate: resolved?.mfn_rate ?? (editing.mfn_rate ?? 0),
+      gst_rate: resolved?.gst_rate ?? (editing.gst_rate ?? 0.05),
+      sima_involved: resolved?.sima_involved ?? (editing.sima_involved ?? false),
+    };
+    const { error } = editing.id
+      ? await sb.from("my_items").update(payload).eq("id", editing.id)
+      : await sb.from("my_items").insert(payload);
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success(tr("已保存", "Saved"));
+    setEditing(null);
+    load();
+  };
+
+  const del = async (id: string) => {
+    if (!confirm(tr("确定删除这个物品？", "Delete this item?"))) return;
+    const { error } = await sb.from("my_items").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    load();
+  };
+
+  if (list === null) return <Spinner />;
+  const isNew = editing && !editing.id;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-display text-xl font-bold">{tr("我的物品", "My items")}</h2>
+          <p className="mt-1 text-xs text-ink-soft">{tr("保存常用物品信息，申请集运时可直接复用；新增的 HS 编码会同步进入报关编码库", "Save reusable item details for forwarding requests — new HS codes are synced into the customs code library")}</p>
+        </div>
+        <button onClick={() => setEditing(newMyItem())} className="inline-flex items-center gap-1 rounded-full bg-foreground px-4 py-2 text-xs font-semibold text-background">
+          <Plus className="h-3.5 w-3.5" />{tr("新增物品", "Add item")}
+        </button>
+      </div>
+
+      {editing && (
+        <div className="rounded-2xl border border-border bg-surface p-6">
+          <div className="mb-3 text-sm font-semibold">{isNew ? tr("新增物品", "New item") : tr("编辑物品", "Edit item")}</div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label={tr("物品名称", "Item name")} full><input className={inputCls} value={editing.name ?? ""} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></Field>
+            <Field label="HS Code"><input className={inputCls} value={editing.hs_code ?? ""} onChange={(e) => setEditing({ ...editing, hs_code: e.target.value })} /></Field>
+            <Field label="SKU"><input className={inputCls} value={editing.sku ?? ""} onChange={(e) => setEditing({ ...editing, sku: e.target.value })} /></Field>
+            <Field label={tr("计量单位", "Unit")}><input className={inputCls} placeholder={tr("如：件、个、套", "e.g. pc, set")} value={editing.unit ?? ""} onChange={(e) => setEditing({ ...editing, unit: e.target.value })} /></Field>
+            <Field label={tr("申报价值 (CAD)", "Declared value (CAD)")}><input type="number" min={0} step="0.01" className={inputCls} value={editing.declared_value_cad ?? 0} onChange={(e) => setEditing({ ...editing, declared_value_cad: Number(e.target.value) || 0 })} /></Field>
+            <Field label={tr("内件数", "Units/box")}><input type="number" min={0} className={inputCls} value={editing.inner_qty ?? ""} onChange={(e) => setEditing({ ...editing, inner_qty: e.target.value === "" ? undefined : Number(e.target.value) })} /></Field>
+            <Field label={tr("MFN 税率", "MFN rate")}><input type="number" min={0} step="0.0001" className={inputCls} value={editing.mfn_rate ?? 0} onChange={(e) => setEditing({ ...editing, mfn_rate: Number(e.target.value) || 0 })} /></Field>
+            <Field label={tr("GST 税率", "GST rate")}><input type="number" min={0} step="0.0001" className={inputCls} value={editing.gst_rate ?? 0.05} onChange={(e) => setEditing({ ...editing, gst_rate: Number(e.target.value) || 0 })} /></Field>
+            <Field label="SIMA">
+              <label className="flex h-11 items-center gap-2 px-1 text-sm">
+                <input type="checkbox" checked={!!editing.sima_involved} onChange={(e) => setEditing({ ...editing, sima_involved: e.target.checked })} />
+                {tr("涉及反倾销/反补贴措施", "Subject to anti-dumping/SIMA")}
+              </label>
+            </Field>
+          </div>
+          <p className="mt-3 text-[11px] text-ink-soft">{tr("提示：如果这个 HS 编码在报关库里已经存在，MFN/GST/SIMA/计量单位会以库里已有数据为准，自动覆盖你在这里填的值。", "Note: if this HS code already exists in the customs library, its MFN/GST/SIMA/unit values take precedence and will overwrite what you enter here.")}</p>
+          <div className="mt-4 flex gap-2">
+            <button onClick={save} disabled={busy} className="inline-flex items-center gap-2 rounded-full bg-cta-gradient px-5 py-2 text-sm font-semibold text-cta-foreground disabled:opacity-50">
+              {busy && <Loader2 className="h-4 w-4 animate-spin" />}{tr("保存", "Save")}
+            </button>
+            <button onClick={() => setEditing(null)} className="rounded-full border border-border px-5 py-2 text-sm">{tr("取消", "Cancel")}</button>
+          </div>
+        </div>
+      )}
+
+      {list.length === 0 && !editing ? (
+        <Empty icon={<Tags />} text={tr("还没有保存物品，点击右上角添加一个", "No saved items yet — add one to get started")} />
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+          <ul className="divide-y divide-border">
+            {list.map((it) => (
+              <li key={it.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 text-brand"><Tags className="h-4 w-4" /></span>
+                <div className="min-w-0">
+                  <div className="font-semibold">{it.name}</div>
+                  <div className="flex flex-wrap gap-2 text-[11px] text-ink-soft">
+                    <span className="font-mono">HS: {it.hs_code}</span>
+                    {it.sku && <span className="font-mono">· SKU: {it.sku}</span>}
+                    {it.unit && <span>· {tr("单位", "Unit")}: {it.unit}</span>}
+                    {it.inner_qty != null && <span>· {tr("内件数", "Units/box")}: {it.inner_qty}</span>}
+                    <span>· {tr("申报价值", "Declared")}: CA${Number(it.declared_value_cad).toFixed(2)}</span>
+                    <span>· MFN {(Number(it.mfn_rate) * 100).toFixed(2)}%</span>
+                    <span>· GST {(Number(it.gst_rate) * 100).toFixed(2)}%</span>
+                    {it.sima_involved && <span className="font-semibold text-warning">· SIMA</span>}
+                  </div>
+                </div>
+                <div className="ml-auto flex gap-1">
+                  <button onClick={() => setEditing(it)} className="rounded-full px-2 py-1 text-xs text-ink-soft hover:bg-accent">{tr("编辑", "Edit")}</button>
+                  <button onClick={() => del(it.id)} className="grid h-7 w-7 place-items-center rounded-full text-ink-soft hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ===================== My Orders / Waybills (merged) =====================
 type OrderFilter = "all" | "order" | "forwarding" | "unwarehoused";
