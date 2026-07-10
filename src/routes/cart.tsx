@@ -1,12 +1,22 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useCart } from "@/lib/cart";
-import { useApp, CNY_TO_CAD } from "@/lib/i18n";
-import { Trash2, Minus, Plus, ShoppingBag, ArrowRight, CheckSquare, Square } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { useEffect, useMemo, useState } from "react";
+import { useCart, type CartLine } from "@/lib/cart";
+import { useApp } from "@/lib/i18n";
+import { listPublicRoutes } from "@/lib/shop-public.functions";
+import { Trash2, Minus, Plus, ShoppingBag, ArrowRight, CheckSquare, Square, Route as RouteIcon, AlertTriangle } from "lucide-react";
 
 export const Route = createFileRoute("/cart")({
   head: () => ({ meta: [{ title: "购物车 / Cart — SinoCargo" }] }),
   component: CartPage,
 });
+
+interface RouteInfo { code: string; name_zh: string; name_en: string | null; shipping_method: string }
+
+// Empty/undefined availableRouteCodes means the product isn't restricted — any active route works.
+function allowedCodes(i: CartLine, allCodes: string[]): string[] {
+  return i.availableRouteCodes && i.availableRouteCodes.length > 0 ? i.availableRouteCodes : allCodes;
+}
 
 function CartPage() {
   const c = useCart();
@@ -15,6 +25,27 @@ function CartPage() {
   const { lang, formatPrice } = useApp();
   const navigate = useNavigate();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
+
+  const fetchRoutes = useServerFn(listPublicRoutes);
+  const [routes, setRoutes] = useState<RouteInfo[] | null>(null);
+  useEffect(() => { fetchRoutes().then((r: any) => setRoutes(r.items ?? [])); }, []);
+
+  const allCodes = useMemo(() => (routes ?? []).map((r) => r.code), [routes]);
+  const routeLabel = (code: string) => {
+    const r = routes?.find((x) => x.code === code);
+    if (!r) return code;
+    return lang === "zh" ? r.name_zh : (r.name_en ?? r.name_zh);
+  };
+
+  // Routes common to every SELECTED item — checkout is only possible when this is non-empty.
+  const commonRoutes = useMemo(() => {
+    if (!routes || selectedItems.length === 0) return null;
+    return selectedItems.reduce<string[] | null>((acc, i) => {
+      const mine = allowedCodes(i, allCodes);
+      return acc === null ? mine : acc.filter((c) => mine.includes(c));
+    }, null) ?? [];
+  }, [selectedItems, routes, allCodes]);
+  const hasRouteConflict = routes !== null && selectedItems.length > 1 && (commonRoutes?.length ?? 0) === 0;
 
   const allSel = items.length > 0 && selectedItems.length === items.length;
 
@@ -32,7 +63,7 @@ function CartPage() {
   }
 
   const goCheckout = () => {
-    if (selectedItems.length === 0) return;
+    if (selectedItems.length === 0 || hasRouteConflict) return;
     const slugs = selectedItems.map((i) => i.slug).join(",");
     navigate({ to: "/checkout", search: { slugs } as any });
   };
@@ -52,8 +83,11 @@ function CartPage() {
         <div className="space-y-3">
           {items.map((i) => {
             const sel = isSelected(i.slug);
+            const codes = allowedCodes(i, allCodes);
+            const restricted = !!(i.availableRouteCodes && i.availableRouteCodes.length > 0);
+            const conflicting = sel && hasRouteConflict;
             return (
-              <div key={i.slug} className={`flex gap-3 rounded-2xl border bg-surface p-4 transition ${sel ? "border-brand/40" : "border-border"}`}>
+              <div key={i.slug} className={`flex gap-3 rounded-2xl border bg-surface p-4 transition ${conflicting ? "border-destructive/50" : sel ? "border-brand/40" : "border-border"}`}>
                 <button onClick={() => toggleSelect(i.slug)} className="shrink-0 self-center">
                   {sel ? <CheckSquare className="h-5 w-5 text-brand" /> : <Square className="h-5 w-5 text-ink-soft" />}
                 </button>
@@ -70,11 +104,28 @@ function CartPage() {
                     <button onClick={() => remove(i.slug)} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-soft hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
                   </div>
                   <div className="mt-1 text-xs text-ink-soft">{i.weightKg}kg · {i.purchaseType === "business" ? tr("商业", "Business") : tr("个人", "Personal")}</div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                    <RouteIcon className="h-3 w-3 text-ink-soft" />
+                    {restricted ? (
+                      codes.map((c) => (
+                        <span key={c} className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-ink-soft">{routeLabel(c)}</span>
+                      ))
+                    ) : (
+                      <span className="text-[10px] text-ink-soft">{tr("不限线路", "Any route")}</span>
+                    )}
+                  </div>
                   <div className="mt-auto flex items-end justify-between pt-2">
                     <div className="inline-flex items-center rounded-full border border-border">
-                      <button onClick={() => update(i.slug, i.quantity - 1)} className="grid h-8 w-8 place-items-center text-ink-soft hover:text-foreground"><Minus className="h-3 w-3" /></button>
-                      <span className="w-10 text-center text-sm font-medium">{i.quantity}</span>
-                      <button onClick={() => update(i.slug, i.quantity + 1)} className="grid h-8 w-8 place-items-center text-ink-soft hover:text-foreground"><Plus className="h-3 w-3" /></button>
+                      {(() => {
+                        const step = i.purchaseType === "business" ? Math.max(i.packQty ?? 1, 1) : 1;
+                        return (
+                          <>
+                            <button onClick={() => update(i.slug, i.quantity - step)} className="grid h-8 w-8 place-items-center text-ink-soft hover:text-foreground"><Minus className="h-3 w-3" /></button>
+                            <span className="w-10 text-center text-sm font-medium">{i.quantity}</span>
+                            <button onClick={() => update(i.slug, i.quantity + step)} className="grid h-8 w-8 place-items-center text-ink-soft hover:text-foreground"><Plus className="h-3 w-3" /></button>
+                          </>
+                        );
+                      })()}
                     </div>
                     <div className="font-display text-lg font-bold text-brand-gradient">{formatPrice(i.priceCNY * i.quantity)}</div>
                   </div>
@@ -89,12 +140,22 @@ function CartPage() {
           <dl className="space-y-2 text-sm">
             <Row label={tr("已选商品", "Selected")} value={`${selectedItems.length} / ${items.length}`} />
             <Row label={tr("小计", "Subtotal")} value={formatPrice(selectedSubtotalCNY)} />
-            <Row label={tr("总重量", "Weight")} value={`${selectedWeightKg.toFixed(2)} kg`} muted />
+            <Row label={tr("预计总重量", "Est. weight")} value={`${selectedWeightKg.toFixed(2)} kg`} muted />
           </dl>
+          <p className="mt-1.5 text-[11px] text-ink-soft">
+            {tr("实际计费重量会根据发货、打包和线路规则有所调整", "Actual chargeable weight may be adjusted based on shipping, packing and route rules")}
+          </p>
           <div className="my-4 h-px bg-border" />
-          <p className="text-[11px] text-ink-soft">{tr("运费、关税在结账页根据所选线路自动计算", "Shipping & duty are calculated on checkout based on the route")}</p>
+          {hasRouteConflict ? (
+            <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-[11px] text-destructive">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {tr("所选商品没有共同可用的线路，无法一起结算，请分开结算或取消勾选部分商品", "Selected items don't share a common shipping route — check out separately or deselect some items")}
+            </div>
+          ) : (
+            <p className="text-[11px] text-ink-soft">{tr("运费、关税在结账页根据所选线路自动计算", "Shipping & duty are calculated on checkout based on the route")}</p>
+          )}
           <button
-            onClick={goCheckout} disabled={selectedItems.length === 0}
+            onClick={goCheckout} disabled={selectedItems.length === 0 || hasRouteConflict}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-cta-gradient px-6 py-3.5 text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50"
           >
             {tr(`结算所选 (${selectedCount})`, `Checkout selected (${selectedCount})`)}<ArrowRight className="h-4 w-4" />

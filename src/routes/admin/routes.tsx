@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   listRoutes, upsertRoute, deleteRoute, quoteFreight,
-  type ShippingRoute, type FreightRule, type CustomsRule, type ShippingMethod, type WeightMode, type ItemFieldKey,
+  type ShippingRoute, type FreightRule, type CustomsRule, type ShippingMethod, type WeightMode, type ItemFieldKey, type RouteUsageScope,
 } from "@/lib/settings.functions";
 import { listDestinations } from "@/lib/presets.functions";
 import { getMyRoles } from "@/lib/admin.functions";
@@ -35,6 +35,11 @@ export const Route = createFileRoute("/admin/routes")({
 const METHOD_OPTIONS: { v: ShippingMethod; label: string }[] = [
   { v: "air", label: "空运" }, { v: "sea", label: "海运" },
   { v: "express", label: "快递" }, { v: "truck", label: "陆运" },
+];
+const USAGE_SCOPE_OPTIONS: { v: RouteUsageScope; label: string }[] = [
+  { v: "shop", label: "仅电商（商品购买）" },
+  { v: "forwarding", label: "仅集运（转运申请）" },
+  { v: "both", label: "电商 + 集运" },
 ];
 const WEIGHT_MODE_OPTIONS: { v: WeightMode; label: string }[] = [
   { v: "actual", label: "只算实重" },
@@ -76,6 +81,7 @@ function RoutesPage() {
             <tr>
               <th className="px-4 py-2.5">编码 / 名称</th>
               <th className="px-4 py-2.5">方式</th>
+              <th className="px-4 py-2.5">使用</th>
               <th className="px-4 py-2.5">起点 → 终点</th>
               <th className="px-4 py-2.5">时效</th>
               <th className="px-4 py-2.5">运费公式</th>
@@ -85,9 +91,9 @@ function RoutesPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {q.isLoading && (<tr><td colSpan={8} className="px-4 py-12 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-slate-500" /></td></tr>)}
-            {q.isError && (<tr><td colSpan={8} className="px-4 py-12 text-center text-rose-400">{(q.error as Error).message}</td></tr>)}
-            {q.data?.routes.length === 0 && (<tr><td colSpan={8} className="px-4 py-12 text-center text-slate-500">暂无线路，请先新增</td></tr>)}
+            {q.isLoading && (<tr><td colSpan={9} className="px-4 py-12 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-slate-500" /></td></tr>)}
+            {q.isError && (<tr><td colSpan={9} className="px-4 py-12 text-center text-rose-400">{(q.error as Error).message}</td></tr>)}
+            {q.data?.routes.length === 0 && (<tr><td colSpan={9} className="px-4 py-12 text-center text-slate-500">暂无线路，请先新增</td></tr>)}
             {q.data?.routes.map((r: any) => {
               const wm = r.freight ? WEIGHT_MODE_OPTIONS.find((x) => x.v === r.freight.weight_mode)?.label : "—";
               return (
@@ -100,6 +106,15 @@ function RoutesPage() {
                     {METHOD_OPTIONS.find((m) => m.v === r.shipping_method)?.label}
                     <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] ${r.cargo_type === "sensitive" ? "bg-amber-500/15 text-amber-300" : "bg-emerald-500/15 text-emerald-300"}`}>
                       {r.cargo_type === "sensitive" ? "敏感货" : "普货"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                      r.usage_scope === "shop" ? "bg-sky-500/15 text-sky-300"
+                        : r.usage_scope === "forwarding" ? "bg-purple-500/15 text-purple-300"
+                        : "bg-slate-500/15 text-slate-300"
+                    }`}>
+                      {USAGE_SCOPE_OPTIONS.find((o) => o.v === (r.usage_scope ?? "both"))?.label ?? "电商 + 集运"}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-300">
@@ -171,6 +186,7 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
     destination_warehouse_id: initial.destination_warehouse_id ?? null,
     shipping_method: initial.shipping_method ?? "air",
     cargo_type: initial.cargo_type ?? "general",
+    usage_scope: (initial.usage_scope ?? "both") as RouteUsageScope,
     destination_code: initial.destination_code ?? "",
     transit_days_min: initial.transit_days_min ?? 7,
     transit_days_max: initial.transit_days_max ?? 14,
@@ -283,6 +299,7 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
             destination_warehouse_id: route.destination_warehouse_id ?? null,
             shipping_method: (route.shipping_method ?? "air") as any,
             cargo_type: (route.cargo_type ?? "general") as any,
+            usage_scope: (route.usage_scope ?? "both") as any,
             destination_code: route.destination_code ?? null,
             transit_days_min: route.transit_days_min ? Number(route.transit_days_min) : null,
             transit_days_max: route.transit_days_max ? Number(route.transit_days_max) : null,
@@ -351,6 +368,10 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
                 <Field label="货物类型">
                   <Select value={route.cargo_type ?? "general"} onChange={(v) => setRoute({ ...route, cargo_type: v as any })}
                     options={[{ v: "general", label: "普货" }, { v: "sensitive", label: "敏感货" }] as any} />
+                </Field>
+                <Field label="使用场景" full>
+                  <Select value={route.usage_scope ?? "both"} onChange={(v) => setRoute({ ...route, usage_scope: v as RouteUsageScope })} options={USAGE_SCOPE_OPTIONS as any} />
+                  <p className="mt-1 text-[11px] text-slate-500">决定本线路显示在哪里：商品详情/购物车/结账页只看"电商"线路；申请集运页只看"集运"线路。</p>
                 </Field>
                 <Field label="目的地 (运单号用)">
                   <Select value={route.destination_code ?? ""} onChange={(v) => setRoute({ ...route, destination_code: v || null })}

@@ -33,23 +33,24 @@ export type PublicProduct = {
   allow_personal: boolean;
   allow_business: boolean;
   moq: number;
-  customs_rate: number;
+  customs_mfn_rate: number;
+  customs_gst_rate: number;
+  customs_antidumping_rate: number;
   freight_cny: number;
-  last_mile_fee_cad: number;
   compare_price_cad: number | null;
   personal_freight_mode: "follow_route" | "per_unit";
   personal_per_unit_freight_cny: number;
-  personal_chargeable_weight_kg: number | null;
   pack_qty: number;
   pack_weight_kg: number | null;
   pack_length_cm: number | null;
   pack_width_cm: number | null;
   pack_height_cm: number | null;
   pack_volume_m3: number | null;
+  available_route_codes: string[] | null;
 };
 
 const SELECT_COLS =
-  "id,slug,name,subtitle,description,brand,price_cny,compare_price_cny,compare_price_cad,weight_kg,cover_url,images,tags,total_stock,sold_count,hs_code,manufacturer,detail_blocks,purchase_type,allow_personal,allow_business,moq,customs_rate,freight_cny,last_mile_fee_cad,personal_freight_mode,personal_per_unit_freight_cny,personal_chargeable_weight_kg,pack_qty,pack_weight_kg,pack_length_cm,pack_width_cm,pack_height_cm,pack_volume_m3,available_route_codes,category:product_categories(slug,name,name_en)";
+  "id,slug,name,subtitle,description,brand,price_cny,compare_price_cny,compare_price_cad,weight_kg,cover_url,images,tags,total_stock,sold_count,hs_code,manufacturer,detail_blocks,purchase_type,allow_personal,allow_business,moq,customs_mfn_rate,customs_gst_rate,customs_antidumping_rate,freight_cny,personal_freight_mode,personal_per_unit_freight_cny,pack_qty,pack_weight_kg,pack_length_cm,pack_width_cm,pack_height_cm,pack_volume_m3,available_route_codes,category:product_categories(slug,name,name_en)";
 
 export const listPublicCategories = createServerFn({ method: "GET" }).handler(async () => {
   const sb = pubClient();
@@ -112,6 +113,7 @@ export const listPublicRoutes = createServerFn({ method: "GET" }).handler(async 
     .from("shipping_routes")
     .select("id, code, name_zh, name_en, shipping_method, destination_code, transit_days_min, transit_days_max, note, sort_order, origin_warehouse_id")
     .eq("is_active", true)
+    .in("usage_scope", ["shop", "both"])
     .order("sort_order");
   if (error) throw new Error(error.message);
   return { items: data ?? [] };

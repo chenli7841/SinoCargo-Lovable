@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Users, Boxes, Truck, Route as RouteIcon, Warehouse,
   Settings as SettingsIcon, LogOut, ExternalLink, ShieldAlert, Loader2,
   Package, Layers, Tag, MapPin, ScanLine, AlertTriangle, FileText, History, Ruler,
-  ShoppingBag, Image as ImageIcon, BookText, PackageCheck,
+  ShoppingBag, Image as ImageIcon, BookText, PackageCheck, Mail,
 } from "lucide-react";
 
 
@@ -65,6 +65,7 @@ const NAV_GROUPS: NavGroup[] = [
   ]},
   { title: "系统管理", items: [
     { to: "/admin/users", label: "用户管理", icon: Users },
+    { to: "/admin/messages", label: "留言信息", icon: Mail },
     { to: "/admin/logs", label: "操作日志", icon: History },
     { to: "/admin/system", label: "系统设置", icon: SettingsIcon },
     { to: "/admin/warehouses", label: "仓库管理", icon: Warehouse },

@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useApp, CNY_TO_CAD } from "@/lib/i18n";
+import { useApp } from "@/lib/i18n";
 import { OrderAttachments } from "@/components/order-attachments";
 import { WaybillsList } from "@/components/waybills-list";
 import { TrackingTimeline } from "@/components/tracking-timeline";
@@ -25,7 +25,7 @@ const sb = supabase as any;
 
 function ForwardingDetailPage() {
   const { forwardingId } = Route.useParams();
-  const { lang } = useApp();
+  const { lang, cnyToCad } = useApp();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
   const [fo, setFo] = useState<any | null>(null);
   const [waybills, setWaybills] = useState<any[]>([]);
@@ -171,8 +171,8 @@ function ForwardingDetailPage() {
                 {fItems.map((it) => (
                   <li key={it.id} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
                     <div className="min-w-0 flex-1 truncate font-medium">{it.name}</div>
-                    <div className="text-xs text-ink-soft">CA${Number((it as any).unit_price_cad ?? Number(it.unit_price_cny) * CNY_TO_CAD).toFixed(2)} × {it.quantity}</div>
-                    <div className="w-24 text-right font-display text-sm font-bold">CA${(Number((it as any).unit_price_cad ?? Number(it.unit_price_cny) * CNY_TO_CAD) * Number(it.quantity)).toFixed(2)}</div>
+                    <div className="text-xs text-ink-soft">CA${Number((it as any).unit_price_cad ?? cnyToCad(Number(it.unit_price_cny))).toFixed(2)} × {it.quantity}</div>
+                    <div className="w-24 text-right font-display text-sm font-bold">CA${(Number((it as any).unit_price_cad ?? cnyToCad(Number(it.unit_price_cny))) * Number(it.quantity)).toFixed(2)}</div>
                   </li>
                 ))}
               </ul>

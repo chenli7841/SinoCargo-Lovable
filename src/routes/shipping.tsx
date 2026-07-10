@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useApp } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
-import { Calculator, Plane, Ship, Package, ArrowRight, User } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Calculator, Plane, Ship, Truck, Zap, Warehouse, Package, ArrowRight, User } from "lucide-react";
 
 export const Route = createFileRoute("/shipping")({
   head: () => ({
@@ -16,25 +17,56 @@ export const Route = createFileRoute("/shipping")({
   component: ShippingPage,
 });
 
-// CNY rate per kg, demo
-const RATES = { air: 75, sea: 22 };
+type RouteTypeKey = "air" | "sea" | "express" | "truck" | "storage";
+interface RouteTypeCfg { enabled: boolean; unit_price_cad: number; transit: string; route: string; dim_divisor: number }
+const ROUTE_TYPE_KEYS: RouteTypeKey[] = ["air", "sea", "express", "truck", "storage"];
+// Shown until /admin → 系统设置 → 线路类型设置 has been saved at least once (seeded by migration).
+const ROUTE_TYPE_FALLBACK: Record<RouteTypeKey, RouteTypeCfg> = {
+  air: { enabled: true, unit_price_cad: 14.5, transit: "7-12 天", route: "广州 → 多伦多 / 温哥华", dim_divisor: 6000 },
+  sea: { enabled: true, unit_price_cad: 4.2, transit: "30-45 天", route: "广州 → 温哥华，整柜海运", dim_divisor: 6000 },
+  express: { enabled: false, unit_price_cad: 18.5, transit: "4-7 天", route: "广州 → 全加拿大", dim_divisor: 5000 },
+  truck: { enabled: false, unit_price_cad: 2.9, transit: "15-25 天", route: "广州 → 多伦多，陆运整柜", dim_divisor: 6000 },
+  storage: { enabled: false, unit_price_cad: 0, transit: "", route: "广州 / 义乌仓代为仓储", dim_divisor: 6000 },
+};
+const ROUTE_TYPE_META: Record<RouteTypeKey, { label: string; labelEn: string; icon: typeof Plane }> = {
+  air: { label: "空运", labelEn: "Air", icon: Plane },
+  sea: { label: "海运", labelEn: "Sea", icon: Ship },
+  express: { label: "快递", labelEn: "Express", icon: Zap },
+  truck: { label: "陆运", labelEn: "Truck", icon: Truck },
+  storage: { label: "仓储", labelEn: "Storage", icon: Warehouse },
+};
 const MIN_KG = 0.5;
 
 function ShippingPage() {
-  const { t, lang, formatPrice } = useApp();
+  const { t, lang, formatCad } = useApp();
   const { user } = useAuth();
-  const [method, setMethod] = useState<"air" | "sea">("air");
+  const [routeTypes, setRouteTypes] = useState<Record<RouteTypeKey, RouteTypeCfg>>(ROUTE_TYPE_FALLBACK);
+  const [method, setMethod] = useState<RouteTypeKey>("air");
   const [weight, setWeight] = useState("1.5");
   const [l, setL] = useState("30");
   const [w, setW] = useState("20");
   const [h, setH] = useState("15");
   const [result, setResult] = useState<number | null>(null);
 
+  useEffect(() => {
+    (supabase as any).from("app_settings").select("value").eq("key", "route_type_display").maybeSingle()
+      .then(({ data }: any) => {
+        if (!data?.value) return;
+        setRouteTypes(Object.fromEntries(ROUTE_TYPE_KEYS.map((k) => [k, { ...ROUTE_TYPE_FALLBACK[k], ...(data.value[k] ?? {}) }])) as Record<RouteTypeKey, RouteTypeCfg>);
+      });
+  }, []);
+
+  const enabledMethods = useMemo(() => ROUTE_TYPE_KEYS.filter((k) => routeTypes[k].enabled), [routeTypes]);
+  useEffect(() => {
+    if (enabledMethods.length > 0 && !enabledMethods.includes(method)) setMethod(enabledMethods[0]);
+  }, [enabledMethods, method]);
+
   const calc = () => {
+    const cfg = routeTypes[method];
     const actual = parseFloat(weight) || 0;
-    const vol = ((parseFloat(l) || 0) * (parseFloat(w) || 0) * (parseFloat(h) || 0)) / 6000;
+    const vol = ((parseFloat(l) || 0) * (parseFloat(w) || 0) * (parseFloat(h) || 0)) / cfg.dim_divisor;
     const billable = Math.max(actual, vol, MIN_KG);
-    const total = billable * RATES[method];
+    const total = billable * cfg.unit_price_cad;
     setResult(total);
   };
 
@@ -68,16 +100,19 @@ function ShippingPage() {
       </header>
 
       <div className="mt-12 grid gap-6 md:grid-cols-2">
-        <div className="rounded-2xl border border-border bg-hero p-6 text-white">
-          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-white/60"><Plane className="h-3.5 w-3.5" /> {t("shipping.air")}</div>
-          <div className="mt-3 font-display text-3xl font-bold">¥{RATES.air} / kg</div>
-          <p className="mt-2 text-sm text-white/70">{lang === "zh" ? "广州 → 多伦多/温哥华，含清关、本地派送" : "Guangzhou → Toronto / Vancouver, customs & last-mile included"}</p>
-        </div>
-        <div className="rounded-2xl border border-border bg-surface p-6">
-          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-ink-soft"><Ship className="h-3.5 w-3.5" /> {t("shipping.sea")}</div>
-          <div className="mt-3 font-display text-3xl font-bold text-brand-gradient">¥{RATES.sea} / kg</div>
-          <p className="mt-2 text-sm text-ink-soft">{lang === "zh" ? "整柜海运，适合大件、家具、囤货" : "Container freight, great for bulk, furniture, restocking"}</p>
-        </div>
+        {enabledMethods.slice(0, 2).map((m, i) => {
+          const cfg = routeTypes[m];
+          const Icon = ROUTE_TYPE_META[m].icon;
+          return (
+            <div key={m} className={i === 0 ? "rounded-2xl border border-border bg-hero p-6 text-white" : "rounded-2xl border border-border bg-surface p-6"}>
+              <div className={`flex items-center gap-2 text-xs uppercase tracking-wider ${i === 0 ? "text-white/60" : "text-ink-soft"}`}>
+                <Icon className="h-3.5 w-3.5" /> {lang === "zh" ? ROUTE_TYPE_META[m].label : ROUTE_TYPE_META[m].labelEn} ({cfg.transit})
+              </div>
+              <div className={i === 0 ? "mt-3 font-display text-3xl font-bold" : "mt-3 font-display text-3xl font-bold text-brand-gradient"}>CA${cfg.unit_price_cad} / kg</div>
+              <p className={`mt-2 text-sm ${i === 0 ? "text-white/70" : "text-ink-soft"}`}>{cfg.route}</p>
+            </div>
+          );
+        })}
       </div>
 
       <section className="mt-12 overflow-hidden rounded-3xl border border-border bg-surface">
@@ -90,14 +125,14 @@ function ShippingPage() {
           <div className="space-y-5">
             <div>
               <label className="mb-2 block text-sm font-medium">{t("shipping.method")}</label>
-              <div className="grid grid-cols-2 gap-2 rounded-full bg-accent p-1">
-                {(["air", "sea"] as const).map((m) => (
+              <div className="grid gap-2 rounded-full bg-accent p-1" style={{ gridTemplateColumns: `repeat(${Math.max(enabledMethods.length, 1)}, minmax(0,1fr))` }}>
+                {enabledMethods.map((m) => (
                   <button
                     key={m}
                     onClick={() => setMethod(m)}
                     className={`rounded-full py-2 text-sm font-medium transition ${method === m ? "bg-foreground text-background" : "text-ink-soft"}`}
                   >
-                    {t(m === "air" ? "shipping.air" : "shipping.sea")}
+                    {lang === "zh" ? ROUTE_TYPE_META[m].label : ROUTE_TYPE_META[m].labelEn}
                   </button>
                 ))}
               </div>
@@ -139,12 +174,16 @@ function ShippingPage() {
           <div className="rounded-2xl bg-hero p-6 text-white">
             <div className="text-xs uppercase tracking-wider text-white/60">{t("shipping.result")}</div>
             <div className="mt-2 font-display text-5xl font-bold">
-              {result === null ? "¥ — " : `¥${result.toFixed(0)}`}
+              {result === null ? "CA$ — " : `CA$${result.toFixed(2)}`}
             </div>
             {result !== null && (
-              <div className="mt-1 text-sm text-white/70">{formatPrice(result)}</div>
+              <div className="mt-1 text-sm text-white/70">{formatCad(result)}</div>
             )}
-            <p className="mt-6 text-xs leading-relaxed text-white/60">{t("shipping.note")}</p>
+            <p className="mt-6 text-xs leading-relaxed text-white/60">
+              {lang === "zh"
+                ? `* 实际运费以入库实测为准，体积重 = 长×宽×高/${routeTypes[method].dim_divisor}`
+                : `* Final freight is based on actual measurements at intake. Volumetric weight = L×W×H/${routeTypes[method].dim_divisor}`}
+            </p>
           </div>
         </div>
       </section>

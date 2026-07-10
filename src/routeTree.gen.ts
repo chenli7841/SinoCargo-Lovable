@@ -28,6 +28,7 @@ import { Route as AdminTrackingPresetsRouteImport } from './routes/admin/trackin
 import { Route as AdminSystemRouteImport } from './routes/admin/system'
 import { Route as AdminRoutesRouteImport } from './routes/admin/routes'
 import { Route as AdminOversizeRulesRouteImport } from './routes/admin/oversize-rules'
+import { Route as AdminMessagesRouteImport } from './routes/admin/messages'
 import { Route as AdminMeasureRouteImport } from './routes/admin/measure'
 import { Route as AdminLogsRouteImport } from './routes/admin/logs'
 import { Route as AdminIntakeScanRouteImport } from './routes/admin/intake-scan'
@@ -171,6 +172,11 @@ const AdminRoutesRoute = AdminRoutesRouteImport.update({
 const AdminOversizeRulesRoute = AdminOversizeRulesRouteImport.update({
   id: '/oversize-rules',
   path: '/oversize-rules',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminMessagesRoute = AdminMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminMeasureRoute = AdminMeasureRouteImport.update({
@@ -456,6 +462,7 @@ export interface FileRoutesByFullPath {
   '/admin/intake-scan': typeof AdminIntakeScanRoute
   '/admin/logs': typeof AdminLogsRoute
   '/admin/measure': typeof AdminMeasureRoute
+  '/admin/messages': typeof AdminMessagesRoute
   '/admin/oversize-rules': typeof AdminOversizeRulesRoute
   '/admin/routes': typeof AdminRoutesRoute
   '/admin/system': typeof AdminSystemRoute
@@ -524,6 +531,7 @@ export interface FileRoutesByTo {
   '/admin/intake-scan': typeof AdminIntakeScanRoute
   '/admin/logs': typeof AdminLogsRoute
   '/admin/measure': typeof AdminMeasureRoute
+  '/admin/messages': typeof AdminMessagesRoute
   '/admin/oversize-rules': typeof AdminOversizeRulesRoute
   '/admin/routes': typeof AdminRoutesRoute
   '/admin/system': typeof AdminSystemRoute
@@ -596,6 +604,7 @@ export interface FileRoutesById {
   '/admin/intake-scan': typeof AdminIntakeScanRoute
   '/admin/logs': typeof AdminLogsRoute
   '/admin/measure': typeof AdminMeasureRoute
+  '/admin/messages': typeof AdminMessagesRoute
   '/admin/oversize-rules': typeof AdminOversizeRulesRoute
   '/admin/routes': typeof AdminRoutesRoute
   '/admin/system': typeof AdminSystemRoute
@@ -668,6 +677,7 @@ export interface FileRouteTypes {
     | '/admin/intake-scan'
     | '/admin/logs'
     | '/admin/measure'
+    | '/admin/messages'
     | '/admin/oversize-rules'
     | '/admin/routes'
     | '/admin/system'
@@ -736,6 +746,7 @@ export interface FileRouteTypes {
     | '/admin/intake-scan'
     | '/admin/logs'
     | '/admin/measure'
+    | '/admin/messages'
     | '/admin/oversize-rules'
     | '/admin/routes'
     | '/admin/system'
@@ -807,6 +818,7 @@ export interface FileRouteTypes {
     | '/admin/intake-scan'
     | '/admin/logs'
     | '/admin/measure'
+    | '/admin/messages'
     | '/admin/oversize-rules'
     | '/admin/routes'
     | '/admin/system'
@@ -1004,6 +1016,13 @@ declare module '@tanstack/react-router' {
       path: '/oversize-rules'
       fullPath: '/admin/oversize-rules'
       preLoaderRoute: typeof AdminOversizeRulesRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/messages': {
+      id: '/admin/messages'
+      path: '/messages'
+      fullPath: '/admin/messages'
+      preLoaderRoute: typeof AdminMessagesRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/measure': {
@@ -1393,6 +1412,7 @@ interface AdminRouteRouteChildren {
   AdminIntakeScanRoute: typeof AdminIntakeScanRoute
   AdminLogsRoute: typeof AdminLogsRoute
   AdminMeasureRoute: typeof AdminMeasureRoute
+  AdminMessagesRoute: typeof AdminMessagesRoute
   AdminOversizeRulesRoute: typeof AdminOversizeRulesRoute
   AdminRoutesRoute: typeof AdminRoutesRoute
   AdminSystemRoute: typeof AdminSystemRoute
@@ -1443,6 +1463,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminIntakeScanRoute: AdminIntakeScanRoute,
   AdminLogsRoute: AdminLogsRoute,
   AdminMeasureRoute: AdminMeasureRoute,
+  AdminMessagesRoute: AdminMessagesRoute,
   AdminOversizeRulesRoute: AdminOversizeRulesRoute,
   AdminRoutesRoute: AdminRoutesRoute,
   AdminSystemRoute: AdminSystemRoute,

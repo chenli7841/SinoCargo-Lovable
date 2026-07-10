@@ -429,6 +429,36 @@ export type Database = {
         }
         Relationships: []
       }
+      contact_messages: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          message: string
+          name: string
+          phone: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          message: string
+          name: string
+          phone?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          message?: string
+          name?: string
+          phone?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       coupon_redemptions: {
         Row: {
           coupon_id: string
@@ -1936,7 +1966,6 @@ export type Database = {
           available_route_codes: string[]
           brand: string | null
           business_air_route_code: string | null
-          business_freight_override: Json
           business_sea_route_code: string | null
           cargo_type: string
           category_id: string | null
@@ -1944,7 +1973,9 @@ export type Database = {
           compare_price_cny: number | null
           cover_url: string | null
           created_at: string
-          customs_rate: number
+          customs_antidumping_rate: number
+          customs_gst_rate: number
+          customs_mfn_rate: number
           description: string | null
           detail_blocks: Json
           freight_cny: number
@@ -1952,7 +1983,6 @@ export type Database = {
           hs_code: string | null
           id: string
           images: Json
-          last_mile_fee_cad: number
           length_cm: number | null
           manufacturer: string | null
           moq: number
@@ -1964,9 +1994,7 @@ export type Database = {
           pack_weight_kg: number | null
           pack_width_cm: number | null
           personal_air_route_code: string | null
-          personal_chargeable_weight_kg: number | null
           personal_freight_mode: string
-          personal_freight_override: Json
           personal_per_unit_freight_air_cny: number
           personal_per_unit_freight_cny: number
           personal_per_unit_freight_sea_cny: number
@@ -1990,7 +2018,6 @@ export type Database = {
           available_route_codes?: string[]
           brand?: string | null
           business_air_route_code?: string | null
-          business_freight_override?: Json
           business_sea_route_code?: string | null
           cargo_type?: string
           category_id?: string | null
@@ -1998,7 +2025,9 @@ export type Database = {
           compare_price_cny?: number | null
           cover_url?: string | null
           created_at?: string
-          customs_rate?: number
+          customs_antidumping_rate?: number
+          customs_gst_rate?: number
+          customs_mfn_rate?: number
           description?: string | null
           detail_blocks?: Json
           freight_cny?: number
@@ -2006,7 +2035,6 @@ export type Database = {
           hs_code?: string | null
           id?: string
           images?: Json
-          last_mile_fee_cad?: number
           length_cm?: number | null
           manufacturer?: string | null
           moq?: number
@@ -2018,9 +2046,7 @@ export type Database = {
           pack_weight_kg?: number | null
           pack_width_cm?: number | null
           personal_air_route_code?: string | null
-          personal_chargeable_weight_kg?: number | null
           personal_freight_mode?: string
-          personal_freight_override?: Json
           personal_per_unit_freight_air_cny?: number
           personal_per_unit_freight_cny?: number
           personal_per_unit_freight_sea_cny?: number
@@ -2044,7 +2070,6 @@ export type Database = {
           available_route_codes?: string[]
           brand?: string | null
           business_air_route_code?: string | null
-          business_freight_override?: Json
           business_sea_route_code?: string | null
           cargo_type?: string
           category_id?: string | null
@@ -2052,7 +2077,9 @@ export type Database = {
           compare_price_cny?: number | null
           cover_url?: string | null
           created_at?: string
-          customs_rate?: number
+          customs_antidumping_rate?: number
+          customs_gst_rate?: number
+          customs_mfn_rate?: number
           description?: string | null
           detail_blocks?: Json
           freight_cny?: number
@@ -2060,7 +2087,6 @@ export type Database = {
           hs_code?: string | null
           id?: string
           images?: Json
-          last_mile_fee_cad?: number
           length_cm?: number | null
           manufacturer?: string | null
           moq?: number
@@ -2072,9 +2098,7 @@ export type Database = {
           pack_weight_kg?: number | null
           pack_width_cm?: number | null
           personal_air_route_code?: string | null
-          personal_chargeable_weight_kg?: number | null
           personal_freight_mode?: string
-          personal_freight_override?: Json
           personal_per_unit_freight_air_cny?: number
           personal_per_unit_freight_cny?: number
           personal_per_unit_freight_sea_cny?: number
@@ -2378,6 +2402,7 @@ export type Database = {
           transit_days_max: number | null
           transit_days_min: number | null
           updated_at: string
+          usage_scope: string
           visible_customer_codes: string[]
           visible_vip_levels: Database["public"]["Enums"]["vip_level"][]
         }
@@ -2410,6 +2435,7 @@ export type Database = {
           transit_days_max?: number | null
           transit_days_min?: number | null
           updated_at?: string
+          usage_scope?: string
           visible_customer_codes?: string[]
           visible_vip_levels?: Database["public"]["Enums"]["vip_level"][]
         }
@@ -2442,6 +2468,7 @@ export type Database = {
           transit_days_max?: number | null
           transit_days_min?: number | null
           updated_at?: string
+          usage_scope?: string
           visible_customer_codes?: string[]
           visible_vip_levels?: Database["public"]["Enums"]["vip_level"][]
         }
@@ -3102,6 +3129,7 @@ export type Database = {
       }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
       lookup_shipment: { Args: { _tracking_no: string }; Returns: Json }
+      track_by_any_no: { Args: { _input: string }; Returns: Json }
       mark_invoices_overdue: { Args: never; Returns: number }
       normalize_no: { Args: { _input: string }; Returns: string }
       pallet_payment_status: { Args: { _pallet_id: string }; Returns: string }

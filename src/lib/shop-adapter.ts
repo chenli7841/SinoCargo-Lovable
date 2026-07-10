@@ -19,6 +19,9 @@ export function adaptProduct(p: PublicProduct): Product {
     image: img,
     purchaseType: (p.purchase_type === "business" ? "business" : "personal"),
     moq: p.moq ?? 1,
+    packQty: p.pack_qty ?? 1,
+    packWeightKg: p.pack_weight_kg ?? undefined,
+    availableRouteCodes: Array.isArray(p.available_route_codes) ? p.available_route_codes : [],
   } as Product;
 }
 

@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { useApp, CNY_TO_CAD } from "@/lib/i18n";
+import { useApp } from "@/lib/i18n";
 import { useCart } from "@/lib/cart";
 
 import { Check, Plane, Ship, Truck, ShoppingCart, Minus, Plus, Calculator } from "lucide-react";
@@ -62,9 +62,11 @@ function ProductDetail() {
   const allowBusiness = dp.allow_business ?? (dp.purchase_type === "business");
   const [mode, setMode] = useState<"personal" | "business">(allowPersonal ? "personal" : "business");
 
-  const { lang, formatPrice, t, currency } = useApp();
+  const { lang, formatPrice, t, currency, cnyToCad } = useApp();
+
   const { add } = useCart();
   const minQty = mode === "business" ? (dp.moq ?? 1) : 1;
+  const stepQty = mode === "business" ? Math.max(dp.pack_qty ?? 1, 1) : 1;
   const [qty, setQty] = useState(minQty);
   useEffect(() => { if (qty < minQty) setQty(minQty); }, [minQty]);
   const [selVariantId, setSelVariantId] = useState<string | null>(variants[0]?.id ?? null);
@@ -75,8 +77,10 @@ function ProductDetail() {
   const [activeImg, setActiveImg] = useState(0);
   const currentImg = gallery[activeImg];
 
+  const totalCustomsRate = Number(dp.customs_mfn_rate ?? 0) + Number(dp.customs_gst_rate ?? 0) + Number(dp.customs_antidumping_rate ?? 0);
+
   const otherPrice = currency === "CNY"
-    ? `≈ CA$${(effectivePriceCNY * CNY_TO_CAD).toFixed(2)}`
+    ? `≈ CA$${cnyToCad(effectivePriceCNY).toFixed(2)}`
     : `≈ ¥${effectivePriceCNY.toFixed(0)}`;
 
   const handleAdd = () => {
@@ -181,14 +185,9 @@ function ProductDetail() {
               )}
             </div>
             <div className="mt-2 text-xs text-ink-soft">{t("product.from")} · {t("product.weight")} {product.weightKg}kg</div>
-            {mode === "business" && Number(dp.customs_rate) > 0 && (
+            {totalCustomsRate > 0 && (
               <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                {lang === "zh" ? `商业采购按 ${(Number(dp.customs_rate) * 100).toFixed(1)}% 收取关税` : `Business: ${(Number(dp.customs_rate) * 100).toFixed(1)}% customs duty`}
-              </div>
-            )}
-            {mode === "business" && Number(dp.last_mile_fee_cad) > 0 && (
-              <div className="mt-1 text-xs text-ink-soft">
-                {lang === "zh" ? `末端派送费 CA$${Number(dp.last_mile_fee_cad).toFixed(2)}` : `Last-mile fee CA$${Number(dp.last_mile_fee_cad).toFixed(2)}`}
+                {lang === "zh" ? `按 ${(totalCustomsRate * 100).toFixed(1)}% 收取关税（MFN+GST+反倾销）` : `${(totalCustomsRate * 100).toFixed(1)}% customs duty (MFN+GST+anti-dumping)`}
               </div>
             )}
             {mode === "business" && qty < (dp.moq ?? 1) && (
@@ -199,14 +198,24 @@ function ProductDetail() {
           </div>
 
           <div className="mt-6 grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-border bg-surface p-4">
-              <div className="flex items-center gap-2 text-xs text-ink-soft"><Plane className="h-3.5 w-3.5" /> {t("shipping.air")}</div>
-              <div className="mt-1 font-semibold">7–12 {t("product.days")}</div>
-            </div>
-            <div className="rounded-xl border border-border bg-surface p-4">
-              <div className="flex items-center gap-2 text-xs text-ink-soft"><Ship className="h-3.5 w-3.5" /> {t("shipping.sea")}</div>
-              <div className="mt-1 font-semibold">30–45 {t("product.days")}</div>
-            </div>
+            {allowedRoutes.length === 0 ? (
+              <div className="col-span-2 rounded-xl border border-dashed border-border bg-surface p-4 text-xs text-ink-soft">
+                {lang === "zh" ? "该商品暂未配置运输线路" : "No shipping route configured for this product"}
+              </div>
+            ) : (
+              allowedRoutes.map((r: any) => {
+                const Icon = r.shipping_method === "sea" ? Ship : r.shipping_method === "express" || r.shipping_method === "truck" ? Truck : Plane;
+                const eta = [r.transit_days_min, r.transit_days_max].filter((n) => n != null).join("-");
+                return (
+                  <div key={r.code} className="rounded-xl border border-border bg-surface p-4">
+                    <div className="flex items-center gap-2 text-xs text-ink-soft">
+                      <Icon className="h-3.5 w-3.5" /> {lang === "zh" ? r.name_zh : (r.name_en ?? r.name_zh)}
+                    </div>
+                    <div className="mt-1 font-semibold">{eta ? `${eta} ${lang === "zh" ? "天" : "days"}` : "—"}</div>
+                  </div>
+                );
+              })
+            )}
           </div>
 
           {variants.length > 0 && (
@@ -222,7 +231,7 @@ function ProductDetail() {
                       className={`rounded-full border px-3 py-1.5 text-xs transition ${active ? "border-brand bg-brand/10 font-semibold text-brand" : "border-border hover:border-brand/40"} ${out ? "opacity-40 line-through" : ""}`}>
                       {label}
                       {v.price_cny != null && Number(v.price_cny) !== Number(product.priceCNY) && (
-                        <span className="ml-1 text-[10px] text-ink-soft">· ¥{Number(v.price_cny).toFixed(0)}</span>
+                        <span className="ml-1 text-[10px] text-ink-soft">· {formatPrice(Number(v.price_cny))}</span>
                       )}
                     </button>
                   );
@@ -238,9 +247,9 @@ function ProductDetail() {
 
           <div className="mt-6 flex items-stretch gap-3">
             <div className="inline-flex items-center rounded-full border border-border bg-surface">
-              <button onClick={() => setQty(Math.max(minQty, qty - 1))} className="grid h-12 w-12 place-items-center text-ink-soft hover:text-foreground"><Minus className="h-4 w-4" /></button>
+              <button onClick={() => setQty(Math.max(minQty, qty - stepQty))} className="grid h-12 w-12 place-items-center text-ink-soft hover:text-foreground"><Minus className="h-4 w-4" /></button>
               <span className="w-12 text-center font-semibold">{qty}</span>
-              <button onClick={() => setQty(qty + 1)} className="grid h-12 w-12 place-items-center text-ink-soft hover:text-foreground"><Plus className="h-4 w-4" /></button>
+              <button onClick={() => setQty(qty + stepQty)} className="grid h-12 w-12 place-items-center text-ink-soft hover:text-foreground"><Plus className="h-4 w-4" /></button>
             </div>
             <button onClick={handleAdd} disabled={stock <= 0 || qty < minQty} className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-cta-gradient px-6 py-4 text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50">
               <ShoppingCart className="h-4 w-4" />

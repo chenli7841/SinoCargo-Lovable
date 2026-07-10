@@ -27,23 +27,21 @@ function ProductEdit() {
   const [form, setForm] = useState<any>({
     sku: "", name: "", slug: "", description: "", brand: "",
     status: "draft", price_cny: 0, compare_price_cad: null,
-    category_id: null, cover_url: "", weight_kg: null, tags: [],
+    category_id: null, cover_url: "", weight_kg: null, length_cm: null, width_cm: null, height_cm: null, tags: [],
     images: [], hs_code: "", manufacturer: "", detail_blocks: [],
     purchase_type: "personal",
     allow_personal: true, allow_business: false,
     cargo_type: "general",
-    moq: 1, customs_rate: 0, last_mile_fee_cad: 0,
+    moq: 1, customs_mfn_rate: 0, customs_gst_rate: 0, customs_antidumping_rate: 0,
     personal_freight_mode: "follow_route",
     personal_per_unit_freight_cny: 0,
     personal_per_unit_freight_air_cny: 0,
     personal_per_unit_freight_sea_cny: 0,
-    personal_chargeable_weight_kg: null,
     personal_air_route_code: null, personal_sea_route_code: null,
     business_air_route_code: null, business_sea_route_code: null,
     pack_qty: 1, pack_weight_kg: null,
     pack_length_cm: null, pack_width_cm: null, pack_height_cm: null, pack_volume_m3: null,
     available_route_codes: [],
-    personal_freight_override: {}, business_freight_override: {},
   });
 
   const [routes, setRoutes] = useState<any[]>([]);
@@ -59,8 +57,6 @@ function ProductEdit() {
         images: Array.isArray(p.images) ? p.images : [],
         detail_blocks: Array.isArray(p.detail_blocks) ? p.detail_blocks : [],
         available_route_codes: Array.isArray(p.available_route_codes) ? p.available_route_codes : [],
-        personal_freight_override: p.personal_freight_override ?? {},
-        business_freight_override: p.business_freight_override ?? {},
       });
       setVariants(q.data.variants);
     }
@@ -70,8 +66,8 @@ function ProductEdit() {
   useEffect(() => {
     import("@/integrations/supabase/client").then(({ supabase }) =>
       (supabase as any).from("shipping_routes")
-        .select("code,name_zh,shipping_method,destination_code,cargo_type")
-        .eq("is_active", true).order("sort_order")
+        .select("code,name_zh,shipping_method,destination_code,cargo_type,usage_scope")
+        .eq("is_active", true).in("usage_scope", ["shop", "both"]).order("sort_order")
         .then(({ data }: any) => setRoutes(data ?? []))
     );
   }, []);
@@ -243,12 +239,17 @@ function ProductEdit() {
             <p className="mt-1 text-[11px] text-slate-500">至少勾选一项；MOQ 仅用于校验是否达到商业采购门槛，不参与运费 / 箱数计算</p>
           </Field>
           {form.allow_business && (
-            <>
-              <Field label="最小起订量 MOQ（仅商业门槛校验）"><Input type="number" value={String(form.moq ?? 1)} onChange={v => setForm({ ...form, moq: Number(v) || 1 })}/></Field>
-              <Field label="关税率（0~1，仅商业）"><Input type="number" value={String(form.customs_rate ?? 0)} onChange={v => setForm({ ...form, customs_rate: Number(v) || 0 })}/></Field>
-              <Field label="末端派送费 CAD（仅商业）"><Input type="number" value={String(form.last_mile_fee_cad ?? 0)} onChange={v => setForm({ ...form, last_mile_fee_cad: Number(v) || 0 })}/></Field>
-            </>
+            <Field label="最小起订量 MOQ（仅商业门槛校验）"><Input type="number" value={String(form.moq ?? 1)} onChange={v => setForm({ ...form, moq: Number(v) || 1 })}/></Field>
           )}
+          <Field label="MFN 关税率（0~1）"><Input type="number" value={String(form.customs_mfn_rate ?? 0)} onChange={v => setForm({ ...form, customs_mfn_rate: Number(v) || 0 })}/></Field>
+          <Field label="GST 税率（0~1）"><Input type="number" value={String(form.customs_gst_rate ?? 0)} onChange={v => setForm({ ...form, customs_gst_rate: Number(v) || 0 })}/></Field>
+          <Field label="反倾销税率（0~1）"><Input type="number" value={String(form.customs_antidumping_rate ?? 0)} onChange={v => setForm({ ...form, customs_antidumping_rate: Number(v) || 0 })}/></Field>
+          <Field label="合计关税率" full>
+            <p className="text-sm text-slate-300">
+              {((Number(form.customs_mfn_rate ?? 0) + Number(form.customs_gst_rate ?? 0) + Number(form.customs_antidumping_rate ?? 0)) * 100).toFixed(1)}%
+            </p>
+            <p className="mt-1 text-[11px] text-slate-500">关税 = 商品小计（单价×数量）× 合计关税率，个人和商业采购均适用</p>
+          </Field>
         </div>
       </Section>
 
@@ -264,7 +265,7 @@ function ProductEdit() {
                 <option value="per_unit">按数量（数量 × 预设单件运费）</option>
               </select>
             </Field>
-            {form.personal_freight_mode === "per_unit" ? (
+            {form.personal_freight_mode === "per_unit" && (
               <>
                 <Field label="单件预设运费 · 空运 CNY">
                   <Input type="number" value={String(form.personal_per_unit_freight_air_cny ?? 0)}
@@ -275,27 +276,40 @@ function ProductEdit() {
                     onChange={v => setForm({ ...form, personal_per_unit_freight_sea_cny: Number(v) || 0 })}/>
                 </Field>
               </>
-            ) : (
-              <Field label="单件预设计费重量 kg">
-                <Input type="number" value={String(form.personal_chargeable_weight_kg ?? "")}
-                  onChange={v => setForm({ ...form, personal_chargeable_weight_kg: v === "" ? null : Number(v) })}/>
-              </Field>
             )}
           </div>
+          {form.personal_freight_mode !== "per_unit" && (
+            <p className="mt-2 text-[11px] text-slate-500">单件计费重量取自下方「个人采购包装规格」的单件重量 / 尺寸，按所选线路的计重规则计算。</p>
+          )}
         </Section>
       )}
 
-      {/* 包装规格（个人/商业 共用，用于按箱计费） */}
-      <Section title="包装规格（个人 / 商业 共用，按包装尺寸 × 箱数计费；箱数 = 数量 ÷ 内件数）">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="内件数（每箱件数，用于计算箱数与运费）"><Input type="number" value={String(form.pack_qty ?? 1)} onChange={v => setForm({ ...form, pack_qty: Number(v) || 1 })}/></Field>
-          <Field label="包装重量 kg"><Input type="number" value={String(form.pack_weight_kg ?? "")} onChange={v => setForm({ ...form, pack_weight_kg: Number(v) || null })}/></Field>
-          <Field label="包装体积 m³"><Input type="number" value={String(form.pack_volume_m3 ?? "")} onChange={v => setForm({ ...form, pack_volume_m3: Number(v) || null })}/></Field>
-          <Field label="长 cm"><Input type="number" value={String(form.pack_length_cm ?? "")} onChange={v => setForm({ ...form, pack_length_cm: Number(v) || null })}/></Field>
-          <Field label="宽 cm"><Input type="number" value={String(form.pack_width_cm ?? "")} onChange={v => setForm({ ...form, pack_width_cm: Number(v) || null })}/></Field>
-          <Field label="高 cm"><Input type="number" value={String(form.pack_height_cm ?? "")} onChange={v => setForm({ ...form, pack_height_cm: Number(v) || null })}/></Field>
-        </div>
-      </Section>
+      {/* 个人采购包装规格：单件重量/尺寸，直接用于个人采购计费重量（不按箱） */}
+      {form.allow_personal && (
+        <Section title="个人采购包装规格（单件重量 / 尺寸，按件计费，不按箱折算）">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="单件重量 kg"><Input type="number" value={String(form.weight_kg ?? "")} onChange={v => setForm({ ...form, weight_kg: v === "" ? null : Number(v) })}/></Field>
+            <Field label="单件长 cm"><Input type="number" value={String(form.length_cm ?? "")} onChange={v => setForm({ ...form, length_cm: v === "" ? null : Number(v) })}/></Field>
+            <Field label="单件宽 cm"><Input type="number" value={String(form.width_cm ?? "")} onChange={v => setForm({ ...form, width_cm: v === "" ? null : Number(v) })}/></Field>
+            <Field label="单件高 cm"><Input type="number" value={String(form.height_cm ?? "")} onChange={v => setForm({ ...form, height_cm: v === "" ? null : Number(v) })}/></Field>
+          </div>
+          <p className="mt-2 text-[11px] text-slate-500">个人采购计费重量 = 单件计费重量（按线路规则取实重/体积重）× 数量，不受下方"商业采购包装规格"影响。</p>
+        </Section>
+      )}
+
+      {/* 商业采购包装规格：整箱重量/尺寸，按箱数折算计费 */}
+      {form.allow_business && (
+        <Section title="商业采购包装规格（整箱重量 / 尺寸，按包装尺寸 × 箱数计费；箱数 = 数量 ÷ 内件数）">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="内件数（每箱件数，用于计算箱数与运费）"><Input type="number" value={String(form.pack_qty ?? 1)} onChange={v => setForm({ ...form, pack_qty: Number(v) || 1 })}/></Field>
+            <Field label="包装重量 kg"><Input type="number" value={String(form.pack_weight_kg ?? "")} onChange={v => setForm({ ...form, pack_weight_kg: Number(v) || null })}/></Field>
+            <Field label="包装体积 m³"><Input type="number" value={String(form.pack_volume_m3 ?? "")} onChange={v => setForm({ ...form, pack_volume_m3: Number(v) || null })}/></Field>
+            <Field label="长 cm"><Input type="number" value={String(form.pack_length_cm ?? "")} onChange={v => setForm({ ...form, pack_length_cm: Number(v) || null })}/></Field>
+            <Field label="宽 cm"><Input type="number" value={String(form.pack_width_cm ?? "")} onChange={v => setForm({ ...form, pack_width_cm: Number(v) || null })}/></Field>
+            <Field label="高 cm"><Input type="number" value={String(form.pack_height_cm ?? "")} onChange={v => setForm({ ...form, pack_height_cm: Number(v) || null })}/></Field>
+          </div>
+        </Section>
+      )}
 
       {/* 线路匹配：个人/商业 × 空运/海运 */}
       <Section title="线路匹配（按 采购模式 × 运输方式 各选一条线路）">
@@ -331,18 +345,6 @@ function ProductEdit() {
         )}
         <p className="mt-2 text-[11px] text-slate-500">线路仅显示与当前商品「货物类型」匹配的线路。未选择则该 采购模式 × 运输方式 组合不可下单。</p>
       </Section>
-
-      {/* 运费公式（个人 / 商业） */}
-      <FreightOverridePanel
-        title="个人采购运费公式（按单品尺寸 × 数量）"
-        value={form.personal_freight_override ?? {}}
-        onChange={(v) => setForm({ ...form, personal_freight_override: v })}
-      />
-      <FreightOverridePanel
-        title="商业采购运费公式（按包装尺寸 × 包装数）"
-        value={form.business_freight_override ?? {}}
-        onChange={(v) => setForm({ ...form, business_freight_override: v })}
-      />
 
 
       {/* 变体 */}
@@ -402,41 +404,5 @@ function Input({ value, onChange, type = "text" }: { value: string; onChange: (v
 function MiniInput({ value, onChange, type = "text" }: { value: string; onChange: (v: string) => void; type?: string }) {
   return <input type={type} value={value} onChange={(e) => onChange(e.target.value)}
     className="w-full rounded border border-white/10 bg-white/5 px-2 py-1 text-xs focus:border-brand focus:outline-none"/>;
-}
-
-function FreightOverridePanel({ title, value, onChange }: { title: string; value: Record<string, any>; onChange: (v: Record<string, any>) => void }) {
-  const set = (k: string, v: any) => onChange({ ...value, [k]: v === "" || v == null ? undefined : v });
-  const num = (k: string) => value?.[k] ?? "";
-  return (
-    <Section title={title}>
-      <p className="mb-3 text-[11px] text-slate-500">留空 = 沿用所选线路 freight_rules 的对应值</p>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="计费模式">
-          <select value={value?.weight_mode ?? ""} onChange={(e) => set("weight_mode", e.target.value || undefined)}
-            className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm [&>option]:bg-[#0E1626]">
-            <option value="">（沿用线路）</option>
-            <option value="actual">按实重</option>
-            <option value="volumetric">按体积重</option>
-            <option value="max">取大者</option>
-          </select>
-        </Field>
-        <Field label="体积除数（默认 6000）">
-          <Input type="number" value={String(num("volumetric_divisor"))} onChange={(v) => set("volumetric_divisor", v === "" ? undefined : Number(v))}/>
-        </Field>
-        <Field label="单价 CNY / kg">
-          <Input type="number" value={String(num("unit_price_cny"))} onChange={(v) => set("unit_price_cny", v === "" ? undefined : Number(v))}/>
-        </Field>
-        <Field label="起步价 CNY">
-          <Input type="number" value={String(num("min_charge_cny"))} onChange={(v) => set("min_charge_cny", v === "" ? undefined : Number(v))}/>
-        </Field>
-        <Field label="附加费 CNY">
-          <Input type="number" value={String(num("extra_fee_cny"))} onChange={(v) => set("extra_fee_cny", v === "" ? undefined : Number(v))}/>
-        </Field>
-        <Field label="保险费率 %">
-          <Input type="number" value={String(num("insurance_rate_pct"))} onChange={(v) => set("insurance_rate_pct", v === "" ? undefined : Number(v))}/>
-        </Field>
-      </div>
-    </Section>
-  );
 }
 

@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useApp, CNY_TO_CAD } from "@/lib/i18n";
+import { useApp } from "@/lib/i18n";
 import { OrderAttachments } from "@/components/order-attachments";
 import { WaybillsList } from "@/components/waybills-list";
 import {
@@ -43,7 +43,7 @@ interface OrderItem {
 
 function OrderDetailPage() {
   const { orderId } = Route.useParams();
-  const { lang } = useApp();
+  const { lang, cnyToCad } = useApp();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [items, setItems] = useState<OrderItem[]>([]);
@@ -142,12 +142,12 @@ function OrderDetailPage() {
                 <Stat label={<span className="inline-flex items-center gap-1"><Boxes className="h-3 w-3" />{tr("运单数（箱数）", "Waybills (boxes)")}</span>} value={waybills.length || "—"} />
                 <Stat label={<span className="inline-flex items-center gap-1"><Weight className="h-3 w-3" />{tr("总重量", "Total weight")}</span>} value={totalWeight > 0 ? `${totalWeight.toFixed(2)} kg` : "—"} />
                 <Stat label={<span className="inline-flex items-center gap-1"><Ruler className="h-3 w-3" />{tr("总体积", "Total volume")}</span>} value={totalVolume > 0 ? `${totalVolume.toFixed(3)} m³` : "—"} />
-                <Stat label={<span className="inline-flex items-center gap-1"><Receipt className="h-3 w-3" />{tr("订单总运费", "Freight total")}</span>} value={<span className="font-display font-bold text-brand-gradient">CA${(freightTotal * CNY_TO_CAD).toFixed(2)}</span>} />
+                <Stat label={<span className="inline-flex items-center gap-1"><Receipt className="h-3 w-3" />{tr("订单总运费", "Freight total")}</span>} value={<span className="font-display font-bold text-brand-gradient">CA${cnyToCad(freightTotal).toFixed(2)}</span>} />
               </dl>
               <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-ink-soft">
-                <div className="rounded-lg bg-accent/40 px-2 py-1.5"><span className="inline-flex items-center gap-1"><Plane className="h-3 w-3" />{tr("运费", "Shipping")}</span><div className="mt-0.5 font-mono text-foreground">CA${(shipFee * CNY_TO_CAD).toFixed(2)}</div></div>
-                <div className="rounded-lg bg-accent/40 px-2 py-1.5"><span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" />{tr("关税", "Customs")}</span><div className="mt-0.5 font-mono text-foreground">CA${(cusFee * CNY_TO_CAD).toFixed(2)}</div></div>
-                <div className="rounded-lg bg-accent/40 px-2 py-1.5"><span className="inline-flex items-center gap-1"><ShieldCheck className="h-3 w-3" />{tr("保险", "Insurance")}</span><div className="mt-0.5 font-mono text-foreground">CA${(insFee * CNY_TO_CAD).toFixed(2)}</div></div>
+                <div className="rounded-lg bg-accent/40 px-2 py-1.5"><span className="inline-flex items-center gap-1"><Plane className="h-3 w-3" />{tr("运费", "Shipping")}</span><div className="mt-0.5 font-mono text-foreground">CA${cnyToCad(shipFee).toFixed(2)}</div></div>
+                <div className="rounded-lg bg-accent/40 px-2 py-1.5"><span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" />{tr("关税", "Customs")}</span><div className="mt-0.5 font-mono text-foreground">CA${cnyToCad(cusFee).toFixed(2)}</div></div>
+                <div className="rounded-lg bg-accent/40 px-2 py-1.5"><span className="inline-flex items-center gap-1"><ShieldCheck className="h-3 w-3" />{tr("保险", "Insurance")}</span><div className="mt-0.5 font-mono text-foreground">CA${cnyToCad(insFee).toFixed(2)}</div></div>
               </div>
             </div>
 
@@ -175,10 +175,10 @@ function OrderDetailPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold">{lang === "zh" ? it.name_zh : it.name_en}</div>
-                      <div className="text-xs text-ink-soft">CA${(Number(it.unit_price_cny) * CNY_TO_CAD).toFixed(2)} × {it.quantity}</div>
+                      <div className="text-xs text-ink-soft">CA${cnyToCad(Number(it.unit_price_cny)).toFixed(2)} × {it.quantity}</div>
                     </div>
                     <div className="text-right">
-                      <div className={`font-display text-sm font-bold ${it.paid ? "line-through" : ""}`}>CA${(itemTotal * CNY_TO_CAD).toFixed(2)}</div>
+                      <div className={`font-display text-sm font-bold ${it.paid ? "line-through" : ""}`}>CA${cnyToCad(itemTotal).toFixed(2)}</div>
                       {it.paid
                         ? <span className="text-[10px] font-semibold text-success">{tr("已付款", "Paid")}</span>
                         : <span className="text-[10px] font-semibold text-warning">{tr("待付款", "Unpaid")}</span>}
@@ -196,7 +196,7 @@ function OrderDetailPage() {
                 }} className="text-xs text-brand hover:underline">{tr("全选未付", "Select all unpaid")}</button>
                 <button onClick={() => setSelected(new Set())} className="text-xs text-ink-soft hover:underline">{tr("清空", "Clear")}</button>
                 <div className="ml-auto text-xs text-ink-soft">
-                  {tr("已选", "Selected")}: {selected.size} · CA${(items.filter((it) => selected.has(it.id)).reduce((s, it) => s + Number(it.unit_price_cny) * it.quantity, 0) * CNY_TO_CAD).toFixed(2)}
+                  {tr("已选", "Selected")}: {selected.size} · CA${cnyToCad(items.filter((it) => selected.has(it.id)).reduce((s, it) => s + Number(it.unit_price_cny) * it.quantity, 0)).toFixed(2)}
                 </div>
                 <button disabled={paying || selected.size === 0}
                   onClick={async () => {
@@ -238,14 +238,14 @@ function OrderDetailPage() {
         <aside className="space-y-6">
           <Card title={tr("费用明细", "Cost breakdown")} icon={<Receipt className="h-4 w-4" />}>
             <dl className="space-y-2 text-sm">
-              <Row label={tr("商品小计", "Subtotal")} value={`CA$${(Number(order.subtotal_cny) * CNY_TO_CAD).toFixed(2)}`} />
-              <Row label={<span className="inline-flex items-center gap-1"><Plane className="h-3 w-3" />{tr("国际运费", "Shipping")}</span>} value={`CA$${(Number(order.shipping_cny) * CNY_TO_CAD).toFixed(2)}`} />
-              <Row label={<span className="inline-flex items-center gap-1"><ShieldCheck className="h-3 w-3" />{tr("保险", "Insurance")}</span>} value={`CA$${(Number(order.insurance_cny) * CNY_TO_CAD).toFixed(2)}`} />
-              <Row label={<span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" />{tr("关税", "Customs/Duty")}</span>} value={`CA$${(Number(order.customs_cny) * CNY_TO_CAD).toFixed(2)}`} />
+              <Row label={tr("商品小计", "Subtotal")} value={`CA$${cnyToCad(Number(order.subtotal_cny)).toFixed(2)}`} />
+              <Row label={<span className="inline-flex items-center gap-1"><Plane className="h-3 w-3" />{tr("国际运费", "Shipping")}</span>} value={`CA$${cnyToCad(Number(order.shipping_cny)).toFixed(2)}`} />
+              <Row label={<span className="inline-flex items-center gap-1"><ShieldCheck className="h-3 w-3" />{tr("保险", "Insurance")}</span>} value={`CA$${cnyToCad(Number(order.insurance_cny)).toFixed(2)}`} />
+              <Row label={<span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" />{tr("关税", "Customs/Duty")}</span>} value={`CA$${cnyToCad(Number(order.customs_cny)).toFixed(2)}`} />
               <div className="my-2 border-t border-border" />
               <Row
                 label={<span className="text-base font-semibold">{tr("合计", "Total")}</span>}
-                value={<span className="font-display text-lg font-bold text-brand-gradient">CA${(Number(order.total_cny) * CNY_TO_CAD).toFixed(2)}</span>}
+                value={<span className="font-display text-lg font-bold text-brand-gradient">CA${cnyToCad(Number(order.total_cny)).toFixed(2)}</span>}
               />
               <div className="pt-1 text-right text-[11px] text-ink-soft">
                 {tr("付款状态", "Payment")}: {(() => {

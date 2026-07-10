@@ -9,7 +9,22 @@ export interface CartLine {
   priceCNY: number;
   weightKg: number;
   purchaseType: "personal" | "business";
+  moq?: number;
+  packQty?: number;
+  packWeightKg?: number;
+  /** Shipping routes this product is restricted to; empty = all routes allowed */
+  availableRouteCodes?: string[];
   quantity: number;
+}
+
+// Personal: per-unit chargeable weight × quantity.
+// Business: package/carton weight × number of packs (quantity ÷ units-per-pack) — falls
+// back to the personal formula if no pack weight has been configured for the product yet.
+export function lineWeightKg(i: CartLine): number {
+  if (i.purchaseType === "business" && i.packWeightKg && i.packQty) {
+    return i.packWeightKg * (i.quantity / i.packQty);
+  }
+  return i.weightKg * i.quantity;
 }
 
 interface CartCtx {
@@ -68,7 +83,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         {
           slug: p.slug, nameZh: p.name.zh, nameEn: p.name.en, image: p.image,
           priceCNY: p.priceCNY, weightKg: p.weightKg,
-          purchaseType: p.purchaseType, quantity: minQty,
+          purchaseType: p.purchaseType, moq: p.moq, packQty: p.packQty, packWeightKg: p.packWeightKg,
+          availableRouteCodes: p.availableRouteCodes ?? [], quantity: minQty,
         },
       ];
     });
@@ -76,6 +92,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const update = (slug: string, qty: number) => {
+    const line = items.find((i) => i.slug === slug);
+    if (line?.purchaseType === "business") {
+      // Wholesale items can never drop below their minimum order quantity — clamp
+      // instead of removing, even if the user keeps pressing "-" at the floor.
+      const floor = Math.max(line.moq ?? 1, 1);
+      setItems((prev) => prev.map((i) => (i.slug === slug ? { ...i, quantity: Math.max(qty, floor) } : i)));
+      return;
+    }
     if (qty <= 0) return remove(slug);
     setItems((prev) => prev.map((i) => (i.slug === slug ? { ...i, quantity: qty } : i)));
   };
@@ -97,12 +121,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const count = items.reduce((n, i) => n + i.quantity, 0);
   const subtotalCNY = items.reduce((s, i) => s + i.priceCNY * i.quantity, 0);
-  const totalWeightKg = items.reduce((w, i) => w + i.weightKg * i.quantity, 0);
+  const totalWeightKg = items.reduce((w, i) => w + lineWeightKg(i), 0);
 
   const selectedItems = useMemo(() => items.filter((i) => isSelected(i.slug)), [items, selected]);
   const selectedCount = selectedItems.reduce((n, i) => n + i.quantity, 0);
   const selectedSubtotalCNY = selectedItems.reduce((s, i) => s + i.priceCNY * i.quantity, 0);
-  const selectedWeightKg = selectedItems.reduce((w, i) => w + i.weightKg * i.quantity, 0);
+  const selectedWeightKg = selectedItems.reduce((w, i) => w + lineWeightKg(i), 0);
 
   return (
     <Ctx.Provider value={{

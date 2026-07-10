@@ -1649,7 +1649,7 @@ export const deductWalletForBatch = createServerFn({ method: "POST" })
     const { data: batchRow } = await supabaseAdmin.from("batches").select("batch_no").eq("id", data.batchId).maybeSingle();
     const batchNo = (batchRow as any)?.batch_no ?? data.batchId;
     const operator_name = await getOperatorName(supabaseAdmin, context.userId);
-    const FX = 0.19;
+    const FX = await getFxCadPerCny(supabaseAdmin);
 
     // 1) Wallet transaction — trigger updates wallets.balance_cad
     if (finalDeduct > 0) {

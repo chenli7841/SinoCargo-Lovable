@@ -1,10 +1,12 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
-import { useCart } from "@/lib/cart";
-import { useApp, CNY_TO_CAD } from "@/lib/i18n";
+import { useCart, type CartLine } from "@/lib/cart";
+import { useApp } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
+import { listPublicRoutes } from "@/lib/shop-public.functions";
 import { toast } from "sonner";
-import { Plane, Ship, Truck, MapPin, Loader2, CheckCircle2, Route as RouteIcon, Tag, X } from "lucide-react";
+import { Plane, Ship, Truck, MapPin, Loader2, CheckCircle2, Route as RouteIcon, Tag, X, Clock } from "lucide-react";
 import { z } from "zod";
 
 export const Route = createFileRoute("/_authenticated/checkout")({
@@ -27,10 +29,15 @@ interface RouteRow {
 
 const sb = supabase as any;
 
+// Empty/undefined availableRouteCodes means the product isn't restricted — any active route works.
+function allowedCodes(i: CartLine, allCodes: string[]): string[] {
+  return i.availableRouteCodes && i.availableRouteCodes.length > 0 ? i.availableRouteCodes : allCodes;
+}
+
 function CheckoutPage() {
   const search = Route.useSearch();
   const { items: allItems, selectedItems, clearSlugs } = useCart();
-  const { lang, formatPrice } = useApp();
+  const { lang, formatPrice, cnyToCad } = useApp();
   const navigate = useNavigate();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
 
@@ -45,7 +52,8 @@ function CheckoutPage() {
 
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [addrId, setAddrId] = useState<string>("");
-  const [shipMethod, setShipMethod] = useState<"air" | "sea">("air");
+  const [routes, setRoutes] = useState<RouteRow[] | null>(null);
+  const [routeCode, setRouteCode] = useState<string>("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [quote, setQuote] = useState<any>(null);
@@ -63,13 +71,40 @@ function CheckoutPage() {
     });
   }, []);
 
-  // Live quote — backend resolves per-product per-(mode, method) route
+  const fetchRoutes = useServerFn(listPublicRoutes);
+  useEffect(() => { fetchRoutes().then((r: any) => setRoutes(r.items ?? [])); }, []);
+
+  // Every selected item is guaranteed (by the cart page) to share at least one route — the
+  // whole point of picking a shared route up front is that ALL lines resolve to the SAME
+  // route_code, so the backend can pool their weight/volume into one chargeable-weight calc
+  // instead of billing each line separately.
+  const allCodes = useMemo(() => (routes ?? []).map((r) => r.code), [routes]);
+  const commonRoutes = useMemo(() => {
+    if (!routes || items.length === 0) return [];
+    const codes = items.reduce<string[] | null>((acc, i) => {
+      const mine = allowedCodes(i, allCodes);
+      return acc === null ? mine : acc.filter((c) => mine.includes(c));
+    }, null) ?? [];
+    return routes.filter((r) => codes.includes(r.code));
+  }, [items, routes, allCodes]);
+
   useEffect(() => {
-    if (items.length === 0) { setQuote(null); return; }
+    if (commonRoutes.length > 0 && !commonRoutes.some((r) => r.code === routeCode)) {
+      setRouteCode(commonRoutes[0].code);
+    }
+  }, [commonRoutes, routeCode]);
+
+  const selectedRoute = commonRoutes.find((r) => r.code === routeCode) ?? null;
+
+  // Live quote — an explicit route_code makes every line resolve to the SAME route, so the
+  // backend pools them into one freight calculation instead of resolving a route per product.
+  useEffect(() => {
+    if (items.length === 0 || !routeCode) { setQuote(null); return; }
     setQuoting(true);
     sb.rpc("quote_shop_order", {
       _payload: {
-        shipping_method: shipMethod,
+        route_code: routeCode,
+        shipping_method: selectedRoute?.shipping_method,
         items: items.map((i) => ({ slug: i.slug, quantity: i.quantity, mode: i.purchaseType })),
         coupon_code: couponCode || undefined,
       },
@@ -88,9 +123,8 @@ function CheckoutPage() {
         setQuote(data);
       }
     }).finally(() => setQuoting(false));
-  }, [shipMethod, couponCode, items.map((i) => `${i.slug}:${i.quantity}:${i.purchaseType}`).join(",")]);
+  }, [routeCode, couponCode, items.map((i) => `${i.slug}:${i.quantity}:${i.purchaseType}`).join(",")]);
 
-  const routesUsed: string[] = quote?.routes_used ?? [];
   const subtotal = quote?.subtotal_cny ?? items.reduce((s, i) => s + i.priceCNY * i.quantity, 0);
   const freight = quote?.freight_cny ?? 0;
   const customs = quote?.customs_cny ?? 0;
@@ -104,7 +138,7 @@ function CheckoutPage() {
     const { data } = await sb.rpc("validate_coupon", { _code: code, _subtotal_cny: subtotal });
     if (data?.ok) {
       setCouponCode(code);
-      setCouponMsg(tr(`已应用：-¥${Number(data.discount_cny).toFixed(2)}`, `Applied: -¥${Number(data.discount_cny).toFixed(2)}`));
+      setCouponMsg(tr(`已应用：-${formatPrice(Number(data.discount_cny))}`, `Applied: -${formatPrice(Number(data.discount_cny))}`));
     } else {
       setCouponCode("");
       const reasonMap: Record<string, [string, string]> = {
@@ -113,7 +147,7 @@ function CheckoutPage() {
         not_started: ["活动尚未开始", "Not started yet"],
         expired: ["优惠码已过期", "Coupon expired"],
         limit_reached: ["使用次数已用完", "Usage limit reached"],
-        min_order: [`未达最低消费 ¥${data?.min_order_cny ?? 0}`, `Below min order ¥${data?.min_order_cny ?? 0}`],
+        min_order: [`未达最低消费 ${formatPrice(Number(data?.min_order_cny ?? 0))}`, `Below min order ${formatPrice(Number(data?.min_order_cny ?? 0))}`],
       };
       const m = reasonMap[data?.reason] ?? ["无效", "Invalid"];
       setCouponMsg(tr(m[0], m[1]));
@@ -124,11 +158,13 @@ function CheckoutPage() {
   const placeOrder = async () => {
     if (items.length === 0) return;
     if (!addrId) return toast.error(tr("请先选择收货地址", "Choose a shipping address first"));
+    if (!routeCode) return toast.error(tr("请先选择运输线路", "Choose a shipping route first"));
     setBusy(true);
     try {
       const addr = addresses.find((a) => a.id === addrId);
       const payload: any = {
-        shipping_method: shipMethod,
+        route_code: routeCode,
+        shipping_method: selectedRoute?.shipping_method,
         address_snapshot: addr,
         items: items.map((i) => ({ slug: i.slug, quantity: i.quantity, mode: i.purchaseType })),
         note: note || null,
@@ -195,24 +231,35 @@ function CheckoutPage() {
           </section>
 
           <section className="rounded-2xl border border-border bg-surface p-6">
-            <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-bold"><RouteIcon className="h-5 w-5 text-brand" />{tr("运输方式", "Shipping method")}</h2>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {([
-                ["air", Plane, tr("空运", "Air")],
-                ["sea", Ship, tr("海运", "Sea")],
-              ] as const).map(([m, Icon, label]) => (
-                <button key={m} onClick={() => setShipMethod(m as "air" | "sea")}
-                  className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${shipMethod === m ? "border-brand bg-brand/5" : "border-border hover:border-brand/40"}`}>
-                  <span className={`grid h-9 w-9 place-items-center rounded-lg ${shipMethod === m ? "bg-brand text-brand-foreground" : "bg-accent text-ink-soft"}`}><Icon className="h-4 w-4" /></span>
-                  <div className="flex-1 font-semibold">{label}</div>
-                </button>
-              ))}
-            </div>
-            {routesUsed.length > 0 && (
-              <p className="mt-3 text-xs text-ink-soft">
-                {tr("已匹配线路", "Matched routes")}：
-                <span className="font-mono text-foreground">{routesUsed.join(", ")}</span>
+            <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-bold"><RouteIcon className="h-5 w-5 text-brand" />{tr("运输线路", "Shipping route")}</h2>
+            {routes === null ? (
+              <p className="text-sm text-ink-soft">{tr("加载线路中…", "Loading routes…")}</p>
+            ) : commonRoutes.length === 0 ? (
+              <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                {tr("所选商品没有共同可用的线路，无法一起结算，请返回购物车分开结算", "Selected items don't share a common route — go back to cart and check out separately")}
               </p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {commonRoutes.map((r) => {
+                  const Icon = r.shipping_method === "sea" ? Ship : r.shipping_method === "truck" ? Truck : Plane;
+                  const active = routeCode === r.code;
+                  return (
+                    <button key={r.code} onClick={() => setRouteCode(r.code)}
+                      className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${active ? "border-brand bg-brand/5" : "border-border hover:border-brand/40"}`}>
+                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${active ? "bg-brand text-brand-foreground" : "bg-accent text-ink-soft"}`}><Icon className="h-4 w-4" /></span>
+                      <div className="flex-1">
+                        <div className="font-semibold">{lang === "zh" ? r.name_zh : (r.name_en ?? r.name_zh)}</div>
+                        {(r.transit_days_min || r.transit_days_max) && (
+                          <div className="flex items-center gap-1 text-xs text-ink-soft">
+                            <Clock className="h-3 w-3" />
+                            {r.transit_days_min}-{r.transit_days_max} {tr("天", "days")}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </section>
 
@@ -353,18 +400,18 @@ function CheckoutPage() {
             <Row label={tr("关税合计", "Duty")} value={quoting ? "…" : formatPrice(customs)} />
             <Row label={tr("保险合计", "Insurance")} value={quoting ? "…" : formatPrice(insurance)} />
             {discount > 0 && <Row label={<span className="text-success">{tr("优惠", "Discount")} ({couponCode})</span> as any} value={<span className="text-success">-{formatPrice(discount)}</span> as any} />}
-            <Row label={tr("方式", "Method")} value={shipMethod === "sea" ? tr("海运", "Sea") : tr("空运", "Air")} muted />
+            <Row label={tr("线路", "Route")} value={selectedRoute ? (lang === "zh" ? selectedRoute.name_zh : (selectedRoute.name_en ?? selectedRoute.name_zh)) : "—"} muted />
           </div>
           <div className="my-4 h-px bg-border" />
           <div className="flex items-baseline justify-between">
             <span className="text-sm font-medium">{tr("合计", "Total")}</span>
             <div className="text-right">
               <div className="font-display text-2xl font-bold text-brand-gradient">{formatPrice(total)}</div>
-              <div className="text-xs text-ink-soft">≈ CA${(total * CNY_TO_CAD).toFixed(2)}</div>
+              <div className="text-xs text-ink-soft">≈ CA${cnyToCad(total).toFixed(2)}</div>
             </div>
           </div>
           <button
-            onClick={placeOrder} disabled={busy || !addrId || quoting || !quote?.ok}
+            onClick={placeOrder} disabled={busy || !addrId || !routeCode || quoting || !quote?.ok}
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-cta-gradient px-6 py-3.5 text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}

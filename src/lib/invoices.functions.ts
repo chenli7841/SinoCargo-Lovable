@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-
-const FX = 0.19;
+import { getFxCadPerCny } from "./orders.functions";
 
 async function assertStaff(supabase: any, userId: string) {
   const { data } = await supabase.rpc("is_staff", { _user_id: userId });
@@ -64,7 +63,7 @@ export const getInvoice = createServerFn({ method: "POST" })
   });
 
 // ---- Compute freight breakdown for a waybill ----
-async function computeWaybillFees(admin: any, waybillId: string) {
+async function computeWaybillFees(admin: any, waybillId: string, fx: number) {
   const { data: wb } = await admin.from("waybills").select("*").eq("id", waybillId).maybeSingle();
   if (!wb) throw new Error("waybill not found");
   let route_id: string | null = null;
@@ -72,7 +71,7 @@ async function computeWaybillFees(admin: any, waybillId: string) {
   if (wb.order_id) {
     const { data: ord } = await admin.from("orders").select("route_id, subtotal_cny").eq("id", wb.order_id).maybeSingle();
     route_id = ord?.route_id ?? null;
-    declared_cad = +(Number(ord?.subtotal_cny ?? 0) * FX).toFixed(2);
+    declared_cad = +(Number(ord?.subtotal_cny ?? 0) * fx).toFixed(2);
   } else if (wb.forwarding_id) {
     const { data: fo } = await admin.from("forwarding_orders").select("route_id, declared_value_cad").eq("id", wb.forwarding_id).maybeSingle();
     route_id = fo?.route_id ?? null;
@@ -93,10 +92,10 @@ async function computeWaybillFees(admin: any, waybillId: string) {
   let freight_cny = chargeable * Number(rule.unit_price_cny) + Number(rule.extra_fee_cny);
   if (freight_cny < Number(rule.min_charge_cny)) freight_cny = Number(rule.min_charge_cny);
   const insurance_cny = declared_cad && Number(rule.insurance_rate_pct ?? 0) > 0
-    ? +(declared_cad * (Number(rule.insurance_rate_pct) / 100) / FX).toFixed(2) : 0;
+    ? +(declared_cad * (Number(rule.insurance_rate_pct) / 100) / fx).toFixed(2) : 0;
   let customs_cny = 0;
   if (customs?.enabled && declared_cad >= Number(customs.threshold_cad)) {
-    customs_cny = +(declared_cad * (Number(customs.rate_pct) / 100) / FX).toFixed(2);
+    customs_cny = +(declared_cad * (Number(customs.rate_pct) / 100) / fx).toFixed(2);
   }
   return { freight_cny: +freight_cny.toFixed(2), customs_cny, insurance_cny, ref: { wb, route_id } };
 }
@@ -111,7 +110,8 @@ export const generateInvoiceForWaybill = createServerFn({ method: "POST" })
     const { data: wb } = await supabaseAdmin.from("waybills").select("*").eq("id", data.waybill_id).maybeSingle();
     if (!wb) throw new Error("waybill not found");
 
-    const fees = await computeWaybillFees(supabaseAdmin, data.waybill_id);
+    const fx = await getFxCadPerCny(supabaseAdmin);
+    const fees = await computeWaybillFees(supabaseAdmin, data.waybill_id, fx);
     const total = fees.freight_cny + fees.customs_cny + fees.insurance_cny;
     if (total <= 0) throw new Error("无法计算费用，请检查线路与重量");
 
@@ -123,7 +123,7 @@ export const generateInvoiceForWaybill = createServerFn({ method: "POST" })
       customs_cny: fees.customs_cny,
       insurance_cny: fees.insurance_cny,
       total_cny: total,
-      fx_rate: FX,
+      fx_rate: fx,
       due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
       created_by: context.userId,
       note: `运单 ${wb.waybill_no}`,
@@ -164,12 +164,13 @@ export const generateBatchInvoice = createServerFn({ method: "POST" })
     }
 
     const { data: batch } = await supabaseAdmin.from("batches").select("batch_no").eq("id", data.batch_id).maybeSingle();
+    const fx = await getFxCadPerCny(supabaseAdmin);
     const created: any[] = [];
     for (const [uid, items] of byUser.entries()) {
       let f = 0, c = 0, ins = 0;
       const lineItems: any[] = [];
       for (const w of items) {
-        const fees = await computeWaybillFees(supabaseAdmin, w.id);
+        const fees = await computeWaybillFees(supabaseAdmin, w.id, fx);
         f += fees.freight_cny; c += fees.customs_cny; ins += fees.insurance_cny;
         lineItems.push({
           waybill_id: w.id, order_id: w.order_id, forwarding_id: w.forwarding_id,
@@ -183,7 +184,7 @@ export const generateBatchInvoice = createServerFn({ method: "POST" })
       const { data: inv } = await supabaseAdmin.from("invoices").insert({
         user_id: uid, type: "batch",
         subtotal_cny: total, freight_cny: +f.toFixed(2), customs_cny: +c.toFixed(2), insurance_cny: +ins.toFixed(2),
-        total_cny: total, fx_rate: FX, batch_no: batch?.batch_no ?? null,
+        total_cny: total, fx_rate: fx, batch_no: batch?.batch_no ?? null,
         due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
         created_by: context.userId, note: `批次 ${batch?.batch_no ?? data.batch_id}`,
       } as any).select("*").single();

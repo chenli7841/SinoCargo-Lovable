@@ -2,7 +2,7 @@ import React from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { useApp, CNY_TO_CAD } from "@/lib/i18n";
+import { useApp } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { TrackingTimeline } from "@/components/tracking-timeline";
@@ -108,7 +108,7 @@ function AccountPage() {
 interface UnpaidBatch { batch_no: string; total_cny: number; shipping_method: string }
 
 function OverviewTab({ onJump, setOrdersFilter }: { onJump: (t: Tab) => void; setOrdersFilter: (f: OrderFilter) => void }) {
-  const { lang } = useApp();
+  const { lang, cnyToCad } = useApp();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
   const [wallet, setWallet] = useState<WalletRow | null>(null);
   const [customerCode, setCustomerCode] = useState<string | null>(null);
@@ -141,7 +141,7 @@ function OverviewTab({ onJump, setOrdersFilter }: { onJump: (t: Tab) => void; se
   }, []);
 
   const unpaidTotalCny = unpaidBatches.reduce((s, b) => s + b.total_cny, 0);
-  const unpaidTotalCad = unpaidTotalCny * CNY_TO_CAD;
+  const unpaidTotalCad = cnyToCad(unpaidTotalCny);
 
   return (
     <div className="space-y-6">
@@ -215,7 +215,7 @@ function OverviewTab({ onJump, setOrdersFilter }: { onJump: (t: Tab) => void; se
                   {b.shipping_method === "air" ? <Plane className="h-3 w-3" /> : <Ship className="h-3 w-3" />}
                 </span>
                 <span className="font-mono text-xs font-semibold">{b.batch_no}</span>
-                <span className="ml-auto font-display text-base font-bold text-foreground">CA${(b.total_cny * CNY_TO_CAD).toFixed(2)}</span>
+                <span className="ml-auto font-display text-base font-bold text-foreground">CA${cnyToCad(b.total_cny).toFixed(2)}</span>
               </li>
             ))}
           </ul>
@@ -752,11 +752,12 @@ function BatchCard({ b, lang, tr, paying, onPay }: {
   b: Batch; lang: "zh" | "en"; tr: (zh: string, en: string) => string;
   paying: string | null; onPay: (batch_no: string, amountCad: number) => void;
 }) {
+  const { cnyToCad } = useApp();
   const isAir = b.shipping_method === "air";
   const lastMileCad = b.last_mile_blocks.reduce((s, lm) => s + (lm.triggered ? lm.fee_cad : 0), 0);
   const extrasCad = b.storage_total_cad + lastMileCad;
-  const headerAmountCad = (b.all_paid ? b.total_cny : b.total_unpaid_cny) * CNY_TO_CAD + (b.all_paid ? 0 : extrasCad);
-  const unpaidCad = b.total_unpaid_cny * CNY_TO_CAD + extrasCad;
+  const headerAmountCad = cnyToCad(b.all_paid ? b.total_cny : b.total_unpaid_cny) + (b.all_paid ? 0 : extrasCad);
+  const unpaidCad = cnyToCad(b.total_unpaid_cny) + extrasCad;
   const [trackOpen, setTrackOpen] = useState(false);
   const [events, setEvents] = useState<any[] | null | "err">(null);
 
@@ -822,7 +823,7 @@ function BatchCard({ b, lang, tr, paying, onPay }: {
 
       <ul className="divide-y divide-border">
         {b.items.map((it) => {
-          const itCad = it.fee_cny * CNY_TO_CAD;
+          const itCad = cnyToCad(it.fee_cny);
           return (
             <li key={`${it.kind}-${it.id}`} className="flex flex-wrap items-center gap-3 px-5 py-3">
               <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${it.kind === "order" ? "bg-brand/10 text-brand" : "bg-cta/10 text-cta"}`}>
@@ -1351,7 +1352,7 @@ interface MyOrderItem {
 const HISTORY_STATUSES = new Set(["delivered", "cancelled"]);
 
 function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } = {}) {
-  const { lang } = useApp();
+  const { lang, cnyToCad } = useApp();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
   const [items, setItems] = useState<MyOrderItem[] | null>(null);
   const [filter, setFilter] = useState<OrderFilter>(initialFilter);
@@ -1566,7 +1567,7 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
               {(() => {
                 const amountCad = o.kind === "forwarding" && (o.total_cad ?? 0) > 0
                   ? Number(o.total_cad)
-                  : o.fee_cny * CNY_TO_CAD;
+                  : cnyToCad(o.fee_cny);
                 return amountCad > 0 ? (
                   <div className="ml-auto text-right">
                     <div className="font-display text-base font-bold text-brand-gradient">CA${amountCad.toFixed(2)}</div>
@@ -1667,26 +1668,21 @@ function WaybillsDropdown({ waybills, lang }: { waybills: MyWaybill[]; lang: "zh
 
 // ===================== Wallet =====================
 function WalletTab() {
-  const { lang } = useApp();
+  const { lang, cadToCny, cnyToCad } = useApp();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
   const [wallet, setWallet] = useState<WalletRow | null>(null);
   const [txs, setTxs] = useState<WalletTx[] | null>(null);
   const [amount, setAmount] = useState<number>(20);
   const [channel, setChannel] = useState<"alipay" | "wechat" | "card">("card");
   const [busy, setBusy] = useState(false);
-  const [fx, setFx] = useState<{ rate: number; mode: "manual" | "live"; updated_at: string | null }>({
-    rate: CNY_TO_CAD, mode: "manual", updated_at: null,
-  });
 
   const load = async () => {
-    const [{ data: w }, { data: t }, { data: s }] = await Promise.all([
+    const [{ data: w }, { data: t }] = await Promise.all([
       sb.from("wallets").select("*").maybeSingle(),
       sb.from("wallet_transactions").select("*").order("created_at", { ascending: false }).limit(50),
-      sb.from("app_settings").select("value").eq("key", "fx_cny_to_cad").maybeSingle(),
     ]);
     setWallet(w ?? { balance_cny: 0, balance_cad: 0, user_id: "" });
     setTxs(t ?? []);
-    if (s?.value) setFx({ rate: Number(s.value.rate) || CNY_TO_CAD, mode: s.value.mode ?? "manual", updated_at: s.value.updated_at ?? null });
   };
   useEffect(() => { load(); }, []);
 
@@ -1698,12 +1694,12 @@ function WalletTab() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return setBusy(false);
     const amountCad = Number(amount.toFixed(2));
-    const amountCnyEq = fx.rate > 0 ? Number((amount / fx.rate).toFixed(2)) : null;
+    const amountCnyEq = Number(cadToCny(amount).toFixed(2));
     const { error } = await sb.from("wallet_transactions").insert({
       user_id: user.id, type: "recharge",
       amount_cad: amountCad,
       amount_cny: amountCnyEq,
-      fx_rate_cny_to_cad: fx.rate,
+      fx_rate_cny_to_cad: cnyToCad(1),
       status: "pending",
       channel,
       note: tr(`用户发起 CA$${amountCad} 充值`, `User initiated CA$${amountCad} top-up`),
@@ -1726,7 +1722,7 @@ function WalletTab() {
   } as Record<string, string>)[s] ?? s;
 
   const balanceCad = Number(wallet.balance_cad ?? 0);
-  const balanceCnyEq = fx.rate > 0 ? balanceCad / fx.rate : 0;
+  const balanceCnyEq = cadToCny(balanceCad);
 
   return (
     <div className="space-y-6">

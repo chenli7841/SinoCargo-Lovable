@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useApp, CNY_TO_CAD } from "@/lib/i18n";
+import { useApp } from "@/lib/i18n";
 import { CreditCard, Loader2, Wallet, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -14,7 +14,7 @@ const sb = supabase as any;
 
 function PayPage() {
   const { orderId } = Route.useParams();
-  const { lang, formatPrice } = useApp();
+  const { lang, formatPrice, cnyToCad } = useApp();
   const navigate = useNavigate();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
 
@@ -38,7 +38,7 @@ function PayPage() {
 
   const unpaidIds = items.filter((i) => !i.paid).map((i) => i.id);
   const needCny = order ? Number(order.total_cny ?? 0) : 0;
-  const needCad = +(needCny * CNY_TO_CAD).toFixed(2);
+  const needCad = +cnyToCad(needCny).toFixed(2);
   const enough = bal >= needCad;
   const allPaid = order?.payment_status === "paid" || unpaidIds.length === 0;
 

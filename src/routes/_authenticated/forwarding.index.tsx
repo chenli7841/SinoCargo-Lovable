@@ -164,7 +164,7 @@ function ForwardingPage() {
       const [p, w, r, fr, a, d] = await Promise.all([
         sb.from("profiles").select("phone").eq("id", user.id).maybeSingle(),
         sb.from("warehouses").select("id,code,name_zh,name_en,address,business_hours,phone,country,type").eq("is_active", true).order("sort_order"),
-        sb.from("shipping_routes").select("id,code,name_zh,name_en,shipping_method,destination_code,origin_warehouse_id,destination_warehouse_id,is_bidirectional,transit_days_min,transit_days_max,item_fields,item_field_required").eq("is_active", true).order("sort_order"),
+        sb.from("shipping_routes").select("id,code,name_zh,name_en,shipping_method,destination_code,origin_warehouse_id,destination_warehouse_id,is_bidirectional,transit_days_min,transit_days_max,item_fields,item_field_required").eq("is_active", true).in("usage_scope", ["forwarding", "both"]).order("sort_order"),
         sb.from("freight_rules").select("route_id,weight_mode,volumetric_divisor,unit_price_cad,min_charge_cad,clearance_fee_cad,unit_price_cny,min_charge_cny,extra_fee_cny,insurance_rate_pct").eq("is_active", true),
         sb.from("addresses").select("*").order("is_default", { ascending: false }),
         sb.from("destinations").select("code,name_zh,name_en,country").eq("active", true).order("sort_order"),

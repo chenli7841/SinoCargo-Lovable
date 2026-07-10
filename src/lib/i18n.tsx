@@ -4,10 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 export type Lang = "zh" | "en";
 export type Currency = "CNY" | "CAD";
 
-// Default fallback: 1 CAD = 5.26 CNY
+// Default fallback used only until app_settings.fx_rate loads: 1 CAD = 5.26 CNY.
+// Always convert via useApp().cnyToCad() / cadToCny() — never a static multiplier —
+// so every conversion reflects the live admin-configured rate (/admin/system → 汇率设置).
 export const DEFAULT_CNY_PER_CAD = 5.26;
-// Legacy constant (CNY -> CAD) kept for backwards compatibility; prefer useApp().cnyToCad()
-export const CNY_TO_CAD = 1 / DEFAULT_CNY_PER_CAD;
 
 const dict = {
   zh: {
@@ -81,10 +81,10 @@ const dict = {
     "shipping.login_hint": "登录后可提交集运单并接收短信通知",
 
     "track.title": "物流追踪",
-    "track.sub": "输入运单号查询您包裹的实时状态",
-    "track.placeholder": "请输入运单号，如 SC2026000123",
+    "track.sub": "输入电商订单号 / 集运订单号 / 运单号，查询您包裹的实时状态",
+    "track.placeholder": "订单号 / 集运单号 / 运单号，如 SC2026000123",
     "track.btn": "查询",
-    "track.notfound": "未找到该运单号，请检查后重试",
+    "track.notfound": "未找到相关记录，请检查订单号/运单号后重试",
     "track.demo_hint": "示例运单号：SC2026000123",
 
     "about.title": "关于 SinoCargo",
@@ -178,10 +178,10 @@ const dict = {
     "shipping.login_hint": "Sign in to submit a shipment request and get SMS updates",
 
     "track.title": "Track your shipment",
-    "track.sub": "Enter your tracking number to see real-time status",
-    "track.placeholder": "Tracking number, e.g. SC2026000123",
+    "track.sub": "Enter your shop order number, forwarding order number, or waybill number to see real-time status",
+    "track.placeholder": "Order / forwarding / waybill number, e.g. SC2026000123",
     "track.btn": "Track",
-    "track.notfound": "Tracking number not found. Please check and retry.",
+    "track.notfound": "No matching record found. Please check the number and retry.",
     "track.demo_hint": "Demo tracking number: SC2026000123",
 
     "about.title": "About SinoCargo",
@@ -229,7 +229,7 @@ const Ctx = createContext<AppCtx | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("zh");
-  const [currency, setCurrencyState] = useState<Currency>("CNY");
+  const [currency, setCurrencyState] = useState<Currency>("CAD");
   const [cnyPerCad, setCnyPerCad] = useState<number>(DEFAULT_CNY_PER_CAD);
 
   useEffect(() => {

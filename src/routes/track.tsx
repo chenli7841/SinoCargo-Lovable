@@ -40,7 +40,7 @@ function TrackPage() {
     const q = no.trim();
     if (!q) return;
     setBusy(true);
-    const { data, error } = await supabase.rpc("lookup_shipment", { _tracking_no: q });
+    const { data, error } = await supabase.rpc("track_by_any_no", { _input: q });
     setBusy(false);
     if (error) return setResult("notfound");
     if (!data) return setResult("notfound");

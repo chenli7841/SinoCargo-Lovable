@@ -32,6 +32,7 @@ export type WeightMode = "actual" | "volumetric" | "max";
 export type PricingMode = "weight" | "pallet";
 
 export type CargoType = "general" | "sensitive";
+export type RouteUsageScope = "shop" | "forwarding" | "both";
 export type ItemFieldKey =
   | "name" | "hscode" | "box_count" | "inner_qty"
   | "material" | "origin" | "unit_price" | "quantity" | "brand"
@@ -45,6 +46,7 @@ export type ShippingRoute = {
   destination_warehouse_id: string | null;
   shipping_method: ShippingMethod;
   cargo_type: CargoType;
+  usage_scope: RouteUsageScope;
   destination_code: string | null;
   transit_days_min: number | null;
   transit_days_max: number | null;

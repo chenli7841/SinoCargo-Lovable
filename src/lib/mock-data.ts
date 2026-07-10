@@ -31,6 +31,12 @@ export interface Product {
   purchaseType: PurchaseType;
   /** Business-only: minimum order quantity */
   moq?: number;
+  /** Business-only: units per inner pack/box — quantity steps by this amount */
+  packQty?: number;
+  /** Business-only: weight of one full pack/carton (kg) — used instead of per-unit weight */
+  packWeightKg?: number;
+  /** Shipping routes this product is restricted to; empty/undefined = all routes allowed */
+  availableRouteCodes?: string[];
   /** Business-only: tiered/wholesale pricing hint */
   wholesaleNote?: { zh: string; en: string };
 }
