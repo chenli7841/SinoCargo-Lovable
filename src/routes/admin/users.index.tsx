@@ -118,7 +118,6 @@ function UsersPage() {
                 </td>
                 <td className="px-4 py-3 text-xs">
                   <div className="text-emerald-300">CA${u.wallet.balance_cad.toFixed(2)}</div>
-                  <div className="text-amber-300">¥{u.wallet.balance_cny.toFixed(2)}</div>
                 </td>
                 <td className="px-4 py-3 text-xs">
                   {u.unpaid.count > 0 ? (

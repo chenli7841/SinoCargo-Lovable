@@ -3,8 +3,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { useApp } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
+import { useCompanyInfo } from "@/lib/company";
 import { submitContactMessage } from "@/lib/contact.functions";
-import { Mail, MapPin, Phone, Clock, Loader2, QrCode } from "lucide-react";
+import { Mail, MapPin, Phone, Clock, Loader2, QrCode, X } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/contact")({
@@ -26,27 +27,34 @@ const OFFICE_FALLBACK: Record<"ca" | "cn", OfficeCfg> = {
   ca: {
     label_zh: "多伦多总部", label_en: "Toronto HQ",
     address: "200 King St W, Toronto, ON M5H 3T4",
-    phone: "+1 (416) 000-0000", email: "support@sinocargo.app",
+    phone: "+1 (416) 000-0000", email: "",
     hours_zh: "周一至周六 9:00–21:00 EST", hours_en: "Mon–Sat 9:00–21:00 EST",
   },
   cn: {
     label_zh: "广州集运中心", label_en: "Guangzhou Warehouse",
     address: "广东省广州市白云区机场路 88 号",
-    phone: "+86 20 0000-0000", email: "warehouse@sinocargo.app",
+    phone: "+86 20 0000-0000", email: "",
     hours_zh: "周一至周六 9:00–18:00 CST", hours_en: "Mon–Sat 9:00–18:00 CST",
   },
 };
 
-function QrCard({ label, handle, qrUrl }: { label: string; handle: string; qrUrl: string }) {
+function QrCard({ label, handle, qrUrl, onZoom }: { label: string; handle: string; qrUrl: string; onZoom: () => void }) {
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-border bg-surface p-5">
-      <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-xl border border-border bg-background">
-        {qrUrl ? (
-          <img src={qrUrl} alt={label} className="h-full w-full object-contain" />
-        ) : (
+      {qrUrl ? (
+        <button
+          type="button"
+          onClick={onZoom}
+          className="group grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-xl border border-border bg-background transition hover:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
+          aria-label={label}
+        >
+          <img src={qrUrl} alt={label} className="h-full w-full object-contain transition group-hover:scale-105" />
+        </button>
+      ) : (
+        <div className="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-xl border border-border bg-background">
           <QrCode className="h-8 w-8 text-ink-soft/40" />
-        )}
-      </div>
+        </div>
+      )}
       <div className="min-w-0">
         <div className="font-display text-sm font-bold">{label}</div>
         <div className="mt-1 truncate text-sm text-ink-soft">{handle || "—"}</div>
@@ -55,50 +63,65 @@ function QrCard({ label, handle, qrUrl }: { label: string; handle: string; qrUrl
   );
 }
 
-function OfficeCard({ cfg, lang }: { cfg: OfficeCfg; lang: "zh" | "en" }) {
+function OfficeCard({ cfg, lang, region }: { cfg: OfficeCfg; lang: "zh" | "en"; region: "ca" | "cn" }) {
+  const regionLabel = region === "ca" ? (lang === "zh" ? "加拿大" : "Canada") : (lang === "zh" ? "中国" : "China");
   return (
     <div className="rounded-2xl border border-border bg-surface p-6">
-      <div className="text-xs font-semibold uppercase tracking-wider text-brand">{lang === "zh" ? "加拿大" : "Canada"}</div>
+      <div className="text-xs font-semibold uppercase tracking-wider text-brand">{regionLabel}</div>
       <h2 className="mt-2 font-display text-xl font-bold">{lang === "zh" ? cfg.label_zh : cfg.label_en}</h2>
       <ul className="mt-4 space-y-2 text-sm text-ink-soft">
         <li className="flex items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0" /> {cfg.address}</li>
         <li className="flex items-center gap-2"><Phone className="h-4 w-4" /> {cfg.phone}</li>
-        <li className="flex items-center gap-2"><Mail className="h-4 w-4" /> {cfg.email}</li>
+        {cfg.email && <li className="flex items-center gap-2"><Mail className="h-4 w-4" /> {cfg.email}</li>}
         <li className="flex items-center gap-2"><Clock className="h-4 w-4" /> {lang === "zh" ? cfg.hours_zh : cfg.hours_en}</li>
       </ul>
     </div>
   );
 }
 
+function mergeOffice(fallback: OfficeCfg, saved: Partial<OfficeCfg> | undefined): OfficeCfg {
+  const out = { ...fallback };
+  for (const k of Object.keys(fallback) as (keyof OfficeCfg)[]) {
+    const v = saved?.[k];
+    if (typeof v === "string" && v.trim()) out[k] = v;
+  }
+  return out;
+}
+
 function ContactPage() {
   const { t, lang } = useApp();
   const submitMessage = useServerFn(submitContactMessage);
+  const company = useCompanyInfo();
   const [offices, setOffices] = useState(OFFICE_FALLBACK);
-  const [social, setSocial] = useState({ wechat: "", wechat_qr_url: "", whatsapp: "", whatsapp_qr_url: "" });
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [zoomedQr, setZoomedQr] = useState<{ url: string; label: string } | null>(null);
+
+  useEffect(() => {
+    if (!zoomedQr) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setZoomedQr(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [zoomedQr]);
 
   useEffect(() => {
     sb.from("app_settings").select("value").eq("key", "contact_offices").maybeSingle()
       .then(({ data }: any) => {
         if (!data?.value) return;
         setOffices({
-          ca: { ...OFFICE_FALLBACK.ca, ...(data.value.ca ?? {}) },
-          cn: { ...OFFICE_FALLBACK.cn, ...(data.value.cn ?? {}) },
-        });
-      });
-    sb.from("app_settings").select("value").eq("key", "company_info").maybeSingle()
-      .then(({ data }: any) => {
-        const v = data?.value ?? {};
-        setSocial({
-          wechat: v.wechat ?? "", wechat_qr_url: v.wechat_qr_url ?? "",
-          whatsapp: v.whatsapp ?? "", whatsapp_qr_url: v.whatsapp_qr_url ?? "",
+          ca: mergeOffice(OFFICE_FALLBACK.ca, data.value.ca),
+          cn: mergeOffice(OFFICE_FALLBACK.cn, data.value.cn),
         });
       });
   }, []);
+
+  // A per-office email left blank in admin settings falls back to the
+  // company-wide contact email rather than showing a blank row.
+  const officeCa = { ...offices.ca, email: offices.ca.email || company.email };
+  const officeCn = { ...offices.cn, email: offices.cn.email || company.email };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,14 +147,42 @@ function ContactPage() {
       </p>
 
       <div className="mt-10 grid gap-4 sm:grid-cols-2">
-        <OfficeCard cfg={offices.ca} lang={lang} />
-        <OfficeCard cfg={offices.cn} lang={lang} />
+        <OfficeCard cfg={officeCa} lang={lang} region="ca" />
+        <OfficeCard cfg={officeCn} lang={lang} region="cn" />
       </div>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <QrCard label={lang === "zh" ? "微信" : "WeChat"} handle={social.wechat} qrUrl={social.wechat_qr_url} />
-        <QrCard label="WhatsApp" handle={social.whatsapp} qrUrl={social.whatsapp_qr_url} />
+        <QrCard
+          label={lang === "zh" ? "微信" : "WeChat"} handle={company.wechat} qrUrl={company.wechat_qr_url}
+          onZoom={() => setZoomedQr({ url: company.wechat_qr_url, label: lang === "zh" ? "微信" : "WeChat" })}
+        />
+        <QrCard
+          label="WhatsApp" handle={company.whatsapp} qrUrl={company.whatsapp_qr_url}
+          onZoom={() => setZoomedQr({ url: company.whatsapp_qr_url, label: "WhatsApp" })}
+        />
       </div>
+
+      {zoomedQr && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-6"
+          onClick={() => setZoomedQr(null)}
+        >
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setZoomedQr(null)}
+              className="absolute -right-3 -top-3 grid h-9 w-9 place-items-center rounded-full bg-surface text-ink shadow-elevated"
+              aria-label={lang === "zh" ? "关闭" : "Close"}
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="rounded-2xl bg-white p-4 shadow-elevated">
+              <img src={zoomedQr.url} alt={zoomedQr.label} className="max-h-[70vh] max-w-[80vw] object-contain" />
+            </div>
+            <div className="mt-3 text-center text-sm font-medium text-white">{zoomedQr.label}</div>
+          </div>
+        </div>
+      )}
 
       <form className="mt-10 rounded-3xl border border-border bg-surface p-6 sm:p-8" onSubmit={submit}>
         <h2 className="font-display text-xl font-bold">{lang === "zh" ? "在线留言" : "Send a message"}</h2>

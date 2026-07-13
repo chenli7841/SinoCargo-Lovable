@@ -5,7 +5,7 @@ import { useState } from "react";
 import { listInvoices, updateInvoiceStatus, deleteInvoice, financeSummary, mergeInvoices } from "@/lib/invoices.functions";
 import { resetAndSeedWaybills } from "@/lib/seed.functions";
 import { getMyRoles } from "@/lib/admin.functions";
-import { FileText, Loader2, Trash2, CheckCircle2, Ban, Database, GitMerge } from "lucide-react";
+import { FileText, Loader2, Trash2, CheckCircle2, Ban, Database, GitMerge, Download } from "lucide-react";
 
 export const Route = createFileRoute("/admin/invoices/")({
   validateSearch: (s: Record<string, unknown>) => ({ userId: typeof s.userId === "string" ? s.userId : undefined }),
@@ -36,6 +36,7 @@ function InvoicesPage() {
   const [seedBusy, setSeedBusy] = useState(false);
   const [seedMsg, setSeedMsg] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
 
   const { userId } = Route.useSearch();
   const navigate = Route.useNavigate();
@@ -69,6 +70,44 @@ function InvoicesPage() {
       setSeedMsg(`✓ 已生成 ${r.forwardingOrders} 个集运订单 / ${r.forwardingItems} 个物品 / ${r.waybills} 条运单 / ${r.batches} 个批次（其中 ${r.multiWaybillOrders} 个为多运单）`);
     } catch (e: any) { setSeedMsg("✗ " + e.message); }
     finally { setSeedBusy(false); }
+  };
+
+  const onExportCsv = async () => {
+    setExporting(true);
+    try {
+      const rows: any[] = [];
+      for (let p = 1; p <= 10; p++) {
+        const r = await fetchList({ data: { page: p, pageSize: 100, status: status || undefined, q: q || undefined, userId: userId || undefined } });
+        rows.push(...r.items);
+        if (rows.length >= r.total || r.items.length === 0) break;
+      }
+      const header = ["账单号", "客户", "客户号", "类型", "金额CNY", "折合CAD", "状态", "到期日", "创建时间"];
+      const csvRows = rows.map((r: any) => [
+        r.invoice_no,
+        r.customer?.full_name ?? r.customer?.email ?? "",
+        r.customer?.customer_code ?? "",
+        r.type,
+        Number(r.total_cny).toFixed(2),
+        (Number(r.total_cny) * Number(r.fx_rate ?? 0.19)).toFixed(2),
+        STATUS_LABEL[r.status] ?? r.status,
+        r.due_date ?? "",
+        new Date(r.created_at).toLocaleString("zh-CN"),
+      ]);
+      const csv = [header, ...csvRows]
+        .map((row) => row.map((v: any) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+        .join("\r\n");
+      const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `invoices-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert("导出失败: " + e.message);
+    } finally {
+      setExporting(false);
+    }
   };
 
   const items = listQ.data?.items ?? [];
@@ -120,6 +159,10 @@ function InvoicesPage() {
         </select>
         <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="搜索账单号"
           className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5" />
+        <button onClick={onExportCsv} disabled={exporting}
+          className="inline-flex items-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 hover:bg-white/5 disabled:opacity-50">
+          {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}导出 CSV（按当前筛选）
+        </button>
         {selected.size >= 2 && (
           <button onClick={async () => {
             if (!confirm(`将选中的 ${selected.size} 张未付账单合并为一张？`)) return;

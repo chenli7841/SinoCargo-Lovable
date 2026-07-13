@@ -154,10 +154,6 @@ function ForwardingPage() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ count: number; waybills: number } | null>(null);
 
-  const [phoneInput, setPhoneInput] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState("");
-
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -207,31 +203,6 @@ function ForwardingPage() {
   const selectedRoute = availableRoutes.find((r) => r.code === routeCode) ?? null;
   const selectedRule = selectedRoute ? rules[selectedRoute.id] : null;
   const selectedAddress = addresses.find((x) => x.id === addressId) ?? null;
-
-  const sendOtp = async () => {
-    if (!phoneInput) return;
-    setBusy(true);
-    try {
-      const { error } = await supabase.auth.updateUser({ phone: phoneInput });
-      if (error) throw error;
-      setOtpSent(true);
-      toast.success(tr("验证码已发送", "Code sent"));
-    } catch (e: any) {
-      toast.error(e.message ?? tr("发送失败", "Send failed"));
-    } finally { setBusy(false); }
-  };
-  const verifyOtp = async () => {
-    setBusy(true);
-    try {
-      const { error } = await supabase.auth.verifyOtp({ phone: phoneInput, token: otp, type: "phone_change" });
-      if (error) throw error;
-      await sb.from("profiles").update({ phone: phoneInput }).eq("id", user!.id);
-      setPhoneRow(phoneInput);
-      toast.success(tr("已绑定", "Linked"));
-    } catch (e: any) {
-      toast.error(e.message ?? tr("验证失败", "Verification failed"));
-    } finally { setBusy(false); }
-  };
 
   const updateParcel = (i: number, patch: Partial<ParcelDraft>) =>
     setParcels((ps) => ps.map((p, idx) => idx === i ? { ...p, ...patch } : p));
@@ -356,25 +327,15 @@ function ForwardingPage() {
   if (!phoneRow) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-12">
-        <section className="rounded-3xl border border-warning/40 bg-warning/5 p-6 sm:p-8">
-          <div className="mb-4 flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-brand" />{tr("绑定手机号（集运客户必填）", "Link your phone (required)")}</div>
-          <p className="mb-5 text-sm text-ink-soft">{tr("每个节点都会通过短信通知您。", "We send SMS at every milestone.")}</p>
-          <div className="space-y-3">
-            <div className="relative">
-              <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
-              <input type="tel" value={phoneInput} onChange={(e) => setPhoneInput(e.target.value)} disabled={otpSent}
-                placeholder="+14165550123" className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30" />
-            </div>
-            {otpSent && (
-              <input value={otp} onChange={(e) => setOtp(e.target.value)} inputMode="numeric" placeholder={tr("6 位验证码", "6-digit code")}
-                className="h-11 w-full rounded-xl border border-border bg-background px-4 text-center text-lg tracking-[0.5em] outline-none focus:border-brand focus:ring-2 focus:ring-brand/30" />
-            )}
-            <button onClick={otpSent ? verifyOtp : sendOtp} disabled={busy || !phoneInput}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-cta-gradient text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-              {otpSent ? tr("验证并绑定", "Verify & link") : tr("发送验证码", "Send code")}
-            </button>
+        <section className="rounded-3xl border border-warning/40 bg-warning/5 p-6 text-center sm:p-8">
+          <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-warning/10 text-warning">
+            <ShieldCheck className="h-6 w-6" />
           </div>
+          <h2 className="text-lg font-semibold">{tr("请到个人中心完善发货信息", "Complete your shipping info in Account")}</h2>
+          <p className="mt-2 text-sm text-ink-soft">{tr("集运客户需先绑定手机号，每个节点都会通过短信通知您。", "Consolidation customers must link a phone first — we send SMS at every milestone.")}</p>
+          <Link to="/account" className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-cta-gradient px-6 text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110">
+            {tr("前往个人中心", "Go to Account")}<ArrowRight className="h-4 w-4" />
+          </Link>
         </section>
       </div>
     );

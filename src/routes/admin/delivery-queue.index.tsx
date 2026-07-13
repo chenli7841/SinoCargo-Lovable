@@ -76,13 +76,13 @@ function DeliveryQueuePage() {
 
   const onDeduct = async (g: any) => {
     if (!g.customer_user_id) { alert("该客户未注册账号，无法扣款"); return; }
-    const suggested = g.fee_cny > 0 ? g.fee_cny.toFixed(2) : "";
-    const input = window.prompt(`扣款金额 (CNY)，客户余额 ${g.wallet_balance_cny != null ? "¥" + g.wallet_balance_cny.toFixed(2) : "—"}`, suggested);
+    const suggested = g.fee_cad > 0 ? g.fee_cad.toFixed(2) : "";
+    const input = window.prompt(`扣款金额 (CAD)，客户余额 ${g.wallet_balance_cad != null ? "CA$" + g.wallet_balance_cad.toFixed(2) : "—"}`, suggested);
     if (!input) return;
     const amt = Number(input);
     if (!(amt > 0)) { alert("金额无效"); return; }
     const note = window.prompt("备注（可空）", "派送费用扣款") ?? undefined;
-    await deduct({ data: { customerUserId: g.customer_user_id, amountCny: amt, note } });
+    await deduct({ data: { customerUserId: g.customer_user_id, amountCad: amt, note } });
     await refresh();
     alert("扣款成功");
   };
@@ -145,9 +145,9 @@ function DeliveryQueuePage() {
                 <td className="px-4 py-3 text-xs">
                   <div className="font-mono text-slate-100">{g.customer_code ?? "—"}</div>
                   {g.full_name && <div className="text-[11px] text-slate-500">{g.full_name}</div>}
-                  {g.wallet_balance_cny != null && (
+                  {g.wallet_balance_cad != null && (
                     <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-slate-500">
-                      <Wallet className="h-3 w-3" /> 余额 {fmtCNY(g.wallet_balance_cny)}
+                      <Wallet className="h-3 w-3" /> 余额 CA${Number(g.wallet_balance_cad).toFixed(2)}
                     </div>
                   )}
                 </td>

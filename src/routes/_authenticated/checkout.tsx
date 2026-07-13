@@ -174,17 +174,25 @@ function CheckoutPage() {
       if (error) throw error;
       if (!data?.ok) {
         if (data?.reason === "insufficient") {
-          throw new Error(tr(
-            `账户余额不足（需 CA$${Number(data.need_cad).toFixed(2)}，当前 CA$${Number(data.balance_cad).toFixed(2)}）`,
-            `Insufficient balance (need CA$${Number(data.need_cad).toFixed(2)}, have CA$${Number(data.balance_cad).toFixed(2)})`
-          ));
+          toast.error(tr(
+            `账户余额不足（需 CA$${Number(data.need_cad).toFixed(2)}，当前 CA$${Number(data.balance_cad).toFixed(2)}），请先充值`,
+            `Insufficient balance (need CA$${Number(data.need_cad).toFixed(2)}, have CA$${Number(data.balance_cad).toFixed(2)}) — please top up`
+          ), {
+            action: {
+              label: tr("去充值", "Top up"),
+              onClick: () => navigate({ to: "/account", search: { tab: "wallet" } }),
+            },
+          });
+          setBusy(false);
+          return;
         }
         throw new Error(data?.reason ?? "下单失败");
       }
       clearSlugs(items.map((i) => i.slug));
+      const pointsMsg = data.points_earned > 0 ? tr(`，获得 ${data.points_earned} 积分`, `, earned ${data.points_earned} points`) : "";
       toast.success(tr(
-        `已生成 ${data.orders_count} 个订单，账单 ${data.invoice_no}`,
-        `${data.orders_count} order(s) created, invoice ${data.invoice_no}`
+        `已生成 ${data.orders_count} 个订单，账单 ${data.invoice_no}${pointsMsg}`,
+        `${data.orders_count} order(s) created, invoice ${data.invoice_no}${pointsMsg}`
       ));
       navigate({ to: "/invoices" });
     } catch (err: any) {

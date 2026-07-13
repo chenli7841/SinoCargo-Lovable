@@ -43,17 +43,30 @@ function AuthPage() {
 
   const isZh = lang === "zh";
   const tr = (zh: string, en: string) => (isZh ? zh : en);
+  const stripSpaces = (v: string) => v.replace(/\s+/g, "");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
       if (mode === "signup") {
-        const { data: available, error: availError } = await supabase.rpc("check_username_available", {
+        const { data: usernameAvailable, error: usernameError } = await supabase.rpc("check_username_available", {
           p_username: username,
         });
-        if (availError) throw availError;
-        if (!available) throw new Error(tr("登录名已被占用", "Login name is already taken"));
+        if (usernameError) throw usernameError;
+        if (!usernameAvailable) throw new Error(tr("登录名已被占用", "Login name is already taken"));
+
+        const { data: emailAvailable, error: emailError } = await supabase.rpc("check_email_available", {
+          p_email: email,
+        });
+        if (emailError) throw emailError;
+        if (!emailAvailable) throw new Error(tr("邮箱已被注册", "Email is already registered"));
+
+        const { data: phoneAvailable, error: phoneError } = await supabase.rpc("check_phone_available", {
+          p_phone: phone,
+        });
+        if (phoneError) throw phoneError;
+        if (!phoneAvailable) throw new Error(tr("手机号已被注册", "Phone number is already registered"));
 
         const { error } = await supabase.auth.signUp({
           email,
@@ -66,7 +79,13 @@ function AuthPage() {
         if (error) throw error;
         toast.success(tr("注册成功！请查收验证邮件", "Account created — check your email to verify"));
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email: identifier, password });
+        const { data: resolvedEmail, error: resolveError } = await supabase.rpc("resolve_login_email", {
+          p_identifier: identifier.trim(),
+        });
+        if (resolveError) throw resolveError;
+        if (!resolvedEmail) throw new Error(tr("账号不存在", "No account found"));
+
+        const { error } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password });
         if (error) throw error;
         toast.success(tr("登录成功", "Signed in"));
       }
@@ -144,15 +163,15 @@ function AuthPage() {
                 <div className="relative">
                   <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
                   <input
-                    required value={username} onChange={(e) => setUsername(e.target.value)}
-                    placeholder={tr("登录名", "Login name")}
+                    required value={username} onChange={(e) => setUsername(stripSpaces(e.target.value))}
+                    placeholder={tr("登录名（不含空格，不区分大小写）", "Login name (no spaces, case-insensitive)")}
                     className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
                   />
                 </div>
                 <div className="relative">
                   <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
                   <input
-                    required type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                    required type="email" value={email} onChange={(e) => setEmail(stripSpaces(e.target.value))}
                     placeholder={tr("邮箱", "Email")}
                     className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
                   />
@@ -160,18 +179,18 @@ function AuthPage() {
                 <div className="relative">
                   <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
                   <input
-                    required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-                    placeholder={tr("手机号（含国家码，如 +1...）", "Phone (with country code, e.g. +1...)")}
+                    required type="tel" value={phone} onChange={(e) => setPhone(stripSpaces(e.target.value))}
+                    placeholder={tr("手机号（如 6478917666 或 +1-647-891-7666）", "Phone, e.g. 6478917666 or +1-647-891-7666")}
                     className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
                   />
                 </div>
               </>
             ) : (
               <div className="relative">
-                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
+                <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
                 <input
-                  required type="email" value={identifier} onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder={tr("邮箱", "Email")}
+                  required type="text" autoComplete="username" value={identifier} onChange={(e) => setIdentifier(stripSpaces(e.target.value))}
+                  placeholder={tr("登录名 / 邮箱 / 手机号", "Login name / Email / Phone")}
                   className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
                 />
               </div>

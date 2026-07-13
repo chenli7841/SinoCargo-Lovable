@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getFxCadPerCny } from "@/lib/orders.functions";
 
 async function assertStaff(supabase: any, userId: string) {
   const { data } = await supabase.rpc("is_staff", { _user_id: userId });
@@ -238,6 +239,7 @@ export const listDeliveryByCustomer = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const fx = await getFxCadPerCny(supabaseAdmin);
 
     let q = supabaseAdmin.from("delivery_queue").select("*").order("created_at", { ascending: false }).limit(2000);
     if (data.status) q = q.eq("status", data.status);
@@ -284,7 +286,7 @@ export const listDeliveryByCustomer = createServerFn({ method: "GET" })
         supabaseAdmin.from("addresses")
           .select("user_id, recipient, phone, line1, line2, city, province, country, postal_code, is_default")
           .in("user_id", userIds),
-        supabaseAdmin.from("wallets").select("user_id, balance_cny").in("user_id", userIds),
+        supabaseAdmin.from("wallets").select("user_id, balance_cad").in("user_id", userIds),
       ]);
       profileMap = new Map((profs ?? []).map((p: any) => [p.id, p]));
       for (const a of addrs ?? []) {
@@ -304,15 +306,16 @@ export const listDeliveryByCustomer = createServerFn({ method: "GET" })
       const phone = a?.phone || p?.phone || p?.reg_phone || null;
       return {
         ...g,
+        fee_cad: +(g.fee_cny * fx).toFixed(2),
         customer_code: g.customer_code || p?.customer_code || null,
         full_name: p?.full_name || (a?.recipient ?? null),
         phone,
         address,
-        wallet_balance_cny: w ? Number(w.balance_cny) : null,
+        wallet_balance_cad: w ? Number(w.balance_cad) : null,
       };
     }).sort((x, y) => (y.earliest_at || "").localeCompare(x.earliest_at || ""));
 
-    return { groups: list };
+    return { groups: list, fx };
   });
 
 // ============================================================
@@ -324,6 +327,7 @@ export const getCustomerDelivery = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const fx = await getFxCadPerCny(supabaseAdmin);
 
     let q = supabaseAdmin.from("delivery_queue")
       .select("*, batches:source_batch_id(batch_no), receivings:source_receiving_id(receiving_no)")
@@ -364,7 +368,7 @@ export const getCustomerDelivery = createServerFn({ method: "GET" })
       logs = lg ?? [];
     }
 
-    return { items, profile, address, wallet, logs };
+    return { items, profile, address, wallet, logs, fx };
   });
 
 // ============================================================
@@ -372,30 +376,22 @@ export const getCustomerDelivery = createServerFn({ method: "GET" })
 // ============================================================
 export const deductCustomerWallet = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { customerUserId: string; amountCny: number; note?: string }) => d)
+  .inputValidator((d: { customerUserId: string; amountCad: number; note?: string }) => d)
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
-    if (!(data.amountCny > 0)) throw new Error("金额必须大于 0");
+    if (!(data.amountCad > 0)) throw new Error("金额必须大于 0");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Ensure wallet exists
-    const { data: w } = await supabaseAdmin.from("wallets").select("*").eq("user_id", data.customerUserId).maybeSingle();
-    if (!w) {
-      await supabaseAdmin.from("wallets").insert({ user_id: data.customerUserId, balance_cny: 0, balance_cad: 0 });
-    }
-    const current = Number(w?.balance_cny ?? 0);
-    const next = current - Number(data.amountCny);
+    const { data: w } = await supabaseAdmin.from("wallets").select("balance_cad").eq("user_id", data.customerUserId).maybeSingle();
+    const current = Number(w?.balance_cad ?? 0);
+    const next = current - Number(data.amountCad);
 
-    const { error: uerr } = await supabaseAdmin.from("wallets")
-      .update({ balance_cny: next, updated_at: new Date().toISOString() })
-      .eq("user_id", data.customerUserId);
-    if (uerr) throw new Error(uerr.message);
-
+    // type "spend" is not in the trigger's credit list, so it debits
+    // wallets.balance_cad directly — no manual balance write needed.
     const { error: terr } = await supabaseAdmin.from("wallet_transactions").insert({
       user_id: data.customerUserId,
-      type: "deduct",
-      amount_cny: -Number(data.amountCny),
-      amount_cad: 0,
+      type: "spend",
+      amount_cad: Number(data.amountCad),
       status: "completed",
       channel: "admin",
       note: data.note ?? "派送费用扣款",
@@ -403,10 +399,10 @@ export const deductCustomerWallet = createServerFn({ method: "POST" })
     if (terr) throw new Error(terr.message);
 
     await logAction(supabaseAdmin, context.userId, "delivery_queue.deduct", data.customerUserId, {
-      amount_cny: data.amountCny, balance_before: current, balance_after: next,
+      amount_cad: data.amountCad, balance_before: current, balance_after: next,
     }, data.note ?? undefined);
 
-    return { ok: true, balance_cny: next };
+    return { ok: true, balance_cad: next };
   });
 
 // ============================================================

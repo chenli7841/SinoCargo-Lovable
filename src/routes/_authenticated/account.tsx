@@ -1,9 +1,11 @@
 import React from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useApp } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
+import { rechargeWallet } from "@/lib/wallet.functions";
 import { toast } from "sonner";
 import { TrackingTimeline } from "@/components/tracking-timeline";
 import {
@@ -31,6 +33,7 @@ const sb = supabase as any;
 
 interface Profile {
   id: string; email: string | null; full_name: string | null; phone: string | null;
+  username: string | null;
   preferred_lang: string; preferred_currency: string;
 }
 interface Address {
@@ -39,9 +42,9 @@ interface Address {
   destination_code: string | null;
 }
 interface Destination { code: string; name_zh: string; name_en: string | null; country: string }
-interface WalletRow { user_id: string; balance_cny: number; balance_cad: number }
+interface WalletRow { user_id: string; balance_cad: number }
 interface WalletTx {
-  id: string; type: string; amount_cny: number | null; amount_cad: number; fx_rate_cny_to_cad: number | null;
+  id: string; type: string; amount_cad: number; amount_cny: number | null;
   status: string; channel: string | null; note: string | null; created_at: string;
 }
 
@@ -92,7 +95,7 @@ function AccountPage() {
           {tab === "overview" && <OverviewTab onJump={setTab} setOrdersFilter={setOrdersFilter} />}
           {tab === "profile" && <ProfileTab />}
           {tab === "addresses" && <AddressTab />}
-          {tab === "batches" && <BatchesTab />}
+          {tab === "batches" && <BatchesTab onJump={setTab} />}
           {tab === "myOrders" && <MyOrdersTab initialFilter={ordersFilter} />}
           {tab === "inventory" && <InventoryTab />}
           {tab === "myItems" && <MyItemsTab />}
@@ -119,7 +122,7 @@ function OverviewTab({ onJump, setOrdersFilter }: { onJump: (t: Tab) => void; se
   const [unpaidBatches, setUnpaidBatches] = useState<UnpaidBatch[]>([]);
 
   useEffect(() => {
-    sb.from("wallets").select("*").maybeSingle().then(({ data }: any) => setWallet(data ?? { balance_cny: 0, balance_cad: 0 }));
+    sb.from("wallets").select("*").maybeSingle().then(({ data }: any) => setWallet(data ?? { balance_cad: 0 }));
     sb.from("profiles").select("customer_code").maybeSingle().then(({ data }: any) => setCustomerCode(data?.customer_code ?? null));
     sb.rpc("unpaid_batches_summary").then(({ data }: any) => setUnpaidBatches((data ?? []).map((r: any) => ({ ...r, total_cny: Number(r.total_cny ?? 0) }))));
     Promise.all([
@@ -271,17 +274,30 @@ function ProfileTab() {
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [busy, setBusy] = useState(false);
+  const initialUsername = useRef<string | null>(null);
 
   useEffect(() => {
-    sb.from("profiles").select("*").maybeSingle().then(({ data }: any) => setProfile(data));
+    sb.from("profiles").select("*").maybeSingle().then(({ data }: any) => {
+      setProfile(data);
+      initialUsername.current = data?.username ?? null;
+    });
   }, []);
   if (!profile) return <Spinner />;
 
   const save = async () => {
-    setBusy(true);
     const p: any = profile;
+    const username = (p.username ?? "").trim();
+    if (!username) return toast.error(tr("登录名不能为空", "Login name is required"));
+
+    setBusy(true);
+    if (username.toLowerCase() !== (initialUsername.current ?? "").toLowerCase()) {
+      const { data: available, error: checkErr } = await sb.rpc("check_username_available", { p_username: username });
+      if (checkErr) { toast.error(checkErr.message); setBusy(false); return; }
+      if (!available) { toast.error(tr("登录名已被占用", "Login name is already taken")); setBusy(false); return; }
+    }
+
     const { error } = await sb.from("profiles").update({
-      full_name: p.full_name, phone: p.phone,
+      full_name: p.full_name, phone: p.phone, username,
       preferred_lang: p.preferred_lang,
       reg_country: p.reg_country ?? null,
       reg_province: p.reg_province ?? null,
@@ -291,7 +307,9 @@ function ProfileTab() {
       reg_phone: p.reg_phone ?? null,
     }).eq("id", profile.id);
     setBusy(false);
-    if (error) toast.error(error.message); else toast.success(tr("已保存", "Saved"));
+    if (error) { toast.error(error.message); return; }
+    initialUsername.current = username;
+    toast.success(tr("已保存", "Saved"));
   };
 
   const p: any = profile;
@@ -302,6 +320,13 @@ function ProfileTab() {
         <h2 className="mb-4 font-display text-xl font-bold">{tr("个人资料", "Profile")}</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={tr("邮箱", "Email")}><input disabled value={profile.email ?? ""} className={inputCls + " opacity-60"} /></Field>
+          <Field label={tr("登录名", "Login name")}>
+            <input
+              value={profile.username ?? ""}
+              onChange={(e) => setProfile({ ...profile, username: e.target.value.replace(/\s+/g, "") })}
+              className={inputCls}
+            />
+          </Field>
           <Field label={tr("姓名", "Full name")}><input value={profile.full_name ?? ""} onChange={(e) => setProfile({ ...profile, full_name: e.target.value })} className={inputCls} /></Field>
           <Field label={tr("手机号", "Phone")}><input value={profile.phone ?? ""} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className={inputCls} /></Field>
           <Field label={tr("偏好语言", "Preferred language")}>
@@ -501,9 +526,10 @@ function computeBatchStatus(statuses: string[]): Batch["batch_status"] {
   return "shipping";
 }
 
-function BatchesTab() {
+function BatchesTab({ onJump }: { onJump: (t: Tab) => void }) {
   const { lang } = useApp();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
+  const navigate = useNavigate();
   const [batches, setBatches] = useState<Batch[] | null>(null);
   const [paying, setPaying] = useState<string | null>(null);
 
@@ -701,10 +727,20 @@ function BatchesTab() {
     setPaying(null);
     if (error) return toast.error(error.message);
     if (!data?.ok) {
-      if (data?.reason === "insufficient") return toast.error(tr(`余额不足，需要 CA$${data.need_cad}，当前 CA$${data.balance_cad}`, `Insufficient balance: need CA$${data.need_cad}, have CA$${data.balance_cad}`));
+      if (data?.reason === "insufficient") {
+        toast.error(tr(
+          `余额不足，需要 CA$${data.need_cad}，当前 CA$${data.balance_cad}，请先充值`,
+          `Insufficient balance: need CA$${data.need_cad}, have CA$${data.balance_cad} — please top up`,
+        ), { action: { label: tr("去充值", "Top up"), onClick: () => onJump("wallet") } });
+        return;
+      }
       return toast.error(tr("付款失败", "Payment failed"));
     }
-    toast.success(tr(`付款成功 CA$${data.paid_cad}`, `Paid CA$${data.paid_cad}`));
+    const pointsMsg = data.points_earned > 0 ? tr(`，获得 ${data.points_earned} 积分`, `, earned ${data.points_earned} points`) : "";
+    toast.success(tr(
+      `付款成功 CA$${data.paid_cad}，账单 ${data.invoice_no}${pointsMsg}`,
+      `Paid CA$${data.paid_cad} — invoice ${data.invoice_no}${pointsMsg}`,
+    ), { action: { label: tr("查看账单", "View invoice"), onClick: () => navigate({ to: "/invoices" }) } });
     load();
   };
 
@@ -1031,8 +1067,41 @@ function InventoryTab() {
   const [groups, setGroups] = useState<InventoryGroup[] | null>(null);
   const [isDemo, setIsDemo] = useState(false);
   const [shipBoxes, setShipBoxes] = useState<Record<string, number>>({});
+  const [storageFee, setStorageFee] = useState<{ total_cad: number } | null>(null);
+  const [payingStorage, setPayingStorage] = useState(false);
+
+  const loadStorageFee = async () => {
+    const { data } = await sb.rpc("preview_storage_fees");
+    setStorageFee(data ?? { total_cad: 0 });
+  };
+
+  const payStorageFee = async () => {
+    if (!storageFee || storageFee.total_cad <= 0) return;
+    if (!confirm(tr(`确认从钱包支付仓储费 CA$${storageFee.total_cad.toFixed(2)}?`, `Pay CA$${storageFee.total_cad.toFixed(2)} storage fee from wallet?`))) return;
+    setPayingStorage(true);
+    const { data, error } = await sb.rpc("pay_storage_fees");
+    setPayingStorage(false);
+    if (error) return toast.error(error.message);
+    if (!data?.ok) {
+      if (data?.reason === "insufficient") {
+        toast.error(tr(
+          `余额不足，需要 CA$${data.need_cad}，当前 CA$${data.balance_cad}，请先充值`,
+          `Insufficient balance: need CA$${data.need_cad}, have CA$${data.balance_cad} — please top up`,
+        ), { action: { label: tr("去充值", "Top up"), onClick: () => navigate({ to: "/account", search: { tab: "wallet" } }) } });
+        return;
+      }
+      return toast.error(tr("付款失败", "Payment failed"));
+    }
+    const pointsMsg = data.points_earned > 0 ? tr(`，获得 ${data.points_earned} 积分`, `, earned ${data.points_earned} points`) : "";
+    toast.success(tr(
+      `仓储费付款成功 CA$${data.paid_cad}，账单 ${data.invoice_no}${pointsMsg}`,
+      `Storage fee paid CA$${data.paid_cad} — invoice ${data.invoice_no}${pointsMsg}`,
+    ), { action: { label: tr("查看账单", "View invoice"), onClick: () => navigate({ to: "/invoices" }) } });
+    loadStorageFee();
+  };
 
   useEffect(() => {
+    loadStorageFee();
     (async () => {
       const [{ data: wbRows }, { data: whRows }] = await Promise.all([
         sb.from("waybills")
@@ -1103,12 +1172,31 @@ function InventoryTab() {
         )}
       </div>
 
-      <StatCard
-        label={tr("库存总箱数", "Total boxes in storage")}
-        value={String(totalBoxes)}
-        sub={tr(`${groups.length} 种货物`, `${groups.length} product(s)`)}
-        icon={<Warehouse className="h-5 w-5" />}
-      />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <StatCard
+          label={tr("库存总箱数", "Total boxes in storage")}
+          value={String(totalBoxes)}
+          sub={tr(`${groups.length} 种货物`, `${groups.length} product(s)`)}
+          icon={<Warehouse className="h-5 w-5" />}
+        />
+        <StatCard
+          label={tr("待付仓储费", "Storage fee due")}
+          value={`CA$${(storageFee?.total_cad ?? 0).toFixed(2)}`}
+          sub={tr("按仓库体积与天数计算，付款后重新计时", "By volume × days — payment resets the billing clock")}
+          icon={<Wallet className="h-5 w-5" />}
+          tone={storageFee && storageFee.total_cad > 0 ? "brand" : undefined}
+          action={storageFee && storageFee.total_cad > 0 ? (
+            <button
+              onClick={payStorageFee}
+              disabled={payingStorage}
+              className="inline-flex items-center gap-2 rounded-full bg-cta-gradient px-4 py-1.5 text-xs font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50"
+            >
+              {payingStorage && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {tr(`支付仓储费 CA$${storageFee.total_cad.toFixed(2)}`, `Pay storage fee CA$${storageFee.total_cad.toFixed(2)}`)}
+            </button>
+          ) : undefined}
+        />
+      </div>
 
       {groups.length === 0 ? (
         <Empty icon={<Warehouse />} text={tr("目前没有仓储中的运单", "No waybills in storage right now")} />
@@ -1668,12 +1756,13 @@ function WaybillsDropdown({ waybills, lang }: { waybills: MyWaybill[]; lang: "zh
 
 // ===================== Wallet =====================
 function WalletTab() {
-  const { lang, cadToCny, cnyToCad } = useApp();
+  const { lang, cadToCny } = useApp();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
+  const doRecharge = useServerFn(rechargeWallet);
   const [wallet, setWallet] = useState<WalletRow | null>(null);
   const [txs, setTxs] = useState<WalletTx[] | null>(null);
   const [amount, setAmount] = useState<number>(20);
-  const [channel, setChannel] = useState<"alipay" | "wechat" | "card">("card");
+  const [channel, setChannel] = useState<"alipay" | "wechat" | "card" | "paypal">("card");
   const [busy, setBusy] = useState(false);
 
   const load = async () => {
@@ -1681,7 +1770,7 @@ function WalletTab() {
       sb.from("wallets").select("*").maybeSingle(),
       sb.from("wallet_transactions").select("*").order("created_at", { ascending: false }).limit(50),
     ]);
-    setWallet(w ?? { balance_cny: 0, balance_cad: 0, user_id: "" });
+    setWallet(w ?? { balance_cad: 0, user_id: "" });
     setTxs(t ?? []);
   };
   useEffect(() => { load(); }, []);
@@ -1691,38 +1780,43 @@ function WalletTab() {
   const recharge = async () => {
     if (!amount || amount < 2) return toast.error(tr("最低充值 CA$2", "Min top-up CA$2"));
     setBusy(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return setBusy(false);
-    const amountCad = Number(amount.toFixed(2));
-    const amountCnyEq = Number(cadToCny(amount).toFixed(2));
-    const { error } = await sb.from("wallet_transactions").insert({
-      user_id: user.id, type: "recharge",
-      amount_cad: amountCad,
-      amount_cny: amountCnyEq,
-      fx_rate_cny_to_cad: cnyToCad(1),
-      status: "pending",
-      channel,
-      note: tr(`用户发起 CA$${amountCad} 充值`, `User initiated CA$${amountCad} top-up`),
-    });
-    setBusy(false);
-    if (error) return toast.error(error.message);
-    toast.success(tr("充值订单已创建，请完成支付（待接入支付网关）", "Top-up created — complete payment (gateway pending)"));
-    load();
+    try {
+      const r = await doRecharge({ data: { amountCad: amount, channel } });
+      toast.success(tr(
+        `充值成功：CA$${r.amount_cad.toFixed(2)}（≈¥${r.amount_cny.toFixed(2)}）已到账`,
+        `Top-up successful: CA$${r.amount_cad.toFixed(2)} (≈¥${r.amount_cny.toFixed(2)}) credited`,
+      ));
+      await load();
+    } catch (e: any) {
+      toast.error(e.message ?? tr("充值失败", "Top-up failed"));
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (!wallet || !txs) return <Spinner />;
 
-  const typeLabel = (t: string) => ({
-    recharge: tr("充值", "Top-up"), spend: tr("消费", "Spend"),
-    refund: tr("退款", "Refund"), adjust: tr("调整", "Adjust"),
-  } as Record<string, string>)[t] ?? t;
+  const typeLabel = (t: WalletTx) => {
+    if (t.type === "spend" && t.channel === "shop") return tr("电商扣款", "Shop deduction");
+    if (t.type === "spend" && t.channel === "batch") return tr("集运扣款", "Forwarding deduction");
+    if (t.type === "spend" && t.channel === "storage") return tr("仓库扣费", "Storage fee deduction");
+    return ({
+      recharge: tr("充值", "Top-up"), spend: tr("消费", "Spend"),
+      refund: tr("退款", "Refund"), adjust: tr("调整", "Adjust"),
+    } as Record<string, string>)[t.type] ?? t.type;
+  };
+  const channelLabel = (c: string) => ({
+    card: tr("信用卡", "Card"), wechat: tr("微信支付", "WeChat Pay"),
+    alipay: tr("支付宝", "Alipay"), paypal: "PayPal", admin: tr("管理员", "Admin"),
+    wallet: tr("钱包", "Wallet"), shop: tr("电商", "Shop"), batch: tr("集运", "Forwarding"),
+    storage: tr("仓库", "Storage"),
+  } as Record<string, string>)[c] ?? c;
   const statusLabel = (s: string) => ({
     pending: tr("待支付", "Pending"), completed: tr("已完成", "Completed"),
     failed: tr("失败", "Failed"), cancelled: tr("已取消", "Cancelled"),
   } as Record<string, string>)[s] ?? s;
 
   const balanceCad = Number(wallet.balance_cad ?? 0);
-  const balanceCnyEq = cadToCny(balanceCad);
 
   return (
     <div className="space-y-6">
@@ -1756,11 +1850,11 @@ function WalletTab() {
         <p className="mt-2 text-xs text-ink-soft">{tr("账户以加币记账", "Account is kept in CAD")}</p>
         <div className="mt-4">
           <div className="mb-2 text-xs font-medium text-ink-soft">{tr("支付方式", "Payment method")}</div>
-          <div className="grid grid-cols-3 gap-2 rounded-full bg-accent p-1">
-            {(["card", "alipay", "wechat"] as const).map((c) => (
+          <div className="grid grid-cols-4 gap-2 rounded-full bg-accent p-1">
+            {(["card", "wechat", "alipay", "paypal"] as const).map((c) => (
               <button key={c} onClick={() => setChannel(c)}
-                className={`rounded-full py-2 text-sm font-medium transition ${channel === c ? "bg-background text-foreground shadow-sm" : "text-ink-soft"}`}>
-                {c === "alipay" ? tr("支付宝", "Alipay") : c === "wechat" ? tr("微信支付", "WeChat Pay") : tr("信用卡", "Card")}
+                className={`rounded-full py-2 text-xs font-medium transition sm:text-sm ${channel === c ? "bg-background text-foreground shadow-sm" : "text-ink-soft"}`}>
+                {c === "alipay" ? tr("支付宝", "Alipay") : c === "wechat" ? tr("微信支付", "WeChat Pay") : c === "paypal" ? "PayPal" : tr("信用卡", "Card")}
               </button>
             ))}
           </div>
@@ -1770,7 +1864,7 @@ function WalletTab() {
           {tr(`充值 CA$${amount}`, `Top up CA$${amount}`)}
         </button>
         <p className="mt-2 text-center text-[11px] text-ink-soft">
-          {tr("⚠️ 支付网关待管理员接入；下单后我们会人工核对到账", "⚠️ Payment gateway pending — orders are confirmed manually")}
+          {tr("⚠️ 暂未接入真实支付网关，充值将直接到账用于测试", "⚠️ No live payment gateway yet — top-ups are credited immediately for testing")}
         </p>
       </div>
 
@@ -1783,6 +1877,7 @@ function WalletTab() {
             {txs.map((t) => {
               const positive = ["recharge", "refund", "adjust"].includes(t.type);
               const cad = Number(t.amount_cad ?? 0);
+              const cny = t.amount_cny != null ? Number(t.amount_cny) : cadToCny(cad);
               return (
                 <li key={t.id} className="flex items-center gap-3 py-3">
                   <span className={`grid h-9 w-9 place-items-center rounded-full ${positive ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
@@ -1790,16 +1885,20 @@ function WalletTab() {
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{typeLabel(t.type)}</span>
+                      <span className="text-sm font-medium">{typeLabel(t)}</span>
                       <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] text-ink-soft">{statusLabel(t.status)}</span>
+                      {t.channel && !["shop", "wallet", "batch", "storage"].includes(t.channel) && (
+                        <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] text-ink-soft">{channelLabel(t.channel)}</span>
+                      )}
                     </div>
                     <div className="text-[11px] text-ink-soft">
                       {new Date(t.created_at).toLocaleString(lang === "zh" ? "zh-CN" : "en-CA")}
-                      {t.channel ? ` · ${t.channel}` : ""}
                     </div>
+                    {t.note && <div className="mt-0.5 truncate text-[11px] text-ink-soft">{t.note}</div>}
                   </div>
                   <div className={`text-right font-display text-sm font-bold ${positive ? "text-success" : "text-foreground"}`}>
                     <div>{positive ? "+" : "-"}CA${cad.toFixed(2)}</div>
+                    <div className="text-[11px] font-normal text-ink-soft">≈¥{cny.toFixed(2)}</div>
                   </div>
                 </li>
               );

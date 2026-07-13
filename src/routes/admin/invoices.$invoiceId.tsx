@@ -1,13 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   getInvoice, updateInvoiceStatus, payInvoice,
   listOfflinePayments, addOfflinePayment, deleteOfflinePayment, splitInvoice,
 } from "@/lib/invoices.functions";
+import { useCompanyInfo, usePrintTemplate } from "@/lib/company";
+import { downloadElementAsPdf } from "@/lib/pdf";
+import { InvoiceDocument } from "@/components/invoice/InvoiceDocument";
 import {
-  ArrowLeft, Loader2, Printer, CheckCircle2, Wallet, Plus, Trash2, Scissors, Receipt,
+  ArrowLeft, Loader2, Printer, Download, CheckCircle2, Wallet, Plus, Trash2, Scissors, Receipt,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/invoices/$invoiceId")({ component: InvoiceDetail });
@@ -27,6 +30,9 @@ function InvoiceDetail() {
   const delOff = useServerFn(deleteOfflinePayment);
   const split = useServerFn(splitInvoice);
   const qc = useQueryClient();
+  const company = useCompanyInfo();
+  const template = usePrintTemplate();
+  const docRef = useRef<HTMLDivElement>(null);
 
   const q = useQuery({ queryKey: ["invoice", invoiceId], queryFn: () => fetchOne({ data: { id: invoiceId } }) });
   const offQ = useQuery({ queryKey: ["invoice-offline", invoiceId], queryFn: () => fetchOff({ data: { invoice_id: invoiceId } }) });
@@ -34,6 +40,7 @@ function InvoiceDetail() {
   const [showOff, setShowOff] = useState(false);
   const [showSplit, setShowSplit] = useState(false);
   const [splitSel, setSplitSel] = useState<Set<string>>(new Set());
+  const [downloading, setDownloading] = useState(false);
 
   if (q.isLoading) return <div className="grid h-[60vh] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-slate-500" /></div>;
   if (q.isError || !q.data) return <div className="p-6 text-rose-400">{(q.error as Error)?.message ?? "未找到"}</div>;
@@ -57,6 +64,17 @@ function InvoiceDetail() {
     if (!r.ok) alert("失败: " + r.reason);
     qc.invalidateQueries({ queryKey: ["invoice", invoiceId] });
   };
+  const onDownload = async () => {
+    if (!docRef.current) return;
+    setDownloading(true);
+    try {
+      await downloadElementAsPdf(docRef.current, `${inv.invoice_no}.pdf`);
+    } catch (e: any) {
+      alert("生成 PDF 失败: " + (e.message ?? e));
+    } finally {
+      setDownloading(false);
+    }
+  };
   const onDoSplit = async () => {
     if (splitSel.size === 0 || splitSel.size === items.length) { alert("请选择部分明细"); return; }
     try {
@@ -72,7 +90,10 @@ function InvoiceDetail() {
       <div className="mb-4 flex items-center justify-between print:hidden">
         <Link to="/admin/invoices" className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-white"><ArrowLeft className="h-4 w-4" />返回</Link>
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => window.print()} className="inline-flex items-center gap-1 rounded-md border border-white/10 px-3 py-1.5 text-sm hover:bg-white/5"><Printer className="h-4 w-4" />打印 / PDF</button>
+          <button onClick={() => window.print()} className="inline-flex items-center gap-1 rounded-md border border-white/10 px-3 py-1.5 text-sm hover:bg-white/5"><Printer className="h-4 w-4" />打印</button>
+          <button onClick={onDownload} disabled={downloading} className="inline-flex items-center gap-1 rounded-md border border-white/10 px-3 py-1.5 text-sm hover:bg-white/5 disabled:opacity-50">
+            {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}下载 PDF
+          </button>
           {inv.status === "unpaid" && (
             <>
               <button onClick={() => setShowOff(true)} className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 px-3 py-1.5 text-sm text-amber-200 hover:bg-amber-500/10"><Receipt className="h-4 w-4"/>登记线下付款</button>
@@ -84,77 +105,11 @@ function InvoiceDetail() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-white p-8 text-slate-900 shadow-2xl print:border-0 print:shadow-none">
-        <div className="mb-6 flex items-start justify-between">
-          <div>
-            <div className="font-display text-2xl font-bold">SinoCargo · 物流账单</div>
-            <div className="mt-1 text-sm text-slate-500">INVOICE</div>
-          </div>
-          <div className="text-right">
-            <div className="font-mono text-lg font-bold">{inv.invoice_no}</div>
-            <div className="mt-1 text-xs text-slate-500">开具: {new Date(inv.created_at).toLocaleDateString()}</div>
-            {inv.due_date && <div className="text-xs text-slate-500">到期: {inv.due_date}</div>}
-            <div className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-              inv.status === "paid" ? "bg-emerald-100 text-emerald-700" :
-              inv.status === "overdue" ? "bg-rose-100 text-rose-700" :
-              inv.status === "void" ? "bg-slate-200 text-slate-600" :
-              "bg-amber-100 text-amber-700"
-            }`}>{inv.status === "paid" ? "已付款" : inv.status === "overdue" ? "已逾期" : inv.status === "void" ? "已作废" : "待付款"}</div>
-          </div>
-        </div>
-
-        <div className="mb-6 grid grid-cols-2 gap-6 text-sm">
-          <div>
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-400">收款方</div>
-            <div className="font-semibold">SinoCargo Logistics Inc.</div>
-            <div className="text-slate-600">中加跨境物流</div>
-          </div>
-          <div>
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-400">付款方</div>
-            <div className="font-semibold">{customer?.full_name ?? customer?.email ?? "—"}</div>
-            <div className="font-mono text-xs text-slate-500">客户号 {customer?.customer_code}</div>
-            {customer?.phone && <div className="text-xs text-slate-500">{customer.phone}</div>}
-            {customer?.email && <div className="text-xs text-slate-500">{customer.email}</div>}
-          </div>
-        </div>
-
-        <table className="mb-4 w-full text-sm">
-          <thead className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wider text-slate-500">
-            <tr>
-              <th className="py-2">明细</th>
-              <th className="py-2 text-right">运费</th>
-              <th className="py-2 text-right">关税</th>
-              <th className="py-2 text-right">保险</th>
-              <th className="py-2 text-right">小计</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {items.map((it: any) => (
-              <tr key={it.id}>
-                <td className="py-2">{it.description}</td>
-                <td className="py-2 text-right">¥{Number(it.freight_cny).toFixed(2)}</td>
-                <td className="py-2 text-right">¥{Number(it.customs_cny).toFixed(2)}</td>
-                <td className="py-2 text-right">¥{Number(it.insurance_cny).toFixed(2)}</td>
-                <td className="py-2 text-right font-semibold">¥{Number(it.amount_cny).toFixed(2)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <div className="ml-auto w-72 space-y-1 text-sm">
-          <Row k="运费合计" v={`¥${Number(inv.freight_cny).toFixed(2)}`} />
-          <Row k="关税合计" v={`¥${Number(inv.customs_cny).toFixed(2)}`} />
-          <Row k="保险合计" v={`¥${Number(inv.insurance_cny).toFixed(2)}`} />
-          {Number(inv.other_cny) > 0 && <Row k="其他" v={`¥${Number(inv.other_cny).toFixed(2)}`} />}
-          <div className="my-2 border-t border-slate-200" />
-          <Row k="应付总额 (CNY)" v={`¥${Number(inv.total_cny).toFixed(2)}`} big />
-          <Row k="折合 (CAD)" v={`CA$${totalCAD.toFixed(2)}`} />
-          {paidCAD > 0 && <Row k="已收 (CAD)" v={`CA$${paidCAD.toFixed(2)}`} />}
-          {paidCAD > 0 && paidCAD < totalCAD && <Row k="待收 (CAD)" v={`CA$${remainCAD.toFixed(2)}`} />}
-        </div>
-
-        {inv.note && <div className="mt-6 border-t border-slate-200 pt-4 text-xs text-slate-500">备注: {inv.note}</div>}
-      </div>
+      <InvoiceDocument
+        ref={docRef}
+        inv={inv} items={items} customer={customer} company={company} template={template}
+        paidCad={paidCAD} remainCad={remainCAD}
+      />
 
       {/* Offline payments list */}
       <div className="mt-6 rounded-2xl border border-white/5 bg-white/[0.02] p-5 print:hidden">
@@ -306,14 +261,6 @@ function OfflineDialog({ onClose, onSubmit, remaining }: {
           </button>
         </div>
       </form>
-    </div>
-  );
-}
-
-function Row({ k, v, big }: { k: string; v: string; big?: boolean }) {
-  return (
-    <div className={`flex items-center justify-between ${big ? "text-base font-bold" : ""}`}>
-      <span className="text-slate-500">{k}</span><span>{v}</span>
     </div>
   );
 }

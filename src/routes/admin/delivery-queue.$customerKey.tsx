@@ -52,6 +52,7 @@ function CustomerDeliveryDetail() {
   const address = q.data?.address;
   const wallet = q.data?.wallet;
   const logs: any[] = q.data?.logs ?? [];
+  const fx = q.data?.fx ?? 0.19;
 
   const toggle = (id: string) => {
     const n = new Set(selected);
@@ -91,13 +92,13 @@ function CustomerDeliveryDetail() {
     if (!customerUserId) return alert("该客户未注册账号，无法扣款");
     const ids = Array.from(selected);
     const selectedFee = items.filter((i) => ids.includes(i.id)).reduce((s, i) => s + Number(i.fee_cny || 0), 0);
-    const suggested = (selectedFee > 0 ? selectedFee : totals.fee).toFixed(2);
-    const input = window.prompt(`扣款金额 (CNY)，当前余额 ${wallet ? "¥" + Number(wallet.balance_cny).toFixed(2) : "—"}`, suggested);
+    const suggestedCad = (selectedFee > 0 ? selectedFee : totals.fee) * fx;
+    const input = window.prompt(`扣款金额 (CAD)，当前余额 ${wallet ? "CA$" + Number(wallet.balance_cad).toFixed(2) : "—"}`, suggestedCad.toFixed(2));
     if (!input) return;
     const amt = Number(input);
     if (!(amt > 0)) return alert("金额无效");
     const note = window.prompt("备注（可空）", "派送费用扣款") ?? undefined;
-    await deduct({ data: { customerUserId, amountCny: amt, note } });
+    await deduct({ data: { customerUserId, amountCad: amt, note } });
     await refresh();
     alert("扣款成功");
   };
@@ -145,7 +146,7 @@ function CustomerDeliveryDetail() {
           <div className="mb-1 flex items-center gap-1 text-[11px] uppercase tracking-wider text-slate-500">
             <Wallet className="h-3 w-3" /> 钱包
           </div>
-          <div className="text-lg font-semibold text-emerald-300">{wallet ? fmtCNY(wallet.balance_cny) : "—"}</div>
+          <div className="text-lg font-semibold text-emerald-300">{wallet ? `CA$${Number(wallet.balance_cad).toFixed(2)}` : "—"}</div>
           <button
             onClick={onDeduct}
             className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-300 hover:bg-amber-500/20"

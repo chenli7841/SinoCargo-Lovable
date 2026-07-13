@@ -14,8 +14,11 @@ export type PublicProduct = {
   id: string;
   slug: string;
   name: string;
+  name_en: string | null;
   subtitle: string | null;
+  subtitle_en: string | null;
   description: string | null;
+  description_en: string | null;
   brand: string | null;
   price_cny: number;
   compare_price_cny: number | null;
@@ -50,7 +53,7 @@ export type PublicProduct = {
 };
 
 const SELECT_COLS =
-  "id,slug,name,subtitle,description,brand,price_cny,compare_price_cny,compare_price_cad,weight_kg,cover_url,images,tags,total_stock,sold_count,hs_code,manufacturer,detail_blocks,purchase_type,allow_personal,allow_business,moq,customs_mfn_rate,customs_gst_rate,customs_antidumping_rate,freight_cny,personal_freight_mode,personal_per_unit_freight_cny,pack_qty,pack_weight_kg,pack_length_cm,pack_width_cm,pack_height_cm,pack_volume_m3,available_route_codes,category:product_categories(slug,name,name_en)";
+  "id,slug,name,name_en,subtitle,subtitle_en,description,description_en,brand,price_cny,compare_price_cny,compare_price_cad,weight_kg,cover_url,images,tags,total_stock,sold_count,hs_code,manufacturer,detail_blocks,purchase_type,allow_personal,allow_business,moq,customs_mfn_rate,customs_gst_rate,customs_antidumping_rate,freight_cny,personal_freight_mode,personal_per_unit_freight_cny,pack_qty,pack_weight_kg,pack_length_cm,pack_width_cm,pack_height_cm,pack_volume_m3,available_route_codes,category:product_categories(slug,name,name_en)";
 
 export const listPublicCategories = createServerFn({ method: "GET" }).handler(async () => {
   const sb = pubClient();

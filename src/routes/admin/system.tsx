@@ -10,12 +10,12 @@ import { Settings as SettingsIcon, Save, Loader2, Upload, X as XIcon, Calculator
 
 export const Route = createFileRoute("/admin/system")({ component: SystemPage });
 
-const KEYS = ["company_info", "invoice_auto_rules", "print_template", "fx_rate", "route_type_display", "contact_offices", "contact_email_notify"];
+const KEYS = ["company_info", "print_template", "fx_rate", "points_rule", "route_type_display", "contact_offices", "contact_email_notify"];
 const KEY_LABELS: Record<string, string> = {
   company_info: "公司基本信息",
   fx_rate: "汇率设置",
+  points_rule: "积分规则",
   route_type_display: "线路类型设置",
-  invoice_auto_rules: "账单自动化规则",
   print_template: "打印模板",
   contact_offices: "办公室信息",
   contact_email_notify: "留言邮件通知",
@@ -37,6 +37,9 @@ const OFFICE_KEYS: OfficeKey[] = ["ca", "cn"];
 interface EmailNotifyCfg { enabled: boolean; from_email: string; to_email: string; cc_emails: string[] }
 const EMAIL_NOTIFY_DEFAULT: EmailNotifyCfg = { enabled: false, from_email: "", to_email: "", cc_emails: [] };
 
+interface PointsRuleCfg { enabled: boolean; points_per_cad: number }
+const POINTS_RULE_DEFAULT: PointsRuleCfg = { enabled: false, points_per_cad: 1 };
+
 
 function SystemPage() {
   const fetchSettings = useServerFn(getAppSettings);
@@ -45,7 +48,6 @@ function SystemPage() {
   const q = useQuery({ queryKey: ["app-settings", KEYS], queryFn: () => fetchSettings({ data: { keys: KEYS } }) });
 
   const [company, setCompany] = useState<any>({});
-  const [rules, setRules] = useState<any>({});
   const [tpl, setTpl] = useState<any>({});
   const [fx, setFx] = useState<any>({ cny_per_cad: 5.26 });
   const [routeTypes, setRouteTypes] = useState<Record<RouteTypeKey, RouteTypeCfg>>(
@@ -56,14 +58,15 @@ function SystemPage() {
   );
   const [emailNotify, setEmailNotify] = useState<EmailNotifyCfg>(EMAIL_NOTIFY_DEFAULT);
   const [ccInput, setCcInput] = useState("");
+  const [pointsRule, setPointsRule] = useState<PointsRuleCfg>(POINTS_RULE_DEFAULT);
   const [saving, setSaving] = useState<string | null>(null);
 
   useEffect(() => {
     if (q.data) {
       setCompany(q.data.settings.company_info ?? {});
-      setRules(q.data.settings.invoice_auto_rules ?? {});
       setTpl(q.data.settings.print_template ?? {});
       setFx(q.data.settings.fx_rate ?? { cny_per_cad: 5.26 });
+      setPointsRule({ ...POINTS_RULE_DEFAULT, ...(q.data.settings.points_rule ?? {}) });
       const saved = q.data.settings.route_type_display ?? {};
       setRouteTypes(Object.fromEntries(ROUTE_TYPE_KEYS.map((k) => [k, { ...ROUTE_TYPE_DEFAULT, ...(saved[k] ?? {}) }])) as Record<RouteTypeKey, RouteTypeCfg>);
       const savedOffices = q.data.settings.contact_offices ?? {};
@@ -99,6 +102,9 @@ function SystemPage() {
         <Card title="公司基本信息">
           <Grid>
             <Field label="公司名称"><Input value={company.name ?? ""} onChange={v => setCompany({ ...company, name: v })}/></Field>
+            <Field label="公司 Logo">
+              <ImageUpload value={company.logo_url ?? ""} onChange={(url: string) => setCompany({ ...company, logo_url: url })} folder="company-logo"/>
+            </Field>
             <Field label="联系电话"><Input value={company.phone ?? ""} onChange={v => setCompany({ ...company, phone: v })}/></Field>
             <Field label="邮箱"><Input value={company.email ?? ""} onChange={v => setCompany({ ...company, email: v })}/></Field>
             <Field label="微信号"><Input value={company.wechat ?? ""} onChange={v => setCompany({ ...company, wechat: v })}/></Field>
@@ -128,6 +134,23 @@ function SystemPage() {
           </Grid>
           <SaveBtn busy={saving === "fx_rate"} onClick={() => save("fx_rate", fx)}/>
           <p className="mt-2 text-[11px] text-slate-500">系统以 CAD 为计算基准，所有 CNY 显示由此汇率换算。保存后前端会在下次加载时生效。</p>
+        </Card>
+
+        {/* Points rule */}
+        <Card title="积分规则">
+          <Grid>
+            <Field label="启用消费返积分">
+              <select value={pointsRule.enabled ? "1" : "0"} onChange={(e) => setPointsRule({ ...pointsRule, enabled: e.target.value === "1" })}
+                className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm [&>option]:bg-[#0E1626]">
+                <option value="0">关闭</option><option value="1">开启</option>
+              </select>
+            </Field>
+            <Field label="每消费 CA$1 获得几积分">
+              <Input type="number" value={String(pointsRule.points_per_cad ?? 1)} onChange={v => setPointsRule({ ...pointsRule, points_per_cad: Number(v) || 0 })}/>
+            </Field>
+          </Grid>
+          <SaveBtn busy={saving === "points_rule"} onClick={() => save("points_rule", pointsRule)}/>
+          <p className="mt-2 text-[11px] text-slate-500">电商下单和集运批次付款成功后，按实际扣款的 CAD 金额自动发放积分（向下取整）。</p>
         </Card>
 
         {/* Route type display (marketing only, not real billing) */}
@@ -225,31 +248,6 @@ function SystemPage() {
         {/* Recompute waybill fees */}
         <RecomputeFeesCard/>
 
-
-        {/* Invoice rules */}
-        <Card title="账单自动化规则">
-          <Grid>
-            <Field label="启用自动开票">
-              <select value={rules.enabled ? "1" : "0"} onChange={(e) => setRules({ ...rules, enabled: e.target.value === "1" })}
-                className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm [&>option]:bg-[#0E1626]">
-                <option value="0">关闭</option><option value="1">开启</option>
-              </select>
-            </Field>
-            <Field label="触发状态">
-              <select value={rules.trigger_status ?? "packed"} onChange={(e) => setRules({ ...rules, trigger_status: e.target.value })}
-                className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm [&>option]:bg-[#0E1626]">
-                <option value="packed">已打包 packed</option>
-                <option value="shipped">已发运 shipped</option>
-                <option value="in_transit">在途 in_transit</option>
-                <option value="delivered">已交付 delivered</option>
-              </select>
-            </Field>
-            <Field label="账期（天）"><Input type="number" value={String(rules.due_days ?? 7)} onChange={v => setRules({ ...rules, due_days: Number(v) || 0 })}/></Field>
-            <Field label="逾期阈值（天）"><Input type="number" value={String(rules.overdue_days ?? 14)} onChange={v => setRules({ ...rules, overdue_days: Number(v) || 0 })}/></Field>
-          </Grid>
-          <SaveBtn busy={saving === "invoice_auto_rules"} onClick={() => save("invoice_auto_rules", rules)}/>
-          <p className="mt-2 text-[11px] text-slate-500">逾期标记由定时任务每日执行（POST /api/public/hooks/mark-overdue）。</p>
-        </Card>
 
         {/* Print template */}
         <Card title="打印模板">

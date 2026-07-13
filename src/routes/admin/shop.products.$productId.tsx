@@ -25,7 +25,7 @@ function ProductEdit() {
   });
 
   const [form, setForm] = useState<any>({
-    sku: "", name: "", slug: "", description: "", brand: "",
+    sku: "", name: "", name_en: "", slug: "", description: "", description_en: "", brand: "",
     status: "draft", price_cny: 0, compare_price_cad: null,
     category_id: null, cover_url: "", weight_kg: null, length_cm: null, width_cm: null, height_cm: null, tags: [],
     images: [], hs_code: "", manufacturer: "", detail_blocks: [],
@@ -135,6 +135,7 @@ function ProductEdit() {
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="SKU"><Input value={form.sku} onChange={v => setForm({ ...form, sku: v })}/></Field>
           <Field label="商品名"><Input value={form.name} onChange={v => setForm({ ...form, name: v })}/></Field>
+          <Field label="商品名（英文）"><Input value={form.name_en ?? ""} onChange={v => setForm({ ...form, name_en: v })}/></Field>
           <Field label="Slug"><Input value={form.slug} onChange={v => setForm({ ...form, slug: v })}/></Field>
           <Field label="品牌"><Input value={form.brand ?? ""} onChange={v => setForm({ ...form, brand: v })}/></Field>
           <Field label="分类">
@@ -154,6 +155,10 @@ function ProductEdit() {
           <Field label="对比价 CAD（原价划线）"><Input type="number" value={String(form.compare_price_cad ?? "")} onChange={v => setForm({ ...form, compare_price_cad: v === "" ? null : Number(v) })}/></Field>
           <Field label="描述" full>
             <textarea value={form.description ?? ""} onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={3} className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm focus:border-brand focus:outline-none"/>
+          </Field>
+          <Field label="描述（英文）" full>
+            <textarea value={form.description_en ?? ""} onChange={(e) => setForm({ ...form, description_en: e.target.value })}
               rows={3} className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm focus:border-brand focus:outline-none"/>
           </Field>
         </div>

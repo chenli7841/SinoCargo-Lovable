@@ -11,8 +11,11 @@ export function adaptProduct(p: PublicProduct): Product {
   const img = p.cover_url || (Array.isArray(p.images) && p.images[0]) || CAT_EMOJI[catSlug] || "🛍️";
   return {
     slug: p.slug,
-    name: { zh: p.name, en: p.name },
-    description: { zh: p.subtitle ?? p.description ?? "", en: p.subtitle ?? p.description ?? "" },
+    name: { zh: p.name, en: p.name_en || p.name },
+    description: {
+      zh: p.subtitle ?? p.description ?? "",
+      en: p.subtitle_en ?? p.description_en ?? p.subtitle ?? p.description ?? "",
+    },
     priceCNY: Number(p.price_cny ?? 0),
     weightKg: Number(p.weight_kg ?? 0.5),
     category: catSlug,

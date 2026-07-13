@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useApp, type Currency } from "@/lib/i18n";
 import { useAuth } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
+import { useCompanyInfo } from "@/lib/company";
 import { Menu, ShoppingCart, User, Globe, LogOut } from "lucide-react";
 import { useState } from "react";
 
@@ -9,6 +10,7 @@ export function Header() {
   const { t, lang, setLang, currency, setCurrency } = useApp();
   const { user, signOut } = useAuth();
   const { count } = useCart();
+  const company = useCompanyInfo();
   const [open, setOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -25,12 +27,16 @@ export function Header() {
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 sm:px-6">
         <Link to="/" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-gradient text-brand-foreground shadow-glow">
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M3 12h13l-3-3M16 12l-3 3M19 6l2 6-2 6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-          <span>SinoCargo</span>
+          {company.logo_url ? (
+            <img src={company.logo_url} alt={company.name} className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+          ) : (
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-gradient text-brand-foreground shadow-glow">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M3 12h13l-3-3M16 12l-3 3M19 6l2 6-2 6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+          )}
+          <span>{company.name}</span>
         </Link>
 
         <nav className="hidden flex-1 items-center gap-1 lg:flex">

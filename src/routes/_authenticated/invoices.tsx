@@ -1,9 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { listMyInvoices, payInvoice, getInvoice } from "@/lib/invoices.functions";
-import { FileText, Loader2, Printer, Wallet, ArrowLeft } from "lucide-react";
+import { useCompanyInfo, usePrintTemplate } from "@/lib/company";
+import { downloadElementAsPdf } from "@/lib/pdf";
+import { InvoiceDocument } from "@/components/invoice/InvoiceDocument";
+import { FileText, Loader2, Printer, Download, Wallet, ArrowLeft } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/invoices")({
   head: () => ({ meta: [{ title: "我的账单 — SinoCargo" }] }),
@@ -23,11 +26,27 @@ function MyInvoicesPage() {
   const fetchOne = useServerFn(getInvoice);
   const pay = useServerFn(payInvoice);
   const qc = useQueryClient();
+  const company = useCompanyInfo();
+  const template = usePrintTemplate();
+  const docRef = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(1);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const q = useQuery({ queryKey: ["my-invoices", page], queryFn: () => fetchList({ data: { page, pageSize: 20 } }) });
   const detailQ = useQuery({ queryKey: ["my-invoice", openId], queryFn: () => fetchOne({ data: { id: openId! } }), enabled: !!openId });
+
+  const onDownload = async () => {
+    if (!docRef.current || !detailQ.data) return;
+    setDownloading(true);
+    try {
+      await downloadElementAsPdf(docRef.current, `${detailQ.data.invoice.invoice_no}.pdf`);
+    } catch (e: any) {
+      alert("生成 PDF 失败: " + (e.message ?? e));
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const onPay = async (id: string) => {
     if (!confirm("使用钱包余额支付？")) return;
@@ -45,12 +64,15 @@ function MyInvoicesPage() {
         {detailQ.data && (
           <>
             <div className="mb-4 flex justify-end gap-2 print:hidden">
-              <button onClick={() => window.print()} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-slate-50"><Printer className="h-4 w-4" />打印 / PDF</button>
+              <button onClick={() => window.print()} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-slate-50"><Printer className="h-4 w-4" />打印</button>
+              <button onClick={onDownload} disabled={downloading} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50">
+                {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}下载 PDF
+              </button>
               {detailQ.data.invoice.status === "unpaid" && (
                 <button onClick={() => onPay(detailQ.data.invoice.id)} className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700"><Wallet className="h-4 w-4" />钱包支付</button>
               )}
             </div>
-            <InvoiceCard inv={detailQ.data.invoice} items={detailQ.data.items} customer={detailQ.data.customer} />
+            <InvoiceDocument ref={docRef} inv={detailQ.data.invoice} items={detailQ.data.items} customer={detailQ.data.customer} company={company} template={template} />
           </>
         )}
       </div>
@@ -95,57 +117,3 @@ function MyInvoicesPage() {
   );
 }
 
-function InvoiceCard({ inv, items, customer }: any) {
-  return (
-    <div className="rounded-2xl border bg-white p-8 shadow-lg">
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <div className="font-display text-2xl font-bold">SinoCargo · 物流账单</div>
-          <div className="mt-1 text-sm text-slate-500">INVOICE</div>
-        </div>
-        <div className="text-right">
-          <div className="font-mono text-lg font-bold">{inv.invoice_no}</div>
-          <div className="mt-1 text-xs text-slate-500">开具: {new Date(inv.created_at).toLocaleDateString()}</div>
-          {inv.due_date && <div className="text-xs text-slate-500">到期: {inv.due_date}</div>}
-          <div className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[inv.status]}`}>{STATUS_LABEL[inv.status]}</div>
-        </div>
-      </div>
-      <div className="mb-6 grid grid-cols-2 gap-6 text-sm">
-        <div>
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-400">收款方</div>
-          <div className="font-semibold">SinoCargo Logistics Inc.</div>
-        </div>
-        <div>
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-400">付款方</div>
-          <div className="font-semibold">{customer?.full_name ?? customer?.email ?? "—"}</div>
-          <div className="font-mono text-xs text-slate-500">客户号 {customer?.customer_code}</div>
-        </div>
-      </div>
-      <table className="mb-4 w-full text-sm">
-        <thead className="border-b text-left text-[11px] uppercase tracking-wider text-slate-500">
-          <tr><th className="py-2">明细</th><th className="py-2 text-right">运费</th><th className="py-2 text-right">关税</th><th className="py-2 text-right">保险</th><th className="py-2 text-right">小计</th></tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {items.map((it: any) => (
-            <tr key={it.id}>
-              <td className="py-2">{it.description}</td>
-              <td className="py-2 text-right">¥{Number(it.freight_cny).toFixed(2)}</td>
-              <td className="py-2 text-right">¥{Number(it.customs_cny).toFixed(2)}</td>
-              <td className="py-2 text-right">¥{Number(it.insurance_cny).toFixed(2)}</td>
-              <td className="py-2 text-right font-semibold">¥{Number(it.amount_cny).toFixed(2)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="ml-auto w-72 space-y-1 text-sm">
-        <div className="flex justify-between"><span className="text-slate-500">运费合计</span><span>¥{Number(inv.freight_cny).toFixed(2)}</span></div>
-        <div className="flex justify-between"><span className="text-slate-500">关税合计</span><span>¥{Number(inv.customs_cny).toFixed(2)}</span></div>
-        <div className="flex justify-between"><span className="text-slate-500">保险合计</span><span>¥{Number(inv.insurance_cny).toFixed(2)}</span></div>
-        <div className="my-2 border-t" />
-        <div className="flex justify-between text-base font-bold"><span>应付总额 (CNY)</span><span>¥{Number(inv.total_cny).toFixed(2)}</span></div>
-        <div className="flex justify-between text-xs text-slate-500"><span>折合</span><span>CA${(Number(inv.total_cny) * Number(inv.fx_rate)).toFixed(2)}</span></div>
-      </div>
-      {inv.note && <div className="mt-6 border-t pt-4 text-xs text-slate-500">备注: {inv.note}</div>}
-    </div>
-  );
-}

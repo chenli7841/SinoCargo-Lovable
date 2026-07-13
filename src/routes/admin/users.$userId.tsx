@@ -159,10 +159,9 @@ function UserDetailPage() {
         {/* Left: info & stats */}
         <div className="space-y-5">
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <StatCard icon={<Package className="h-4 w-4" />} label="历史订单" value={String(d.ordersCount)} accent="text-blue-400" />
-            <StatCard icon={<Wallet className="h-4 w-4" />} label="钱包余额 (CAD)" value={`CA$${Number(d.wallet?.balance_cad ?? 0).toFixed(2)}`} accent="text-emerald-400" />
-            <StatCard icon={<Wallet className="h-4 w-4" />} label="钱包余额 (CNY)" value={`¥${Number(d.wallet?.balance_cny ?? 0).toFixed(2)}`} accent="text-amber-400" />
+            <StatCard icon={<Wallet className="h-4 w-4" />} label="钱包余额" value={`CA$${Number(d.wallet?.balance_cad ?? 0).toFixed(2)}`} accent="text-emerald-400" />
           </div>
 
           {/* Profile details */}
@@ -206,7 +205,6 @@ function UserDetailPage() {
           {/* Wallet balance editor */}
           <WalletCard
             userId={userId}
-            currentCny={Number(d.wallet?.balance_cny ?? 0)}
             currentCad={Number(d.wallet?.balance_cad ?? 0)}
             canEdit={canEdit}
           />
@@ -654,34 +652,33 @@ function BlacklistCard({ userId, currentBlacklisted, currentReason, canEdit }: {
 }
 
 
-function WalletCard({ userId, currentCny, currentCad, canEdit }: {
-  userId: string; currentCny: number; currentCad: number; canEdit: boolean;
+function WalletCard({ userId, currentCad, canEdit }: {
+  userId: string; currentCad: number; canEdit: boolean;
 }) {
   const qc = useQueryClient();
   const save = useServerFn(adjustUserWallet);
-  const [currency, setCurrency] = useState<"CNY" | "CAD">("CNY");
   const [mode, setMode] = useState<"delta" | "set">("delta");
   const [amount, setAmount] = useState<string>("");
   const [note, setNote] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  const cur = currency === "CNY" ? currentCny : currentCad;
+  const cur = currentCad;
   const parsed = Number(amount);
   const valid = amount !== "" && Number.isFinite(parsed);
   const preview = valid ? (mode === "set" ? parsed : cur + parsed) : cur;
   const delta = valid ? preview - cur : 0;
-  const symbol = currency === "CNY" ? "¥" : "CA$";
+  const symbol = "CA$";
 
   const onSave = async () => {
     if (!valid) return;
     const confirmMsg = mode === "set"
-      ? `确认将 ${currency} 余额设置为 ${symbol}${parsed.toFixed(2)}？`
-      : `确认${delta >= 0 ? "增加" : "扣除"} ${symbol}${Math.abs(delta).toFixed(2)} ${currency}？`;
+      ? `确认将余额设置为 ${symbol}${parsed.toFixed(2)}？`
+      : `确认${delta >= 0 ? "增加" : "扣除"} ${symbol}${Math.abs(delta).toFixed(2)}？`;
     if (!confirm(confirmMsg)) return;
     setBusy(true); setMsg(null);
     try {
-      await save({ data: { userId, currency, mode, amount: parsed, note: note.trim() || null } });
+      await save({ data: { userId, mode, amount: parsed, note: note.trim() || null } });
       await qc.invalidateQueries({ queryKey: ["admin-user-detail", userId] });
       setAmount(""); setNote("");
       setMsg({ kind: "ok", text: "余额已更新" });
@@ -693,7 +690,7 @@ function WalletCard({ userId, currentCny, currentCad, canEdit }: {
   return (
     <section className="rounded-2xl border border-white/5 bg-white/[0.03] p-5">
       <h2 className="font-display text-base font-bold inline-flex items-center gap-2">
-        <Wallet className="h-4 w-4 text-emerald-400" />钱包余额调整
+        <Wallet className="h-4 w-4 text-emerald-400" />钱包余额调整 (CAD)
       </h2>
       <p className="mt-1 text-xs text-slate-400">
         手动增加 / 扣除 或 直接设定客户钱包余额。每次操作会写入钱包流水与操作日志。
@@ -701,18 +698,9 @@ function WalletCard({ userId, currentCny, currentCad, canEdit }: {
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <div>
-          <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-400">币种</div>
-          <div className="flex gap-1.5">
-            {(["CNY", "CAD"] as const).map((c) => (
-              <button key={c} type="button" disabled={!canEdit}
-                onClick={() => setCurrency(c)}
-                className={`rounded-md border px-3 py-1 text-xs font-semibold ${currency === c ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200" : "border-white/10 bg-white/5 text-slate-400 hover:border-white/20"} disabled:opacity-50`}>
-                {c === "CNY" ? "人民币 CNY" : "加元 CAD"}
-              </button>
-            ))}
-          </div>
+          <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-400">当前余额</div>
           <div className="mt-2 text-xs text-slate-400">
-            当前余额：<span className="font-mono font-bold text-slate-100">{symbol}{cur.toFixed(2)}</span>
+            <span className="font-mono font-bold text-slate-100">{symbol}{cur.toFixed(2)}</span>
           </div>
         </div>
 

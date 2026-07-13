@@ -1977,6 +1977,7 @@ export type Database = {
           customs_gst_rate: number
           customs_mfn_rate: number
           description: string | null
+          description_en: string | null
           detail_blocks: Json
           freight_cny: number
           height_cm: number | null
@@ -1987,6 +1988,7 @@ export type Database = {
           manufacturer: string | null
           moq: number
           name: string
+          name_en: string | null
           pack_height_cm: number | null
           pack_length_cm: number | null
           pack_qty: number
@@ -2006,6 +2008,7 @@ export type Database = {
           sold_count: number
           status: Database["public"]["Enums"]["product_status"]
           subtitle: string | null
+          subtitle_en: string | null
           tags: string[]
           total_stock: number
           updated_at: string
@@ -2029,6 +2032,7 @@ export type Database = {
           customs_gst_rate?: number
           customs_mfn_rate?: number
           description?: string | null
+          description_en?: string | null
           detail_blocks?: Json
           freight_cny?: number
           height_cm?: number | null
@@ -2039,6 +2043,7 @@ export type Database = {
           manufacturer?: string | null
           moq?: number
           name: string
+          name_en?: string | null
           pack_height_cm?: number | null
           pack_length_cm?: number | null
           pack_qty?: number
@@ -2058,6 +2063,7 @@ export type Database = {
           sold_count?: number
           status?: Database["public"]["Enums"]["product_status"]
           subtitle?: string | null
+          subtitle_en?: string | null
           tags?: string[]
           total_stock?: number
           updated_at?: string
@@ -2081,6 +2087,7 @@ export type Database = {
           customs_gst_rate?: number
           customs_mfn_rate?: number
           description?: string | null
+          description_en?: string | null
           detail_blocks?: Json
           freight_cny?: number
           height_cm?: number | null
@@ -2091,6 +2098,7 @@ export type Database = {
           manufacturer?: string | null
           moq?: number
           name?: string
+          name_en?: string | null
           pack_height_cm?: number | null
           pack_length_cm?: number | null
           pack_qty?: number
@@ -2110,6 +2118,7 @@ export type Database = {
           sold_count?: number
           status?: Database["public"]["Enums"]["product_status"]
           subtitle?: string | null
+          subtitle_en?: string | null
           tags?: string[]
           total_stock?: number
           updated_at?: string
@@ -3080,6 +3089,18 @@ export type Database = {
       check_username_available: {
         Args: { p_username: string }
         Returns: boolean
+      }
+      check_email_available: {
+        Args: { p_email: string }
+        Returns: boolean
+      }
+      check_phone_available: {
+        Args: { p_phone: string }
+        Returns: boolean
+      }
+      normalize_phone: {
+        Args: { p_phone: string }
+        Returns: string
       }
       resolve_login_email: {
         Args: { p_identifier: string }
