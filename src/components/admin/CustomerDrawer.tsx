@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Card } from "@/lib/admin-shared";
-import { saveInspectionFee, deductWalletForBatch } from "@/lib/orders.functions";
+import { saveInspectionFee, deductWalletForBatch, deductBatchOffline } from "@/lib/orders.functions";
 import { X, Truck, Package, Layers, ChevronDown, ChevronRight, Wallet, Save, AlertTriangle } from "lucide-react";
 
 type Props = {
@@ -20,6 +20,7 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
   const qc = useQueryClient();
   const saveInspection = useServerFn(saveInspectionFee);
   const deduct = useServerFn(deductWalletForBatch);
+  const deductOffline = useServerFn(deductBatchOffline);
 
   const c = customerData ?? {};
   const waybills = (c.waybills ?? []) as any[];
@@ -41,6 +42,8 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
 
   const [inspection, setInspection] = useState(String(Number(c.fee_inspection_cad ?? 0)));
   const [discount, setDiscount] = useState("0");
+  const [method, setMethod] = useState<"wallet" | "emt" | "cash">("wallet");
+  const [refNo, setRefNo] = useState("");
   const [busy, setBusy] = useState(false);
 
   const inspAmt = Math.max(0, Number(inspection || 0));
@@ -60,12 +63,19 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
   const onDeduct = async () => {
     if (!c.user_id) { alert("客户未绑定账号，无法扣款"); return; }
     if (!(subtotal > 0)) { alert("金额需大于 0"); return; }
-    if (!confirm(`确认扣款 ${cad(finalDeduct)}（含检查费 ${cad(inspAmt)}，折扣 ${cad(discAmt)}）？`)) return;
+    const methodLabel = method === "wallet" ? "钱包扣款" : method === "emt" ? "EMT 收款" : "现金收款";
+    if (!confirm(`确认${methodLabel} ${cad(finalDeduct)}（含检查费 ${cad(inspAmt)}，折扣 ${cad(discAmt)}）？`)) return;
     setBusy(true);
     try {
       // Save inspection first so it's reflected in the batch bill
       if (inspAmt >= 0) await saveInspection({ data: { batchId, customerCode, amountCad: inspAmt } });
-      await deduct({ data: { batchId, userId: c.user_id, amountCad: subtotal, discountCad: discAmt, note: `批次扣款 · ${customerCode}` } });
+      if (method === "wallet") {
+        const r: any = await deduct({ data: { batchId, userId: c.user_id, amountCad: subtotal, discountCad: discAmt, note: `批次扣款 · ${customerCode}` } });
+        if (r?.ok === false && r.reason === "already_paid") { alert("该客户在本批次已结清"); return; }
+      } else {
+        const r: any = await deductOffline({ data: { batchId, userId: c.user_id, method, discountCad: discAmt, refNo: refNo || undefined, note: `批次${methodLabel} · ${customerCode}` } });
+        if (r?.ok === false && r.reason === "already_paid") { alert("该客户在本批次已结清"); return; }
+      }
       await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
       onClose();
     } catch (e: any) { alert(e.message); }
@@ -264,6 +274,28 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
               <div className="mt-2 flex justify-between border-t border-white/5 pt-2">
                 <span className="text-xs font-semibold text-slate-200">实际扣款</span>
                 <span className="font-mono text-lg font-bold text-emerald-300">{cad(finalDeduct)}</span>
+              </div>
+              <div className="mt-2 border-t border-white/5 pt-2">
+                <label className="block text-[10px] uppercase tracking-wider text-slate-500">收款方式</label>
+                <div className="mt-1 grid grid-cols-3 gap-1">
+                  {(["wallet", "emt", "cash"] as const).map((m) => (
+                    <button key={m} type="button" disabled={!canEdit}
+                      onClick={() => setMethod(m)}
+                      className={`rounded-md border px-2 py-1.5 text-xs font-semibold ${method === m ? "border-brand bg-brand/10 text-brand" : "border-white/10 bg-white/5 text-slate-300"}`}>
+                      {m === "wallet" ? "钱包" : m === "emt" ? "EMT" : "现金"}
+                    </button>
+                  ))}
+                </div>
+                {method !== "wallet" && (
+                  <input value={refNo} disabled={!canEdit} onChange={(e) => setRefNo(e.target.value)}
+                    placeholder="凭证号 / 参考号（可选）"
+                    className="mt-2 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100 placeholder:text-slate-500"/>
+                )}
+                <p className="mt-1.5 text-[10px] leading-snug text-slate-500">
+                  {method === "wallet"
+                    ? "生成账单并结清 · 记录钱包流水 · 调整钱包余额 · 该客户批次未付运单标记为已付款。"
+                    : "生成账单并结清 · 记录一条流水（不影响钱包余额）· 该客户批次未付运单标记为已付款。"}
+                </p>
               </div>
             </Card>
 

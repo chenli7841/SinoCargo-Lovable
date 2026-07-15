@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { useApp } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
 import { rechargeWallet } from "@/lib/wallet.functions";
+import { listMyBatches, payMyBatch } from "@/lib/orders.functions";
 import { toast } from "sonner";
 import { TrackingTimeline } from "@/components/tracking-timeline";
 import {
@@ -108,11 +109,12 @@ function AccountPage() {
 }
 
 // ===================== Overview =====================
-interface UnpaidBatch { batch_no: string; total_cny: number; shipping_method: string }
+interface UnpaidBatch { batch_no: string; total_cad: number; shipping_method: string | null }
 
 function OverviewTab({ onJump, setOrdersFilter }: { onJump: (t: Tab) => void; setOrdersFilter: (f: OrderFilter) => void }) {
-  const { lang, cnyToCad } = useApp();
+  const { lang } = useApp();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
+  const fetchMyBatches = useServerFn(listMyBatches);
   const [wallet, setWallet] = useState<WalletRow | null>(null);
   const [customerCode, setCustomerCode] = useState<string | null>(null);
   const [totalOrders, setTotalOrders] = useState<number | null>(null);
@@ -124,7 +126,11 @@ function OverviewTab({ onJump, setOrdersFilter }: { onJump: (t: Tab) => void; se
   useEffect(() => {
     sb.from("wallets").select("*").maybeSingle().then(({ data }: any) => setWallet(data ?? { balance_cad: 0 }));
     sb.from("profiles").select("customer_code").maybeSingle().then(({ data }: any) => setCustomerCode(data?.customer_code ?? null));
-    sb.rpc("unpaid_batches_summary").then(({ data }: any) => setUnpaidBatches((data ?? []).map((r: any) => ({ ...r, total_cny: Number(r.total_cny ?? 0) }))));
+    fetchMyBatches().then((r: any) => {
+      const all = (r?.batches ?? []) as any[];
+      setBatchCount(all.length);
+      setUnpaidBatches(all.filter((b) => !b.is_paid).map((b) => ({ batch_no: b.batch_no, total_cad: b.subtotal_cad, shipping_method: b.shipping_method })));
+    });
     Promise.all([
       sb.from("orders").select("id,status,batch_no"),
       sb.from("forwarding_orders").select("id,status,batch_no"),
@@ -137,14 +143,10 @@ function OverviewTab({ onJump, setOrdersFilter }: { onJump: (t: Tab) => void; se
         fRows.filter((r: any) => ["shipped", "in_transit"].includes(r.status)).length;
       setInTransit(transit);
       setUnwarehoused(fRows.filter((r: any) => r.status === "pending").length);
-      const batches = new Set<string>();
-      [...oRows, ...fRows].forEach((r: any) => { if (r.batch_no) batches.add(r.batch_no); });
-      setBatchCount(batches.size);
     });
   }, []);
 
-  const unpaidTotalCny = unpaidBatches.reduce((s, b) => s + b.total_cny, 0);
-  const unpaidTotalCad = cnyToCad(unpaidTotalCny);
+  const unpaidTotalCad = unpaidBatches.reduce((s, b) => s + b.total_cad, 0);
 
   return (
     <div className="space-y-6">
@@ -218,7 +220,7 @@ function OverviewTab({ onJump, setOrdersFilter }: { onJump: (t: Tab) => void; se
                   {b.shipping_method === "air" ? <Plane className="h-3 w-3" /> : <Ship className="h-3 w-3" />}
                 </span>
                 <span className="font-mono text-xs font-semibold">{b.batch_no}</span>
-                <span className="ml-auto font-display text-base font-bold text-foreground">CA${cnyToCad(b.total_cny).toFixed(2)}</span>
+                <span className="ml-auto font-display text-base font-bold text-foreground">CA${b.total_cad.toFixed(2)}</span>
               </li>
             ))}
           </ul>
@@ -464,274 +466,67 @@ function AddressTab() {
 }
 
 // ===================== Batches (merged: orders + forwarding) =====================
+// Batch visibility + amounts are sourced from listMyBatches() (src/lib/orders.functions.ts),
+// which reuses computeBatchFeeSummary — the exact same computation staff see in
+// the admin "扣款" screens — filtered down to this customer's own bucket. A batch
+// only shows up once staff move it to shipped/arrived/closed.
 interface BatchItem {
   kind: "order" | "forwarding";
   id: string;
   no: string;
   status: string;
-  fee_cny: number;
   tracking_no: string | null;
   payment_status: string;
-  extra?: string;
-  route_id: string | null;
-  weight_kg: number;
-}
-interface LastMileBlock {
-  route_id: string;
-  route_code: string;
-  threshold_kg: number;
-  fee_cad: number;
-  sum_weight_kg: number;
-  triggered: boolean;
-  gap_kg: number;
-}
-interface StorageBlock {
-  warehouse_code: string;
-  warehouse_name: string;
-  cbm_real: number;
-  cbm_charged: number;
-  fee_per_cbm_day: number;
-  free_days: number;
-  max_days_charged: number;
-  fee_cad: number;
-  storage_status_count: number;
 }
 interface Batch {
-  batch_no: string | null;
+  batch_id: string;
+  batch_no: string;
   shipping_method: string | null;
   eta: string | null;
+  status: "shipped" | "arrived" | "closed";
   items: BatchItem[];
-  total_unpaid_cny: number;
-  total_cny: number;
-  all_paid: boolean;
+  subtotal_cad: number;
+  is_paid: boolean;
   intl_tracking_nos: string[];
-  batch_status: "shipping" | "awaiting_delivery" | "awaiting_pickup" | "completed";
-  last_mile_blocks: LastMileBlock[];
-  storage_blocks: StorageBlock[];
-  storage_total_cad: number;
-  grand_total_cny: number; // 后台锁定后写入的最终结算金额
-  batch_locked: boolean;   // 后台是否已锁定（决定是否显示 grand_total_cny）
 }
 
-const STATUS_RANK: Record<string, number> = {
-  pending: 1, received: 2, packed: 3, shipped: 4, in_transit: 5, ready_pickup: 6, delivered: 7,
+const BATCH_STATUS_LABELS: Record<Batch["status"], [string, string, string]> = {
+  shipped: ["已发出", "Shipped", "bg-brand/10 text-brand"],
+  arrived: ["已到件", "Arrived", "bg-cta/10 text-cta"],
+  closed:  ["已关闭", "Closed",  "bg-success/10 text-success"],
 };
-function computeBatchStatus(statuses: string[]): Batch["batch_status"] {
-  const ranks = statuses.filter((s) => s !== "cancelled").map((s) => STATUS_RANK[s] ?? 1);
-  if (ranks.length === 0) return "shipping";
-  const min = Math.min(...ranks);
-  if (min >= 7) return "completed";
-  if (min >= 6) return "awaiting_pickup";
-  if (min >= 5) return "awaiting_delivery";
-  return "shipping";
-}
 
 function BatchesTab({ onJump }: { onJump: (t: Tab) => void }) {
   const { lang } = useApp();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
   const navigate = useNavigate();
+  const fetchMyBatches = useServerFn(listMyBatches);
+  const doPay = useServerFn(payMyBatch);
   const [batches, setBatches] = useState<Batch[] | null>(null);
   const [paying, setPaying] = useState<string | null>(null);
 
   const load = async () => {
-    const [{ data: o }, { data: f }, { data: wb }, { data: routes }, { data: whs }] = await Promise.all([
-      sb.from("orders").select("id,order_no,status,total_cny,shipping_method,tracking_no,batch_no,eta,payment_status,created_at,route_id,freight_snapshot").order("created_at", { ascending: false }),
-      sb.from("forwarding_orders").select("id,request_no,status,fee_cny,weight_kg,warehouse,shipping_method,tracking_no,batch_no,eta,payment_status,created_at,route_id,intake_at,length_cm,width_cm,height_cm").order("created_at", { ascending: false }),
-      sb.from("waybills").select("order_id,forwarding_id,intl_tracking_no,status"),
-      sb.from("shipping_routes").select("id,code,last_mile_fee_cad,last_mile_threshold_kg"),
-      sb.from("warehouses").select("code,name_zh,storage_fee_cad_per_cbm_day,storage_free_days"),
-    ]);
-
-    const routeMap = new Map<string, { code: string; fee_cad: number; threshold_kg: number }>();
-    (routes ?? []).forEach((r: any) => routeMap.set(r.id, {
-      code: r.code,
-      fee_cad: Number(r.last_mile_fee_cad ?? 0),
-      threshold_kg: Number(r.last_mile_threshold_kg ?? 0),
-    }));
-    const whMap = new Map<string, { name: string; fee_per_cbm_day: number; free_days: number }>();
-    (whs ?? []).forEach((w: any) => whMap.set(w.code, {
-      name: w.name_zh,
-      fee_per_cbm_day: Number(w.storage_fee_cad_per_cbm_day ?? 0),
-      free_days: Number(w.storage_free_days ?? 0),
-    }));
-
-    const orderTracks = new Map<string, string[]>();
-    const fwdTracks = new Map<string, string[]>();
-    const orderWbStatus = new Map<string, string[]>();
-    const fwdWbStatus = new Map<string, string[]>();
-    (wb ?? []).forEach((w: any) => {
-      if (w.order_id) {
-        if (w.intl_tracking_no) {
-          const a = orderTracks.get(w.order_id) ?? []; a.push(w.intl_tracking_no); orderTracks.set(w.order_id, a);
-        }
-        const s = orderWbStatus.get(w.order_id) ?? []; s.push(w.status); orderWbStatus.set(w.order_id, s);
-      } else if (w.forwarding_id) {
-        if (w.intl_tracking_no) {
-          const a = fwdTracks.get(w.forwarding_id) ?? []; a.push(w.intl_tracking_no); fwdTracks.set(w.forwarding_id, a);
-        }
-        const s = fwdWbStatus.get(w.forwarding_id) ?? []; s.push(w.status); fwdWbStatus.set(w.forwarding_id, s);
-      }
-    });
-
-    type FwdRow = { warehouse: string; intake_at: string | null; status: string; cbm: number };
-    const batchFwd = new Map<string, FwdRow[]>();
-
-    type B = Batch & { _statuses: string[] };
-    const map = new Map<string, B>();
-    const key = (b: string | null) => b ?? "__unassigned__";
-    const addTrack = (b: Batch, t: string | null | undefined) => {
-      if (t && !b.intl_tracking_nos.includes(t)) b.intl_tracking_nos.push(t);
-    };
-    const makeBatch = (r: any): B => ({
-      batch_no: r.batch_no, shipping_method: r.shipping_method, eta: r.eta,
-      items: [], total_unpaid_cny: 0, total_cny: 0, all_paid: true,
-      intl_tracking_nos: [], batch_status: "shipping", last_mile_blocks: [],
-      storage_blocks: [], storage_total_cad: 0, grand_total_cny: 0, batch_locked: false, _statuses: [],
-    });
-    for (const r of (o ?? [])) {
-      const k = key(r.batch_no);
-      if (!map.has(k)) map.set(k, makeBatch(r));
-      const b = map.get(k)!;
-      const fee = Number(r.total_cny ?? 0);
-      const cw = Number((r.freight_snapshot as any)?.chargeable_weight ?? (r.freight_snapshot as any)?.actual_weight ?? 0);
-      b.items.push({ kind: "order", id: r.id, no: r.order_no, status: r.status, fee_cny: fee, tracking_no: r.tracking_no, payment_status: r.payment_status, route_id: r.route_id ?? null, weight_kg: cw });
-      b.total_cny += fee;
-      if (r.payment_status !== "paid") { b.total_unpaid_cny += fee; b.all_paid = false; }
-      if (!b.shipping_method) b.shipping_method = r.shipping_method;
-      if (!b.eta) b.eta = r.eta;
-      addTrack(b, r.tracking_no);
-      (orderTracks.get(r.id) ?? []).forEach((t) => addTrack(b, t));
-      (orderWbStatus.get(r.id) ?? []).forEach((s) => b._statuses.push(s));
-    }
-    for (const r of (f ?? [])) {
-      const k = key(r.batch_no);
-      if (!map.has(k)) map.set(k, makeBatch(r));
-      const b = map.get(k)!;
-      const fee = Number(r.fee_cny ?? 0);
-      b.items.push({
-        kind: "forwarding", id: r.id, no: r.request_no, status: r.status,
-        fee_cny: fee, tracking_no: r.tracking_no, payment_status: r.payment_status,
-        extra: `${r.warehouse === "guangzhou" ? tr("广州仓", "Guangzhou") : tr("义乌仓", "Yiwu")}${r.weight_kg ? ` · ${Number(r.weight_kg).toFixed(1)}kg` : ""}`,
-        route_id: r.route_id ?? null,
-        weight_kg: Number(r.weight_kg ?? 0),
-      });
-      b.total_cny += fee;
-      if (r.payment_status !== "paid") { b.total_unpaid_cny += fee; b.all_paid = false; }
-      addTrack(b, r.tracking_no);
-      (fwdTracks.get(r.id) ?? []).forEach((t) => addTrack(b, t));
-      (fwdWbStatus.get(r.id) ?? []).forEach((s) => b._statuses.push(s));
-      // collect for storage
-      const L = Number(r.length_cm ?? 0), W = Number(r.width_cm ?? 0), H = Number(r.height_cm ?? 0);
-      const cbm = (L * W * H) / 1_000_000;
-      if (r.warehouse && (r.intake_at || r.status === "storage")) {
-        const list = batchFwd.get(k) ?? []; list.push({
-          warehouse: r.warehouse, intake_at: r.intake_at, status: r.status, cbm,
-        }); batchFwd.set(k, list);
-      }
-    }
-    const now = Date.now();
-    const arr: Batch[] = Array.from(map.entries())
-      .filter(([, b]) => b.batch_no)
-      .map(([k, b]) => {
-        b.batch_status = computeBatchStatus(b._statuses);
-        // last-mile blocks
-        const byRoute = new Map<string, number>();
-        for (const it of b.items) {
-          if (!it.route_id) continue;
-          byRoute.set(it.route_id, (byRoute.get(it.route_id) ?? 0) + (Number(it.weight_kg) || 0));
-        }
-        const blocks: LastMileBlock[] = [];
-        byRoute.forEach((sumW, rid) => {
-          const meta = routeMap.get(rid);
-          if (!meta || meta.fee_cad <= 0 || meta.threshold_kg <= 0) return;
-          const triggered = sumW < meta.threshold_kg;
-          blocks.push({
-            route_id: rid, route_code: meta.code,
-            threshold_kg: meta.threshold_kg, fee_cad: meta.fee_cad,
-            sum_weight_kg: sumW, triggered, gap_kg: Math.max(0, meta.threshold_kg - sumW),
-          });
-        });
-        b.last_mile_blocks = blocks;
-
-        // storage blocks: group by warehouse
-        const rows = batchFwd.get(k) ?? [];
-        const byWh = new Map<string, FwdRow[]>();
-        for (const row of rows) {
-          const arr2 = byWh.get(row.warehouse) ?? []; arr2.push(row); byWh.set(row.warehouse, arr2);
-        }
-        const sblocks: StorageBlock[] = [];
-        let stotal = 0;
-        byWh.forEach((rs, code) => {
-          const meta = whMap.get(code);
-          if (!meta || meta.fee_per_cbm_day <= 0) return;
-          const cbm_real = rs.reduce((s, r) => s + r.cbm, 0);
-          const cbm_charged = Math.max(1, Math.ceil(cbm_real));
-          let storageStatusCount = 0;
-          let maxDays = 0;
-          let fee = 0;
-          for (const r of rs) {
-            if (!r.intake_at && r.status !== "storage") continue;
-            const start = r.intake_at ? new Date(r.intake_at).getTime() : now;
-            const elapsedDays = Math.max(0, Math.ceil((now - start) / 86400000));
-            const ignoresFree = r.status === "storage";
-            if (ignoresFree) storageStatusCount++;
-            const billable = ignoresFree ? elapsedDays : Math.max(0, elapsedDays - meta.free_days);
-            if (billable > maxDays) maxDays = billable;
-            // per-row fee uses row cbm but batch charges by ceil cbm; pro-rate fairly: use cbm_charged proportionally
-            // Simplification: compute as cbm_charged * sum(billable_days_weighted by row_cbm / cbm_real) when cbm_real>0
-            const share = cbm_real > 0 ? r.cbm / cbm_real : 1 / rs.length;
-            fee += cbm_charged * billable * meta.fee_per_cbm_day * share;
-          }
-          fee = +fee.toFixed(2);
-          if (fee <= 0) return;
-          sblocks.push({
-            warehouse_code: code,
-            warehouse_name: meta.name,
-            cbm_real: +cbm_real.toFixed(3),
-            cbm_charged,
-            fee_per_cbm_day: meta.fee_per_cbm_day,
-            free_days: meta.free_days,
-            max_days_charged: maxDays,
-            fee_cad: fee,
-            storage_status_count: storageStatusCount,
-          });
-          stotal += fee;
-        });
-        b.storage_blocks = sblocks;
-        b.storage_total_cad = +stotal.toFixed(2);
-        return b;
-      }).sort((a, b) => (a.eta ?? "").localeCompare(b.eta ?? ""));
-    // Read locked batch totals (set by admin when batch status crosses out of "draft")
-    const batchNos = arr.map((b) => b.batch_no).filter(Boolean) as string[];
-    if (batchNos.length) {
-      const { data: bRows } = await sb.from("batches")
-        .select("batch_no, status, grand_total_cny").in("batch_no", batchNos);
-      const bMap = new Map<string, { status: string; grand_total_cny: number }>();
-      for (const r of (bRows ?? []) as any[]) bMap.set(r.batch_no, { status: r.status, grand_total_cny: Number(r.grand_total_cny ?? 0) });
-      for (const b of arr) {
-        const row = b.batch_no ? bMap.get(b.batch_no) : null;
-        if (row) {
-          b.grand_total_cny = row.grand_total_cny;
-          b.batch_locked = row.status !== "draft";
-        }
-      }
-    }
-    setBatches(arr);
+    const r: any = await fetchMyBatches();
+    setBatches((r?.batches ?? []) as Batch[]);
   };
   useEffect(() => { load(); }, []);
 
-  const pay = async (batch_no: string, amountCad: number) => {
-    if (!confirm(tr(`确认从钱包支付 CA$${amountCad.toFixed(2)} 给批次 ${batch_no}?`, `Pay CA$${amountCad.toFixed(2)} from wallet for batch ${batch_no}?`))) return;
-    setPaying(batch_no);
-    const { data, error } = await sb.rpc("pay_batch", { _batch_no: batch_no });
+  const pay = async (batchId: string, batchNo: string, amountCad: number) => {
+    if (!confirm(tr(`确认从钱包支付 CA$${amountCad.toFixed(2)} 给批次 ${batchNo}?`, `Pay CA$${amountCad.toFixed(2)} from wallet for batch ${batchNo}?`))) return;
+    setPaying(batchId);
+    const data: any = await doPay({ data: { batchId } }).catch((e: any) => ({ ok: false, reason: e.message }));
     setPaying(null);
-    if (error) return toast.error(error.message);
     if (!data?.ok) {
       if (data?.reason === "insufficient") {
         toast.error(tr(
           `余额不足，需要 CA$${data.need_cad}，当前 CA$${data.balance_cad}，请先充值`,
           `Insufficient balance: need CA$${data.need_cad}, have CA$${data.balance_cad} — please top up`,
         ), { action: { label: tr("去充值", "Top up"), onClick: () => onJump("wallet") } });
+        return;
+      }
+      if (data?.reason === "already_paid") {
+        toast.info(tr("该批次已结清", "This batch is already settled"));
+        load();
         return;
       }
       return toast.error(tr("付款失败", "Payment failed"));
@@ -747,21 +542,21 @@ function BatchesTab({ onJump }: { onJump: (t: Tab) => void }) {
   const [showHistory, setShowHistory] = useState(false);
 
   if (batches === null) return <Spinner />;
-  if (batches.length === 0) return <Empty icon={<Layers />} text={tr("还没有任何订单或集运", "No orders or shipments yet")} />;
+  if (batches.length === 0) return <Empty icon={<Layers />} text={tr("还没有可显示的批次（批次发出后会出现在这里）", "No batches yet — they appear here once shipped")} />;
 
-  const historyCount = batches.filter((b) => b.batch_status === "completed").length;
-  const visible = showHistory ? batches : batches.filter((b) => b.batch_status !== "completed");
+  const historyCount = batches.filter((b) => b.status === "closed").length;
+  const visible = showHistory ? batches : batches.filter((b) => b.status !== "closed");
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="font-display text-xl font-bold">{tr("我的批次", "My batches")}</h2>
-          <p className="mt-1 text-xs text-ink-soft">{tr("电商订单与集运请求按发货批次合并，可一次性结算（加币计费）", "Shop & forwarding orders merged by batch — settle in one click (CAD)")}</p>
+          <p className="mt-1 text-xs text-ink-soft">{tr("批次发出后显示在这里，可一次性结算（加币计费）", "Batches appear here once shipped — settle in one click (CAD)")}</p>
         </div>
         <label className="inline-flex shrink-0 items-center gap-2 text-xs text-ink-soft">
           <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
-          {tr(`显示历史批次 (${historyCount})`, `Show history (${historyCount})`)}
+          {tr(`显示已关闭批次 (${historyCount})`, `Show closed (${historyCount})`)}
         </label>
       </div>
 
@@ -771,29 +566,17 @@ function BatchesTab({ onJump }: { onJump: (t: Tab) => void }) {
         </div>
       )}
       {visible.map((b) => (
-        <BatchCard key={b.batch_no ?? "__unassigned__"} b={b} lang={lang} tr={tr} paying={paying} onPay={pay} />
+        <BatchCard key={b.batch_id} b={b} lang={lang} tr={tr} paying={paying} onPay={pay} />
       ))}
     </div>
   );
 }
 
-const BATCH_STATUS_LABELS: Record<Batch["batch_status"], [string, string, string]> = {
-  shipping:          ["正在运输", "In transit",        "bg-brand/10 text-brand"],
-  awaiting_delivery: ["待派送",   "Awaiting delivery", "bg-cta/10 text-cta"],
-  awaiting_pickup:   ["待取货",   "Ready for pickup",  "bg-warning/10 text-warning"],
-  completed:         ["已完成",   "Completed",         "bg-success/10 text-success"],
-};
-
 function BatchCard({ b, lang, tr, paying, onPay }: {
   b: Batch; lang: "zh" | "en"; tr: (zh: string, en: string) => string;
-  paying: string | null; onPay: (batch_no: string, amountCad: number) => void;
+  paying: string | null; onPay: (batchId: string, batchNo: string, amountCad: number) => void;
 }) {
-  const { cnyToCad } = useApp();
   const isAir = b.shipping_method === "air";
-  const lastMileCad = b.last_mile_blocks.reduce((s, lm) => s + (lm.triggered ? lm.fee_cad : 0), 0);
-  const extrasCad = b.storage_total_cad + lastMileCad;
-  const headerAmountCad = cnyToCad(b.all_paid ? b.total_cny : b.total_unpaid_cny) + (b.all_paid ? 0 : extrasCad);
-  const unpaidCad = cnyToCad(b.total_unpaid_cny) + extrasCad;
   const [trackOpen, setTrackOpen] = useState(false);
   const [events, setEvents] = useState<any[] | null | "err">(null);
 
@@ -819,18 +602,18 @@ function BatchCard({ b, lang, tr, paying, onPay }: {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-      <header className={`flex flex-wrap items-center gap-3 border-b border-border px-5 py-4 ${b.all_paid ? "bg-success/5" : "bg-accent/40"}`}>
+      <header className={`flex flex-wrap items-center gap-3 border-b border-border px-5 py-4 ${b.is_paid ? "bg-success/5" : "bg-accent/40"}`}>
         <span className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 text-brand">
           {isAir ? <Plane className="h-4 w-4" /> : <Ship className="h-4 w-4" />}
         </span>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-display text-sm font-bold">{b.batch_no ?? tr("未分配批次", "Unassigned")}</span>
+            <span className="font-display text-sm font-bold">{b.batch_no}</span>
             {(() => {
-              const [zh, en, cls] = BATCH_STATUS_LABELS[b.batch_status];
+              const [zh, en, cls] = BATCH_STATUS_LABELS[b.status];
               return <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>{tr(zh, en)}</span>;
             })()}
-            {b.all_paid ? (
+            {b.is_paid ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success">
                 <CheckCircle2 className="h-3 w-3" />{tr("已结清", "Settled")}
               </span>
@@ -846,44 +629,34 @@ function BatchCard({ b, lang, tr, paying, onPay }: {
         </div>
         <div className="ml-auto text-right">
           <div className="text-[10px] uppercase tracking-wider text-ink-soft">
-            {b.all_paid ? tr("批次合计", "Batch total") : tr("批次待付", "Batch unpaid")}
+            {b.is_paid ? tr("批次合计", "Batch total") : tr("批次待付", "Batch unpaid")}
           </div>
-          <div className="font-display text-lg font-bold text-brand-gradient">CA${headerAmountCad.toFixed(2)}</div>
-          {b.batch_locked && b.grand_total_cny > 0 && (
-            <div className="mt-1 text-[10px] text-ink-soft">
-              {tr("结算总额", "Settled total")}：<span className="font-mono font-semibold text-success">¥{b.grand_total_cny.toFixed(2)}</span>
-            </div>
-          )}
+          <div className="font-display text-lg font-bold text-brand-gradient">CA${b.subtotal_cad.toFixed(2)}</div>
         </div>
       </header>
 
       <ul className="divide-y divide-border">
-        {b.items.map((it) => {
-          const itCad = cnyToCad(it.fee_cny);
-          return (
-            <li key={`${it.kind}-${it.id}`} className="flex flex-wrap items-center gap-3 px-5 py-3">
-              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${it.kind === "order" ? "bg-brand/10 text-brand" : "bg-cta/10 text-cta"}`}>
-                {it.kind === "order" ? <><ShoppingCart className="h-3 w-3" />{tr("商城", "Shop")}</> : <><Truck className="h-3 w-3" />{tr("集运", "Forwarding")}</>}
-              </span>
-              <span className="font-mono text-xs font-semibold">{it.no}</span>
-              {it.extra && <span className="text-[11px] text-ink-soft">· {it.extra}</span>}
-              {it.tracking_no && <span className="text-[11px] text-ink-soft">· <span className="font-mono">{it.tracking_no}</span></span>}
-              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${it.payment_status === "paid" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
-                {it.payment_status === "paid" ? tr("已付款", "Paid") : tr("待付款", "Unpaid")}
-              </span>
-              <span className={`ml-auto text-sm font-semibold ${it.payment_status === "paid" ? "text-ink-soft line-through" : ""}`}>CA${itCad.toFixed(2)}</span>
-              {it.kind === "order" ? (
-                <Link to="/orders/$orderId" params={{ orderId: it.id }} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium hover:border-brand hover:text-brand">
-                  {tr("详情", "Detail")} <ArrowRight className="h-3 w-3" />
-                </Link>
-              ) : (
-                <Link to="/forwarding/$forwardingId" params={{ forwardingId: it.id }} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium hover:border-brand hover:text-brand">
-                  {tr("详情", "Detail")} <ArrowRight className="h-3 w-3" />
-                </Link>
-              )}
-            </li>
-          );
-        })}
+        {b.items.map((it) => (
+          <li key={`${it.kind}-${it.id}`} className="flex flex-wrap items-center gap-3 px-5 py-3">
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${it.kind === "order" ? "bg-brand/10 text-brand" : "bg-cta/10 text-cta"}`}>
+              {it.kind === "order" ? <><ShoppingCart className="h-3 w-3" />{tr("商城", "Shop")}</> : <><Truck className="h-3 w-3" />{tr("集运", "Forwarding")}</>}
+            </span>
+            <span className="font-mono text-xs font-semibold">{it.no}</span>
+            {it.tracking_no && <span className="text-[11px] text-ink-soft">· <span className="font-mono">{it.tracking_no}</span></span>}
+            <span className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${it.payment_status === "paid" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
+              {it.payment_status === "paid" ? tr("已付款", "Paid") : tr("待付款", "Unpaid")}
+            </span>
+            {it.kind === "order" ? (
+              <Link to="/orders/$orderId" params={{ orderId: it.id }} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium hover:border-brand hover:text-brand">
+                {tr("详情", "Detail")} <ArrowRight className="h-3 w-3" />
+              </Link>
+            ) : (
+              <Link to="/forwarding/$forwardingId" params={{ forwardingId: it.id }} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium hover:border-brand hover:text-brand">
+                {tr("详情", "Detail")} <ArrowRight className="h-3 w-3" />
+              </Link>
+            )}
+          </li>
+        ))}
       </ul>
 
       {/* Batch tracking timeline */}
@@ -906,87 +679,17 @@ function BatchCard({ b, lang, tr, paying, onPay }: {
         )}
       </div>
 
-      {b.last_mile_blocks.length > 0 && (
-        <div className="space-y-2 border-t border-border bg-background/60 px-5 py-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
-            {tr("末端派送费", "Last-mile delivery")}
-          </div>
-          {b.last_mile_blocks.map((lm) => (
-            <div key={lm.route_id} className="rounded-lg border border-border/60 bg-surface px-3 py-2 text-[11px]">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-[10px] text-ink-soft">{lm.route_code}</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${lm.triggered ? "bg-warning/10 text-warning" : "bg-success/10 text-success"}`}>
-                  {lm.triggered ? tr("已触发", "Triggered") : tr("未触发", "Not triggered")}
-                </span>
-                <span className="ml-auto font-semibold">
-                  {lm.triggered ? `+ CA$${lm.fee_cad.toFixed(2)}` : `CA$0.00`}
-                </span>
-              </div>
-              <div className="mt-1 text-ink-soft">
-                {tr("触发条件", "Trigger")}：
-                {tr("电商+集运 合计收费重量", "Shop + forwarding chargeable weight")}
-                {" "}
-                <span className={lm.triggered ? "font-semibold text-warning" : "font-semibold"}>{lm.sum_weight_kg.toFixed(2)} kg</span>
-                {" "}
-                {lm.triggered ? "<" : "≥"}
-                {" "}
-                <span className="font-semibold">{lm.threshold_kg.toFixed(2)} kg</span>
-                {lm.triggered && (
-                  <> · {tr("差额", "Gap")} <span className="font-semibold text-warning">{lm.gap_kg.toFixed(2)} kg</span></>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {b.storage_blocks.length > 0 && (
-        <div className="space-y-2 border-t border-border bg-background/60 px-5 py-3">
-          <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
-            <span>{tr("仓储费", "Storage fee")}</span>
-            <span className="font-display text-sm font-bold text-foreground normal-case">+ CA${b.storage_total_cad.toFixed(2)}</span>
-          </div>
-          {b.storage_blocks.map((s) => (
-            <div key={s.warehouse_code} className="rounded-lg border border-border/60 bg-surface px-3 py-2 text-[11px]">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold">{s.warehouse_name}</span>
-                <span className="font-mono text-[10px] text-ink-soft">{s.warehouse_code}</span>
-                <span className="ml-auto font-semibold">+ CA${s.fee_cad.toFixed(2)}</span>
-              </div>
-              <div className="mt-1 text-ink-soft">
-                {tr("实际体积", "Volume")} <span className="font-semibold">{s.cbm_real.toFixed(3)} cbm</span>
-                {" · "}
-                {tr("计费体积", "Charged")} <span className="font-semibold">{s.cbm_charged} cbm</span>
-                {s.cbm_real < 1 && <span className="ml-1 text-warning">({tr("不足1cbm按1cbm", "min 1 cbm")})</span>}
-                {" · "}
-                {tr("单价", "Rate")} CA${s.fee_per_cbm_day.toFixed(2)}/cbm/{tr("天", "day")}
-                {" · "}
-                {tr("免费", "Free")} {s.free_days} {tr("天", "d")}
-                {" · "}
-                {tr("最长计费", "Max billed")} <span className="font-semibold">{s.max_days_charged} {tr("天", "d")}</span>
-                {s.storage_status_count > 0 && (
-                  <span className="ml-1 text-warning">
-                    ({s.storage_status_count} {tr("件「仓储中」忽略免费时效", "in storage — free days ignored")})
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-
-      {!b.all_paid && b.batch_no && b.total_unpaid_cny > 0 && (
+      {!b.is_paid && b.subtotal_cad > 0 && (
         <div className="flex flex-wrap items-center gap-3 border-t border-border bg-background px-5 py-3">
           <div className="text-xs text-ink-soft">
-            {tr("待付", "Unpaid")}: <span className="font-display text-base font-bold text-foreground">CA${unpaidCad.toFixed(2)}</span>
+            {tr("待付", "Unpaid")}: <span className="font-display text-base font-bold text-foreground">CA${b.subtotal_cad.toFixed(2)}</span>
           </div>
           <button
-            disabled={paying === b.batch_no}
-            onClick={() => onPay(b.batch_no!, unpaidCad)}
+            disabled={paying === b.batch_id}
+            onClick={() => onPay(b.batch_id, b.batch_no, b.subtotal_cad)}
             className="ml-auto inline-flex items-center gap-2 rounded-full bg-cta-gradient px-5 py-2 text-xs font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50"
           >
-            {paying === b.batch_no ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
+            {paying === b.batch_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
             {tr("钱包付款", "Pay from wallet")}
           </button>
         </div>
@@ -1809,8 +1512,9 @@ function WalletTab() {
     card: tr("信用卡", "Card"), wechat: tr("微信支付", "WeChat Pay"),
     alipay: tr("支付宝", "Alipay"), paypal: "PayPal", admin: tr("管理员", "Admin"),
     wallet: tr("钱包", "Wallet"), shop: tr("电商", "Shop"), batch: tr("集运", "Forwarding"),
-    storage: tr("仓库", "Storage"),
+    storage: tr("仓库", "Storage"), emt: "EMT", cash: tr("现金", "Cash"),
   } as Record<string, string>)[c] ?? c;
+  const isOfflineChannel = (c: string | null) => c === "emt" || c === "cash";
   const statusLabel = (s: string) => ({
     pending: tr("待支付", "Pending"), completed: tr("已完成", "Completed"),
     failed: tr("失败", "Failed"), cancelled: tr("已取消", "Cancelled"),
@@ -1889,6 +1593,11 @@ function WalletTab() {
                       <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] text-ink-soft">{statusLabel(t.status)}</span>
                       {t.channel && !["shop", "wallet", "batch", "storage"].includes(t.channel) && (
                         <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] text-ink-soft">{channelLabel(t.channel)}</span>
+                      )}
+                      {isOfflineChannel(t.channel) && (
+                        <span className="rounded-full bg-cta/10 px-2 py-0.5 text-[10px] font-medium text-cta" title={tr("线下收款，不影响钱包余额", "Offline payment — doesn't affect wallet balance")}>
+                          {tr("线下 · 不影响余额", "Offline · balance unaffected")}
+                        </span>
                       )}
                     </div>
                     <div className="text-[11px] text-ink-soft">

@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/lib/auth";
 import { useApp } from "@/lib/i18n";
+import { useCompanyInfo } from "@/lib/company";
 import { Loader2, User, Mail, Lock, Phone, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,6 +27,7 @@ type Mode = "signin" | "signup";
 function AuthPage() {
   const { lang } = useApp();
   const { user } = useAuth();
+  const company = useCompanyInfo();
   const navigate = useNavigate();
   const search = useSearch({ from: "/auth" });
   const [mode, setMode] = useState<Mode>("signin");
@@ -112,12 +114,16 @@ function AuthPage() {
     <div className="min-h-[80vh] bg-gradient-to-br from-background via-accent/30 to-background px-4 py-12">
       <div className="mx-auto w-full max-w-md">
         <Link to="/" className="mb-8 flex items-center justify-center gap-2 font-display text-xl font-bold">
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand-gradient text-brand-foreground shadow-glow">
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M3 12h13l-3-3M16 12l-3 3M19 6l2 6-2 6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-          SinoCargo
+          {company.logo_url ? (
+            <img src={company.logo_url} alt={company.name} className="h-9 w-9 shrink-0 rounded-lg object-cover" />
+          ) : (
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand-gradient text-brand-foreground shadow-glow">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M3 12h13l-3-3M16 12l-3 3M19 6l2 6-2 6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+          )}
+          {company.name}
         </Link>
 
         <div className="rounded-3xl border border-border bg-surface p-6 shadow-elevated sm:p-8">

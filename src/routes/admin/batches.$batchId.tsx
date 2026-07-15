@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   getBatchDetail, updateBatchStatus, assignWaybillsToBatch, listWaybills,
-  updateBatch, batchUpdateWaybillsByBatch, deductWalletForBatch, type BatchStatus, type WaybillStatus,
+  updateBatch, batchUpdateWaybillsByBatch, deductWalletForBatch, deductBatchOffline, type BatchStatus, type WaybillStatus,
 } from "@/lib/orders.functions";
 import { listCartons, listPallets, updateCarton, updatePallet, getContainerLabelData, splitPallet } from "@/lib/cartons.functions";
 import { getMyRoles } from "@/lib/admin.functions";
@@ -42,6 +42,7 @@ function BatchDetail() {
   const updPallet = useServerFn(updatePallet);
   const fetchLabel = useServerFn(getContainerLabelData);
   const deduct = useServerFn(deductWalletForBatch);
+  const deductOffline = useServerFn(deductBatchOffline);
   const doSplitPallet = useServerFn(splitPallet);
 
   const detailQ = useQuery({ queryKey: ["admin-batch", batchId], queryFn: () => fetchDetail({ data: { batchId } }) });
@@ -88,6 +89,8 @@ function BatchDetail() {
   const [drawerCustomer, setDrawerCustomer] = useState<string | null>(null);
   const [deductState, setDeductState] = useState<{ user_id: string; customer_code: string; balance: number; subtotal: number } | null>(null);
   const [deductDiscount, setDeductDiscount] = useState("0");
+  const [deductMethod, setDeductMethod] = useState<"wallet" | "emt" | "cash">("wallet");
+  const [deductRefNo, setDeductRefNo] = useState("");
 
   if (detailQ.isLoading) return <div className="grid place-items-center p-20"><Loader2 className="h-6 w-6 animate-spin text-slate-500"/></div>;
   if (detailQ.isError) return <div className="p-6 text-rose-400">{(detailQ.error as Error).message}</div>;
@@ -575,7 +578,27 @@ function BatchDetail() {
                       实际扣款：<span className="font-mono font-bold">CA${finalAmt.toFixed(2)}</span>
                       {disc > 0 && <span className="ml-2 text-[10px] text-emerald-300/80">（折扣 CA${disc.toFixed(2)}）</span>}
                     </div>
-                    <div className="text-[10px] text-slate-500">确认后：生成账单并结清 · 记录钱包流水 · 该客户批次未付运单标记为已付款 · 写入操作记录与物流轨迹 · 折扣计入批次账单明细。</div>
+                    <div>
+                      <label className="block text-slate-400">收款方式</label>
+                      <div className="mt-1 grid grid-cols-3 gap-1">
+                        {(["wallet", "emt", "cash"] as const).map((m) => (
+                          <button key={m} type="button" onClick={() => setDeductMethod(m)}
+                            className={`rounded-md border px-2 py-1.5 text-xs font-semibold ${deductMethod === m ? "border-brand bg-brand/10 text-brand" : "border-white/10 bg-white/5 text-slate-300"}`}>
+                            {m === "wallet" ? "钱包" : m === "emt" ? "EMT" : "现金"}
+                          </button>
+                        ))}
+                      </div>
+                      {deductMethod !== "wallet" && (
+                        <input value={deductRefNo} onChange={(e) => setDeductRefNo(e.target.value)}
+                          placeholder="凭证号 / 参考号（可选）"
+                          className="mt-2 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100 placeholder:text-slate-500"/>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      {deductMethod === "wallet"
+                        ? "确认后：生成账单并结清 · 记录钱包流水 · 调整钱包余额 · 该客户批次未付运单标记为已付款 · 写入操作记录与物流轨迹 · 折扣计入批次账单明细。"
+                        : "确认后：生成账单并结清 · 记录一条流水（不影响钱包余额）· 该客户批次未付运单标记为已付款 · 写入操作记录与物流轨迹 · 折扣计入批次账单明细。"}
+                    </div>
                   </div>
                   <div className="mt-4 flex justify-end gap-2">
                     <button onClick={() => setDeductState(null)} className="rounded-md border border-white/10 px-3 py-1.5 text-xs">取消</button>
@@ -583,8 +606,11 @@ function BatchDetail() {
                       onClick={async () => {
                         if (!(sub > 0)) { alert("金额需大于 0"); return; }
                         try {
-                          await deduct({ data: { batchId, userId: deductState.user_id, amountCad: sub, discountCad: disc, note: `批次 ${batch.batch_no} 扣款` } });
-                          setDeductState(null); setDeductDiscount("0");
+                          const r: any = deductMethod === "wallet"
+                            ? await deduct({ data: { batchId, userId: deductState.user_id, amountCad: sub, discountCad: disc, note: `批次 ${batch.batch_no} 扣款` } })
+                            : await deductOffline({ data: { batchId, userId: deductState.user_id, method: deductMethod, discountCad: disc, refNo: deductRefNo || undefined, note: `批次 ${batch.batch_no} ${deductMethod === "emt" ? "EMT" : "现金"}收款` } });
+                          if (r?.ok === false && r.reason === "already_paid") { alert("该客户在本批次已结清"); }
+                          setDeductState(null); setDeductDiscount("0"); setDeductMethod("wallet"); setDeductRefNo("");
                           await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
                         } catch (e: any) { alert(e.message); }
                       }}

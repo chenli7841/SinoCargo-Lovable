@@ -3,8 +3,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { getMyRoles } from "@/lib/admin.functions";
-import { ROLE_LABEL, ROLE_COLOR } from "@/lib/admin-roles";
+import { getMyRoles, type AppRole } from "@/lib/admin.functions";
+import { ROLE_LABEL, ROLE_COLOR, ADMIN_CONSOLE_ROLES } from "@/lib/admin-roles";
 import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard, Users, Boxes, Truck, Route as RouteIcon, Warehouse,
@@ -20,19 +20,22 @@ export const Route = createFileRoute("/admin")({
   beforeLoad: async ({ location }) => {
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) {
-      throw redirect({ to: "/auth", search: { redirect: location.href } });
+      throw redirect({ to: "/admin-login", search: { redirect: location.href } });
     }
   },
   component: AdminLayout,
 });
 
 type NavItem = { to: string; label: string; icon: any; soon?: boolean };
-type NavGroup = { title: string; items: NavItem[] };
+type NavGroup = { title: string; items: NavItem[]; roles: AppRole[] };
+
+const OWNER_MANAGER: AppRole[] = ["owner", "manager"];
+
 const NAV_GROUPS: NavGroup[] = [
-  { title: "", items: [
+  { title: "", roles: ADMIN_CONSOLE_ROLES, items: [
     { to: "/admin", label: "运营概览", icon: LayoutDashboard },
   ]},
-  { title: "发货仓库操作", items: [
+  { title: "发货仓库操作", roles: [...OWNER_MANAGER, "warehouse_cn", "support"], items: [
     { to: "/admin/intake-scan", label: "入库扫描", icon: ScanLine },
     { to: "/admin/measure", label: "量尺称重", icon: Ruler },
     { to: "/admin/detained", label: "滞留单号", icon: AlertTriangle },
@@ -40,19 +43,19 @@ const NAV_GROUPS: NavGroup[] = [
     { to: "/admin/pallets", label: "托盘管理", icon: Layers },
     { to: "/admin/batches", label: "批次管理", icon: Truck },
   ]},
-  { title: "收货仓库操作", items: [
+  { title: "收货仓库操作", roles: [...OWNER_MANAGER, "warehouse_ca", "support"], items: [
     { to: "/admin/receivings", label: "收货管理", icon: PackageCheck },
     { to: "/admin/delivery-queue", label: "待派送列表", icon: Truck },
     { to: "/admin/waybills", label: "集运单到货 / 派送", icon: Truck },
   ]},
-  { title: "订单 / 集运单查询", items: [
+  { title: "订单 / 集运单查询", roles: [...OWNER_MANAGER, "warehouse_cn", "warehouse_ca", "support"], items: [
     { to: "/admin/orders", label: "电商订单", icon: ShoppingBag },
     { to: "/admin/forwardings", label: "集运订单", icon: Boxes },
     { to: "/admin/waybills", label: "运单列表", icon: Truck },
     { to: "/admin/history", label: "历史记录", icon: History },
     { to: "/admin/invoices", label: "账单管理", icon: FileText },
   ]},
-  { title: "电商管理", items: [
+  { title: "电商管理", roles: [...OWNER_MANAGER, "sales"], items: [
     { to: "/admin/shop", label: "电商概览", icon: ShoppingBag },
     { to: "/admin/shop/orders", label: "电商订单", icon: ShoppingBag },
     { to: "/admin/shop/orders/procurement", label: "代采购列表", icon: Truck },
@@ -63,7 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
     { to: "/admin/shop/banners", label: "Banner 装修", icon: ImageIcon },
     { to: "/admin/shop/articles", label: "文章管理", icon: FileText },
   ]},
-  { title: "系统管理", items: [
+  { title: "系统管理", roles: OWNER_MANAGER, items: [
     { to: "/admin/users", label: "用户管理", icon: Users },
     { to: "/admin/messages", label: "留言信息", icon: Mail },
     { to: "/admin/logs", label: "操作日志", icon: History },
@@ -94,14 +97,25 @@ function AdminLayout() {
   });
 
   const roles = rolesQ.data?.roles ?? [];
-  const isStaff = roles.some((r) => r !== "customer");
-  const isForbidden = !rolesQ.isLoading && rolesQ.isSuccess && !isStaff;
+  const hasConsoleAccess = roles.some((r) => ADMIN_CONSOLE_ROLES.includes(r));
+  const isForbidden = !rolesQ.isLoading && rolesQ.isSuccess && !hasConsoleAccess;
+
+  const visibleGroups = NAV_GROUPS.filter((g) => g.roles.some((r) => roles.includes(r)));
+  const allowedPaths = visibleGroups.flatMap((g) => g.items.map((i) => i.to));
+  // "/admin" (dashboard) is a leaf, not a prefix — every other admin route also
+  // starts with "/admin/", so it must only ever match exactly.
+  const pathAllowed = (p: string) => (p === "/admin" ? pathname === "/admin" : (pathname === p || pathname.startsWith(p + "/")));
+  const isPageRestricted = hasConsoleAccess && pathname !== "/admin/forbidden" && !allowedPaths.some(pathAllowed);
 
   useEffect(() => {
     if (isForbidden && pathname !== "/admin/forbidden") {
-      navigate({ to: "/admin/forbidden" });
+      navigate({ to: "/admin/forbidden", search: { reason: "no-role" } });
+      return;
     }
-  }, [isForbidden, pathname, navigate]);
+    if (isPageRestricted) {
+      navigate({ to: "/admin/forbidden", search: { reason: "page" } });
+    }
+  }, [isForbidden, isPageRestricted, pathname, navigate]);
 
   if (rolesQ.isLoading) {
     return (
@@ -121,7 +135,7 @@ function AdminLayout() {
       </div>
     );
   }
-  if (!isStaff) return <Outlet />;
+  if (!hasConsoleAccess) return <Outlet />;
 
   return (
     <div className="flex min-h-screen w-full bg-[#0B1220] text-slate-100">
@@ -135,7 +149,7 @@ function AdminLayout() {
           </div>
         </div>
         <nav className="flex-1 space-y-2 overflow-y-auto p-2">
-          {NAV_GROUPS.map((group, gi) => (
+          {visibleGroups.map((group, gi) => (
             <div key={gi}>
               {group.title && (
                 <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
@@ -189,7 +203,7 @@ function AdminLayout() {
               <ExternalLink className="h-3 w-3" />前台
             </Link>
             <button
-              onClick={async () => { await signOut(); navigate({ to: "/auth" }); }}
+              onClick={async () => { await signOut(); navigate({ to: "/admin-login" }); }}
               className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2.5 py-1.5 text-xs text-slate-200 hover:bg-white/5"
             >
               <LogOut className="h-3 w-3" />退出
