@@ -12,7 +12,7 @@ import {
 
 export const Route = createFileRoute("/admin/")({ component: AdminIndex });
 
-const METHOD_LABEL: Record<string, string> = { air: "空运", sea: "海运", express: "快递", truck: "陆运", unknown: "未指定" };
+const METHOD_LABEL: Record<string, string> = { air: "空运", sea: "海运", express: "快递", truck: "陆运", storage: "仓储", unknown: "未指定" };
 const PIE_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4"];
 
 function AdminIndex() {

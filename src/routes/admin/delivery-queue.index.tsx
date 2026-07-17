@@ -75,12 +75,21 @@ function DeliveryQueuePage() {
   };
 
   const onDeduct = async (g: any) => {
-    if (!g.customer_user_id) { alert("该客户未注册账号，无法扣款"); return; }
+    if (!g.customer_user_id) {
+      alert("该客户未注册账号，无法扣款");
+      return;
+    }
     const suggested = g.fee_cad > 0 ? g.fee_cad.toFixed(2) : "";
-    const input = window.prompt(`扣款金额 (CAD)，客户余额 ${g.wallet_balance_cad != null ? "CA$" + g.wallet_balance_cad.toFixed(2) : "—"}`, suggested);
+    const input = window.prompt(
+      `扣款金额 (CAD)，客户余额 ${g.wallet_balance_cad != null ? "CA$" + g.wallet_balance_cad.toFixed(2) : "—"}`,
+      suggested,
+    );
     if (!input) return;
     const amt = Number(input);
-    if (!(amt > 0)) { alert("金额无效"); return; }
+    if (!(amt > 0)) {
+      alert("金额无效");
+      return;
+    }
     const note = window.prompt("备注（可空）", "派送费用扣款") ?? undefined;
     await deduct({ data: { customerUserId: g.customer_user_id, amountCad: amt, note } });
     await refresh();

@@ -10,7 +10,19 @@ import {
   addDeliveryTrackingEvent,
 } from "@/lib/delivery-queue.functions";
 import { Page, fmtDate, fmtCNY } from "@/lib/admin-shared";
-import { Loader2, ArrowLeft, Truck, Wallet, Check, X, MapPin, Package, Layers, History, Route as RouteIcon } from "lucide-react";
+import {
+  Loader2,
+  ArrowLeft,
+  Truck,
+  Wallet,
+  Check,
+  X,
+  MapPin,
+  Package,
+  Layers,
+  History,
+  Route as RouteIcon,
+} from "lucide-react";
 
 export const Route = createFileRoute("/admin/delivery-queue/$customerKey")({
   component: CustomerDeliveryDetail,
@@ -65,14 +77,16 @@ function CustomerDeliveryDetail() {
     else setSelected(new Set(pending));
   };
 
-  const totals = items.filter((i) => i.status === "pending").reduce(
-    (acc, it) => ({
-      count: acc.count + 1,
-      weight: acc.weight + Number(it.weight_kg || 0),
-      fee: acc.fee + Number(it.fee_cny || 0),
-    }),
-    { count: 0, weight: 0, fee: 0 },
-  );
+  const totals = items
+    .filter((i) => i.status === "pending")
+    .reduce(
+      (acc, it) => ({
+        count: acc.count + 1,
+        weight: acc.weight + Number(it.weight_kg || 0),
+        fee: acc.fee + Number(it.fee_cny || 0),
+      }),
+      { count: 0, weight: 0, fee: 0 },
+    );
 
   const onBulk = async (status: "dispatched" | "cancelled") => {
     const ids = Array.from(selected);
@@ -93,7 +107,10 @@ function CustomerDeliveryDetail() {
     const ids = Array.from(selected);
     const selectedFee = items.filter((i) => ids.includes(i.id)).reduce((s, i) => s + Number(i.fee_cny || 0), 0);
     const suggestedCad = (selectedFee > 0 ? selectedFee : totals.fee) * fx;
-    const input = window.prompt(`扣款金额 (CAD)，当前余额 ${wallet ? "CA$" + Number(wallet.balance_cad).toFixed(2) : "—"}`, suggestedCad.toFixed(2));
+    const input = window.prompt(
+      `扣款金额 (CAD)，当前余额 ${wallet ? "CA$" + Number(wallet.balance_cad).toFixed(2) : "—"}`,
+      suggestedCad.toFixed(2),
+    );
     if (!input) return;
     const amt = Number(input);
     if (!(amt > 0)) return alert("金额无效");
@@ -113,8 +130,14 @@ function CustomerDeliveryDetail() {
   };
 
   const addressText = address
-    ? [address.line1, address.line2, address.city, address.province, address.country, address.postal_code].filter(Boolean).join(" ")
-    : profile ? [profile.reg_address, profile.reg_city, profile.reg_province, profile.reg_country, profile.reg_postal_code].filter(Boolean).join(" ") : "";
+    ? [address.line1, address.line2, address.city, address.province, address.country, address.postal_code]
+        .filter(Boolean)
+        .join(" ")
+    : profile
+      ? [profile.reg_address, profile.reg_city, profile.reg_province, profile.reg_country, profile.reg_postal_code]
+          .filter(Boolean)
+          .join(" ")
+      : "";
   const phone = address?.phone || profile?.phone || profile?.reg_phone || "—";
   const name = profile?.full_name || address?.recipient || "—";
 
@@ -123,7 +146,10 @@ function CustomerDeliveryDetail() {
       title={`派送详情 · ${profile?.customer_code ?? customerCode ?? "—"}`}
       subtitle={`共 ${items.length} 项 · 待派送 ${totals.count} · 总重 ${totals.weight.toFixed(2)} kg · 总费用 ${fmtCNY(totals.fee)}`}
       action={
-        <Link to="/admin/delivery-queue" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200">
+        <Link
+          to="/admin/delivery-queue"
+          className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200"
+        >
           <ArrowLeft className="h-3 w-3" /> 返回列表
         </Link>
       }
@@ -146,7 +172,9 @@ function CustomerDeliveryDetail() {
           <div className="mb-1 flex items-center gap-1 text-[11px] uppercase tracking-wider text-slate-500">
             <Wallet className="h-3 w-3" /> 钱包
           </div>
-          <div className="text-lg font-semibold text-emerald-300">{wallet ? `CA$${Number(wallet.balance_cad).toFixed(2)}` : "—"}</div>
+          <div className="text-lg font-semibold text-emerald-300">
+            {wallet ? `CA$${Number(wallet.balance_cad).toFixed(2)}` : "—"}
+          </div>
           <button
             onClick={onDeduct}
             className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-300 hover:bg-amber-500/20"

@@ -9,7 +9,10 @@ export const Route = createFileRoute("/track")({
   head: () => ({
     meta: [
       { title: "物流追踪 / Track — SinoCargo" },
-      { name: "description", content: "Enter your SinoCargo tracking number to see real-time shipment status from China to Canada." },
+      {
+        name: "description",
+        content: "Enter your SinoCargo tracking number to see real-time shipment status from China to Canada.",
+      },
       { property: "og:title", content: "Track your shipment — SinoCargo" },
       { property: "og:description", content: "Real-time China-to-Canada shipment tracking." },
     ],
@@ -87,14 +90,20 @@ function TrackPage() {
               <div className="text-xs uppercase tracking-wider text-white/60">Tracking #</div>
               <div className="font-display text-2xl font-bold">{result.tracking_no}</div>
               {result.current_location && (
-                <div className="mt-1 text-sm text-white/80">{tr("当前位置", "Current")}: {result.current_location}</div>
+                <div className="mt-1 text-sm text-white/80">
+                  {tr("当前位置", "Current")}: {result.current_location}
+                </div>
               )}
             </div>
             <div className="flex flex-col items-end gap-1">
               <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm backdrop-blur">
                 {result.shipping_method === "sea" ? <Ship className="h-4 w-4" /> : <Plane className="h-4 w-4" />}
                 {t(result.shipping_method === "sea" ? "shipping.sea" : "shipping.air")}
-                {result.eta && <><span className="mx-2 text-white/40">·</span>ETA {result.eta}</>}
+                {result.eta && (
+                  <>
+                    <span className="mx-2 text-white/40">·</span>ETA {result.eta}
+                  </>
+                )}
               </div>
               {result.carrier && <div className="text-xs text-white/60">{result.carrier}</div>}
             </div>

@@ -40,9 +40,13 @@ function MessagesPage() {
   return (
     <Page title="留言信息" subtitle={`来自官网 /contact 页面的在线留言 · ${newCount} 条未读`}>
       {q.isLoading ? (
-        <div className="grid h-40 place-items-center"><Loader2 className="h-6 w-6 animate-spin text-slate-500" /></div>
+        <div className="grid h-40 place-items-center">
+          <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
+        </div>
       ) : list.length === 0 ? (
-        <Card><div className="py-8 text-center text-sm text-slate-500">暂无留言</div></Card>
+        <Card>
+          <div className="py-8 text-center text-sm text-slate-500">暂无留言</div>
+        </Card>
       ) : (
         <div className="space-y-3">
           {list.map((m) => (
@@ -52,21 +56,35 @@ function MessagesPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-slate-100">{m.name}</span>
                     {m.status === "new" ? (
-                      <span className="rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand">未读</span>
+                      <span className="rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand">
+                        未读
+                      </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-                        <CheckCircle2 className="h-3 w-3" />已读
+                        <CheckCircle2 className="h-3 w-3" />
+                        已读
                       </span>
                     )}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-400">
-                    <span className="inline-flex items-center gap-1"><Mail className="h-3 w-3" />{m.email}</span>
-                    {m.phone && <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{m.phone}</span>}
+                    <span className="inline-flex items-center gap-1">
+                      <Mail className="h-3 w-3" />
+                      {m.email}
+                    </span>
+                    {m.phone && (
+                      <span className="inline-flex items-center gap-1">
+                        <Phone className="h-3 w-3" />
+                        {m.phone}
+                      </span>
+                    )}
                     <span>{fmtDate(m.created_at)}</span>
                   </div>
                 </div>
                 {m.status === "new" && (
-                  <button onClick={() => markRead(m.id)} className="shrink-0 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs hover:bg-white/10">
+                  <button
+                    onClick={() => markRead(m.id)}
+                    className="shrink-0 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs hover:bg-white/10"
+                  >
                     标为已读
                   </button>
                 )}

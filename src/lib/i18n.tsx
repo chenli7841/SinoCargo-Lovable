@@ -119,7 +119,8 @@ const dict = {
 
     "hero.tag": "China · Canada Cross-Border",
     "hero.title": "China sourcing,\ndelivered home.",
-    "hero.subtitle": "Self-operated marketplace plus international consolidation. Source goods, dual-currency checkout, end-to-end tracking — 7–12 days to your door in Canada.",
+    "hero.subtitle":
+      "Self-operated marketplace plus international consolidation. Source goods, dual-currency checkout, end-to-end tracking — 7–12 days to your door in Canada.",
     "hero.cta_shop": "Shop now",
     "hero.cta_ship": "How shipping works",
     "home.shipping_entry": "China → Canada shipping",
@@ -245,12 +246,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const setLang = (l: Lang) => { setLangState(l); localStorage.setItem("lang", l); };
-  const setCurrency = (c: Currency) => { setCurrencyState(c); localStorage.setItem("currency", c); };
+  const setLang = (l: Lang) => {
+    setLangState(l);
+    localStorage.setItem("lang", l);
+  };
+  const setCurrency = (c: Currency) => {
+    setCurrencyState(c);
+    localStorage.setItem("currency", c);
+  };
 
   const t = (k: TKey) => dict[lang][k] ?? k;
-
-
 
   const cadToCny = (cad: number) => cad * cnyPerCad;
   const cnyToCad = (cny: number) => cny / cnyPerCad;
@@ -264,7 +269,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return `CA$${cad.toLocaleString("en-CA", { maximumFractionDigits: 2 })}`;
   };
 
-  return <Ctx.Provider value={{ lang, setLang, currency, setCurrency, t, formatPrice, cnyPerCad, cadToCny, cnyToCad, formatCad }}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider
+      value={{ lang, setLang, currency, setCurrency, t, formatPrice, cnyPerCad, cadToCny, cnyToCad, formatCad }}
+    >
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export function useApp() {

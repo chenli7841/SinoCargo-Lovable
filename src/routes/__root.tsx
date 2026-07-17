@@ -16,6 +16,8 @@ import { AuthProvider } from "@/lib/auth";
 import { CartProvider } from "@/lib/cart";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
+import { FloatingContact } from "@/components/site/FloatingContact";
+import { TrackingPixels } from "@/components/site/TrackingPixels";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -77,14 +79,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "SinoCargo — China to Canada Sourcing & Consolidation" },
-      { name: "description", content: "Self-operated marketplace plus international consolidation from China to Canada. Dual-currency checkout, end-to-end tracking, 7-12 day air shipping." },
-      { property: "og:title", content: "SinoCargo — China to Canada Sourcing & Consolidation" },
-      { property: "og:description", content: "Source goods from China, ship to Canada in 7-12 days. Dual-currency, end-to-end tracking." },
+      { title: "SinoCargo — 中国到加拿大跨境采购 + 集运" },
+      { name: "description", content: "自营商城 + 国际集运一站搞定。源头好物、双币结算、全程可追踪，平均 7–12 天送达加拿大。" },
+      { property: "og:title", content: "SinoCargo — 中国到加拿大跨境采购 + 集运" },
+      { property: "og:description", content: "自营商城 + 国际集运一站搞定。源头好物、双币结算、全程可追踪，平均 7–12 天送达加拿大。" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "SinoCargo — 中国到加拿大跨境采购 + 集运" },
+      { name: "twitter:description", content: "自营商城 + 国际集运一站搞定。源头好物、双币结算、全程可追踪，平均 7–12 天送达加拿大。" },
     ],
     links: [
+      { rel: "icon", href: "/favicon.png", type: "image/png" },
       { rel: "stylesheet", href: appCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
@@ -125,6 +130,8 @@ function RootComponent() {
               </main>
               <Footer />
             </div>
+            <FloatingContact />
+            <TrackingPixels />
             <Toaster richColors position="top-center" />
           </CartProvider>
         </AppProvider>

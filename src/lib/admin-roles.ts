@@ -13,16 +13,20 @@ export const ROLE_LABEL: Record<AppRole, { zh: string; en: string }> = {
 };
 
 export const ASSIGNABLE_ROLES: AppRole[] = [
-  "owner","manager","warehouse_cn","warehouse_ca",
-  "driver","pickup_point","sales","support",
+  "owner",
+  "manager",
+  "warehouse_cn",
+  "warehouse_ca",
+  "driver",
+  "pickup_point",
+  "sales",
+  "support",
 ];
 
 // Roles allowed into the /admin console. driver/pickup_point don't have a
 // backend console view yet (they'll get their own dedicated page later), so
 // they're deliberately excluded here even though they're staff roles.
-export const ADMIN_CONSOLE_ROLES: AppRole[] = [
-  "owner","manager","warehouse_cn","warehouse_ca","sales","support",
-];
+export const ADMIN_CONSOLE_ROLES: AppRole[] = ["owner", "manager", "warehouse_cn", "warehouse_ca", "sales", "support"];
 
 export const ROLE_COLOR: Record<AppRole, string> = {
   owner: "bg-rose-500/15 text-rose-600 border-rose-500/30",

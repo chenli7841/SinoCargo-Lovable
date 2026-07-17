@@ -13,10 +13,7 @@ const searchSchema = z.object({ redirect: z.string().optional() });
 export const Route = createFileRoute("/admin-login")({
   validateSearch: searchSchema,
   head: () => ({
-    meta: [
-      { title: "后台登录 — SinoCargo Admin" },
-      { name: "robots", content: "noindex,nofollow" },
-    ],
+    meta: [{ title: "后台登录 — SinoCargo Admin" }, { name: "robots", content: "noindex,nofollow" }],
   }),
   component: AdminLoginPage,
 });
@@ -73,7 +70,11 @@ function AdminLoginPage() {
           <div className="relative">
             <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <input
-              required type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)}
+              required
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               placeholder="邮箱"
               className="h-11 w-full rounded-lg border border-white/10 bg-white/5 pl-10 pr-4 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/30"
             />
@@ -81,13 +82,18 @@ function AdminLoginPage() {
           <div className="relative">
             <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <input
-              required type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)}
+              required
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="密码"
               className="h-11 w-full rounded-lg border border-white/10 bg-white/5 pl-10 pr-4 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/30"
             />
           </div>
           <button
-            type="submit" disabled={busy}
+            type="submit"
+            disabled={busy}
             className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-brand to-cta text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
@@ -97,7 +103,9 @@ function AdminLoginPage() {
 
         <div className="mt-5 flex items-center justify-center gap-1.5 text-xs text-slate-500">
           <ArrowRight className="h-3 w-3 rotate-180" />
-          <Link to="/" className="hover:text-slate-300">返回官网首页</Link>
+          <Link to="/" className="hover:text-slate-300">
+            返回官网首页
+          </Link>
         </div>
       </div>
     </div>

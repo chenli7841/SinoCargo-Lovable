@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "sdk_version": "0.22.2",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://ubmdwjcvsmhwcpksgras.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "sinocargo-mcp",
+      "version": "0.1.0",
+      "title": "SinoCargo"
+    },
+    "tools": [
+      {
+        "name": "list_my_orders",
+        "title": "List my orders",
+        "description": "List the signed-in user's SinoCargo shop orders, newest first.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "limit": {
+              "description": "Max rows (default 20).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_my_forwardings",
+        "title": "List my forwarding orders",
+        "description": "List the signed-in user's international forwarding (集运) orders, newest first.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "limit": {
+              "description": "Max rows (default 20).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "track_waybill",
+        "title": "Track a waybill",
+        "description": "Look up a SinoCargo waybill by its waybill number. Access is scoped by RLS to waybills the signed-in user owns.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "waybill_no": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Waybill number, e.g. SC240101ABC."
+            }
+          },
+          "required": [
+            "waybill_no"
+          ]
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}

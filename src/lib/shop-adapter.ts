@@ -2,8 +2,14 @@ import type { Product } from "./mock-data";
 import type { PublicProduct } from "./shop-public.functions";
 
 const CAT_EMOJI: Record<string, string> = {
-  electronics: "📱", fashion: "👗", beauty: "💄", home: "🛋️",
-  food: "🍜", "mom-baby": "🍼", health: "🌿", stationery: "✏️",
+  electronics: "📱",
+  fashion: "👗",
+  beauty: "💄",
+  home: "🛋️",
+  food: "🍜",
+  "mom-baby": "🍼",
+  health: "🌿",
+  stationery: "✏️",
 };
 
 export function adaptProduct(p: PublicProduct): Product {
@@ -20,7 +26,7 @@ export function adaptProduct(p: PublicProduct): Product {
     weightKg: Number(p.weight_kg ?? 0.5),
     category: catSlug,
     image: img,
-    purchaseType: (p.purchase_type === "business" ? "business" : "personal"),
+    purchaseType: p.purchase_type === "business" ? "business" : "personal",
     moq: p.moq ?? 1,
     packQty: p.pack_qty ?? 1,
     packWeightKg: p.pack_weight_kg ?? undefined,

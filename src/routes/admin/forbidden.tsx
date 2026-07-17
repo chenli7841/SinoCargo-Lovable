@@ -25,11 +25,17 @@ function Forbidden() {
         </p>
         <div className="mt-6 flex justify-center gap-2">
           {isPageRestricted ? (
-            <Link to="/admin" className="rounded-md bg-white/10 px-4 py-2 text-sm hover:bg-white/15">返回运营概览</Link>
+            <Link to="/admin" className="rounded-md bg-white/10 px-4 py-2 text-sm hover:bg-white/15">
+              返回运营概览
+            </Link>
           ) : (
-            <Link to="/account" className="rounded-md bg-white/10 px-4 py-2 text-sm hover:bg-white/15">返回我的账户</Link>
+            <Link to="/account" className="rounded-md bg-white/10 px-4 py-2 text-sm hover:bg-white/15">
+              返回我的账户
+            </Link>
           )}
-          <Link to="/" className="rounded-md border border-white/10 px-4 py-2 text-sm hover:bg-white/5">回到首页</Link>
+          <Link to="/" className="rounded-md border border-white/10 px-4 py-2 text-sm hover:bg-white/5">
+            回到首页
+          </Link>
         </div>
       </div>
     </div>

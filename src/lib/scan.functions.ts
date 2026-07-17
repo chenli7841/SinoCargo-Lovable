@@ -276,7 +276,7 @@ export const intakeScanReceiveOrder = createServerFn({ method: "POST" })
     const ids = (wbs as any[]).map((w) => w.id);
     await supabaseAdmin.from("waybills").update({ status: newStatus }).in("id", ids);
     for (const w of wbs as any[]) {
-      await writeReceivedEvent(supabaseAdmin, w, warehouseName, operatorName, context.userId);
+      await writeReceivedEvent(supabaseAdmin, w, warehouseName, operatorName, context.userId, isStorage);
     }
     await supabaseAdmin.from("admin_action_logs").insert({
       entity_type: "order",
@@ -300,13 +300,14 @@ export const intakeScanReceiveOrder = createServerFn({ method: "POST" })
     return { ok: true, waybills: wbs, parentNo: (order as any).order_no };
   });
 
-// ====== Helper: write '仓库已收件' tracking event + admin action log for a single waybill ======
+// ====== Helper: write '仓库已收件' (+ '仓储中' when storage route) tracking events + admin log ======
 async function writeReceivedEvent(
   supabaseAdmin: any,
   waybill: { id: string; waybill_no: string; order_id?: string | null; forwarding_id?: string | null },
   warehouseName: string | null,
   operatorName: string,
   operatorId: string,
+  isStorage: boolean = false,
 ) {
   let { data: ship } = await supabaseAdmin.from("shipments").select("id").eq("tracking_no", waybill.waybill_no).maybeSingle();
   if (!ship) {
@@ -315,25 +316,37 @@ async function writeReceivedEvent(
   }
   if (ship) {
     const wh = warehouseName || "集运仓";
-    await supabaseAdmin.from("tracking_events").insert({
+    const now = new Date();
+    const events: any[] = [{
       shipment_id: ship.id,
       status_zh: `仓库已收件 — ${wh} / 操作员 ${operatorName}`,
       status_en: `Received at warehouse — ${wh} / by ${operatorName}`,
       location_zh: wh,
       location_en: wh,
-      event_time: new Date().toISOString(),
+      event_time: now.toISOString(),
+      source: "admin_action",
+      source_ref: operatorId,
+    }];
+    if (isStorage) events.push({
+      shipment_id: ship.id,
+      status_zh: "仓储中",
+      status_en: "In storage",
+      location_zh: wh,
+      location_en: wh,
+      event_time: new Date(now.getTime() + 1000).toISOString(),
       source: "admin_action",
       source_ref: operatorId,
     });
+    await supabaseAdmin.from("tracking_events").insert(events);
   }
   await supabaseAdmin.from("admin_action_logs").insert({
     entity_type: "waybill",
     entity_id: waybill.id,
     action: "intake_received",
-    after: { warehouse: warehouseName, waybill_no: waybill.waybill_no },
+    after: { warehouse: warehouseName, waybill_no: waybill.waybill_no, storage: isStorage },
     operator_id: operatorId,
     operator_name: operatorName,
-    note: `入库扫描收件: ${waybill.waybill_no} @ ${warehouseName || "集运仓"}`,
+    note: `入库扫描收件: ${waybill.waybill_no} @ ${warehouseName || "集运仓"}${isStorage ? " · 进入仓储" : ""}`,
   });
 }
 
@@ -365,7 +378,7 @@ export const intakeScanReceiveWaybill = createServerFn({ method: "POST" })
     const isStorage = (wb as any).shipping_method === "storage";
     const newStatus = isStorage ? "storage" : "received";
     await supabaseAdmin.from("waybills").update({ status: newStatus }).eq("id", (wb as any).id);
-    await writeReceivedEvent(supabaseAdmin, wb as any, warehouseName, operatorName, context.userId);
+    await writeReceivedEvent(supabaseAdmin, wb as any, warehouseName, operatorName, context.userId, isStorage);
     return { ok: true, waybill: wb };
   });
 
@@ -396,7 +409,7 @@ export const intakeScanCommit = createServerFn({ method: "POST" })
       const ids = (existing as any[]).map((w) => w.id);
       await supabaseAdmin.from("waybills").update({ status: newStatus }).in("id", ids);
       for (const w of existing as any[]) {
-        await writeReceivedEvent(supabaseAdmin, w, warehouseName, operatorName, context.userId);
+        await writeReceivedEvent(supabaseAdmin, w, warehouseName, operatorName, context.userId, isStorage);
       }
       await supabaseAdmin.from("admin_action_logs").insert({
         entity_type: data.parentKind,
@@ -456,19 +469,18 @@ export const intakeScanCommit = createServerFn({ method: "POST" })
       [fk]: data.parentId,
       user_id: parent.user_id,
       shipping_method: parent.shipping_method,
-      status: "received" as const,
+      status: (isStorage ? "storage" : "received") as any,
       weight_kg: data.weightPerBox ?? null,
       items_summary: itemsSummary,
     }));
     const { data: ins, error } = await supabaseAdmin.from("waybills").insert(rows as any).select("id, waybill_no, shipping_method");
     if (error) throw new Error(error.message);
 
-    // Tracking events: write '仓库已收件' now; if storage route, schedule 'storage' +5s.
+    // Tracking events: '运单已生成' + '仓库已收件' (+ '仓储中' when storage route) — all written immediately.
     const warehouseName: string | null = (parent as any).warehouse ?? (parent as any).pickup_warehouse ?? null;
     const operatorName = await getOperatorName(supabaseAdmin, context.userId);
     const wh = warehouseName || "集运仓";
     const now = new Date();
-    const inFive = new Date(now.getTime() + 5000);
     for (const w of (ins ?? []) as any[]) {
       let { data: ship } = await supabaseAdmin.from("shipments").select("id").eq("tracking_no", w.waybill_no).maybeSingle();
       if (!ship) {
@@ -495,7 +507,8 @@ export const intakeScanCommit = createServerFn({ method: "POST" })
       if (isStorage) events.push({
         shipment_id: ship.id, status_zh: "仓储中", status_en: "In storage",
         location_zh: wh, location_en: wh,
-        event_time: inFive.toISOString(), source: "admin_action",
+        event_time: new Date(now.getTime() + 1000).toISOString(),
+        source: "admin_action", source_ref: context.userId,
       });
       await supabaseAdmin.from("tracking_events").insert(events);
     }
@@ -505,18 +518,12 @@ export const intakeScanCommit = createServerFn({ method: "POST" })
       entity_type: data.parentKind,
       entity_id: data.parentId,
       action: "intake_received",
-      after: { box_count: n, warehouse: warehouseName, waybills: (ins ?? []).map((w: any) => w.waybill_no) },
+      after: { box_count: n, warehouse: warehouseName, waybills: (ins ?? []).map((w: any) => w.waybill_no), storage: isStorage },
       operator_id: context.userId,
       operator_name: operatorName,
-      note: `入库扫描: 生成 ${n} 个运单 @ ${wh}`,
+      note: `入库扫描: 生成 ${n} 个运单 @ ${wh}${isStorage ? " · 进入仓储" : ""}`,
     });
 
-    // For storage route, wait 5s then flip waybill status to 'storage' (no duplicate events).
-    if (isStorage && (ins ?? []).length) {
-      await new Promise((r) => setTimeout(r, 5000));
-      const ids = (ins as any[]).map((w) => w.id);
-      await supabaseAdmin.from("waybills").update({ status: "storage" }).in("id", ids);
-    }
 
     // mark parent status + intake_at
     const newParentStatus = ((parent as any).status === "pending" || (parent as any).status === "draft") ? "received" : (parent as any).status;

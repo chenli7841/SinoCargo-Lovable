@@ -3,11 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
 function pubClient() {
-  return createClient<Database>(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_PUBLISHABLE_KEY!,
-    { auth: { storage: undefined, persistSession: false, autoRefreshToken: false } },
-  );
+  return createClient<Database>(process.env.SUPABASE_URL!, process.env.SUPABASE_PUBLISHABLE_KEY!, {
+    auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+  });
 }
 
 export type PublicProduct = {
@@ -70,7 +68,10 @@ export const listPublicProducts = createServerFn({ method: "POST" })
   .inputValidator((d: { category?: string; q?: string; limit?: number } = {}) => d)
   .handler(async ({ data }) => {
     const sb = pubClient();
-    let q = sb.from("products").select(SELECT_COLS).eq("status", "active" as any)
+    let q = sb
+      .from("products")
+      .select(SELECT_COLS)
+      .eq("status", "active" as any)
       .order("created_at", { ascending: false })
       .limit(Math.min(200, data.limit ?? 100));
     if (data.q) q = q.ilike("name", `%${data.q}%`);
@@ -103,8 +104,12 @@ export const getPublicProduct = createServerFn({ method: "POST" })
     const cat = (product as any).category?.slug as string | undefined;
     let related: PublicProduct[] = [];
     if (cat) {
-      const { data: rel } = await sb.from("products").select(SELECT_COLS)
-        .eq("status", "active" as any).neq("slug", data.slug).limit(8);
+      const { data: rel } = await sb
+        .from("products")
+        .select(SELECT_COLS)
+        .eq("status", "active" as any)
+        .neq("slug", data.slug)
+        .limit(8);
       related = ((rel ?? []) as any as PublicProduct[]).filter((p) => p.category?.slug === cat).slice(0, 4);
     }
     return { product: product as any as PublicProduct, related, variants: (variants ?? []) as any[] };
@@ -114,7 +119,9 @@ export const listPublicRoutes = createServerFn({ method: "GET" }).handler(async 
   const sb = pubClient();
   const { data, error } = await sb
     .from("shipping_routes")
-    .select("id, code, name_zh, name_en, shipping_method, destination_code, transit_days_min, transit_days_max, note, sort_order, origin_warehouse_id")
+    .select(
+      "id, code, name_zh, name_en, shipping_method, destination_code, transit_days_min, transit_days_max, note, sort_order, origin_warehouse_id",
+    )
     .eq("is_active", true)
     .in("usage_scope", ["shop", "both"])
     .order("sort_order");

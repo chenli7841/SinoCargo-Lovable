@@ -1,5 +1,11 @@
 import { forwardRef } from "react";
-import type { CompanyInfo, PrintTemplate } from "@/lib/company";
+import type { CompanyInfo } from "@/lib/company";
+
+type PrintTemplate = {
+  logo_url?: string | null;
+  header?: string | null;
+  footer?: string | null;
+};
 
 const STATUS_LABEL: Record<string, string> = { unpaid: "待付款", paid: "已付款", overdue: "已逾期", void: "已作废" };
 const STATUS_COLOR: Record<string, string> = {
@@ -27,7 +33,10 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
   const logo = template.logo_url || company.logo_url;
 
   return (
-    <div ref={ref} className="rounded-2xl border border-border bg-white p-8 text-slate-900 shadow-2xl print:border-0 print:shadow-none">
+    <div
+      ref={ref}
+      className="rounded-2xl border border-border bg-white p-8 text-slate-900 shadow-2xl print:border-0 print:shadow-none"
+    >
       <div className="mb-6 flex items-start justify-between">
         <div className="flex items-center gap-3">
           {logo && <img src={logo} alt={company.name} className="h-12 w-12 shrink-0 rounded object-contain" />}
@@ -40,7 +49,9 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
           <div className="font-mono text-lg font-bold">{inv.invoice_no}</div>
           <div className="mt-1 text-xs text-slate-500">开具: {new Date(inv.created_at).toLocaleDateString()}</div>
           {inv.due_date && <div className="text-xs text-slate-500">到期: {inv.due_date}</div>}
-          <div className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLOR[inv.status] ?? ""}`}>
+          <div
+            className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLOR[inv.status] ?? ""}`}
+          >
             {STATUS_LABEL[inv.status] ?? inv.status}
           </div>
         </div>
@@ -94,11 +105,17 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
         <Row k="应付总额 (CNY)" v={`¥${Number(inv.total_cny).toFixed(2)}`} big />
         <Row k="折合 (CAD)" v={`CA$${totalCad.toFixed(2)}`} />
         {paidCad != null && paidCad > 0 && <Row k="已收 (CAD)" v={`CA$${paidCad.toFixed(2)}`} />}
-        {paidCad != null && remainCad != null && paidCad > 0 && paidCad < totalCad && <Row k="待收 (CAD)" v={`CA$${remainCad.toFixed(2)}`} />}
+        {paidCad != null && remainCad != null && paidCad > 0 && paidCad < totalCad && (
+          <Row k="待收 (CAD)" v={`CA$${remainCad.toFixed(2)}`} />
+        )}
       </div>
 
       {inv.note && <div className="mt-6 border-t border-slate-200 pt-4 text-xs text-slate-500">备注: {inv.note}</div>}
-      {template.footer && <div className="mt-6 border-t border-slate-200 pt-4 text-center text-[11px] text-slate-400">{template.footer}</div>}
+      {template.footer && (
+        <div className="mt-6 border-t border-slate-200 pt-4 text-center text-[11px] text-slate-400">
+          {template.footer}
+        </div>
+      )}
     </div>
   );
 });
@@ -106,7 +123,8 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
 function Row({ k, v, big }: { k: string; v: string; big?: boolean }) {
   return (
     <div className={`flex items-center justify-between ${big ? "text-base font-bold" : ""}`}>
-      <span className="text-slate-500">{k}</span><span>{v}</span>
+      <span className="text-slate-500">{k}</span>
+      <span>{v}</span>
     </div>
   );
 }

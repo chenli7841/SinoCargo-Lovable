@@ -57,12 +57,21 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
       await saveInspection({ data: { batchId, customerCode, amountCad: inspAmt } });
       await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
       alert("已保存检查费");
-    } catch (e: any) { alert(e.message); }
-    finally { setBusy(false); }
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
   const onDeduct = async () => {
-    if (!c.user_id) { alert("客户未绑定账号，无法扣款"); return; }
-    if (!(subtotal > 0)) { alert("金额需大于 0"); return; }
+    if (!c.user_id) {
+      alert("客户未绑定账号，无法扣款");
+      return;
+    }
+    if (!(subtotal > 0)) {
+      alert("金额需大于 0");
+      return;
+    }
     const methodLabel = method === "wallet" ? "钱包扣款" : method === "emt" ? "EMT 收款" : "现金收款";
     if (!confirm(`确认${methodLabel} ${cad(finalDeduct)}（含检查费 ${cad(inspAmt)}，折扣 ${cad(discAmt)}）？`)) return;
     setBusy(true);
@@ -70,67 +79,130 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
       // Save inspection first so it's reflected in the batch bill
       if (inspAmt >= 0) await saveInspection({ data: { batchId, customerCode, amountCad: inspAmt } });
       if (method === "wallet") {
-        const r: any = await deduct({ data: { batchId, userId: c.user_id, amountCad: subtotal, discountCad: discAmt, note: `批次扣款 · ${customerCode}` } });
-        if (r?.ok === false && r.reason === "already_paid") { alert("该客户在本批次已结清"); return; }
+        const r: any = await deduct({
+          data: {
+            batchId,
+            userId: c.user_id,
+            amountCad: subtotal,
+            discountCad: discAmt,
+            note: `批次扣款 · ${customerCode}`,
+          },
+        });
+        if (r?.ok === false && r.reason === "already_paid") {
+          alert("该客户在本批次已结清");
+          return;
+        }
       } else {
-        const r: any = await deductOffline({ data: { batchId, userId: c.user_id, method, discountCad: discAmt, refNo: refNo || undefined, note: `批次${methodLabel} · ${customerCode}` } });
-        if (r?.ok === false && r.reason === "already_paid") { alert("该客户在本批次已结清"); return; }
+        const r: any = await deductOffline({
+          data: {
+            batchId,
+            userId: c.user_id,
+            method,
+            discountCad: discAmt,
+            refNo: refNo || undefined,
+            note: `批次${methodLabel} · ${customerCode}`,
+          },
+        });
+        if (r?.ok === false && r.reason === "already_paid") {
+          alert("该客户在本批次已结清");
+          return;
+        }
       }
       await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
       onClose();
-    } catch (e: any) { alert(e.message); }
-    finally { setBusy(false); }
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()}
-        className="absolute right-0 top-0 h-full w-full max-w-5xl overflow-y-auto border-l border-white/10 bg-[#0A0F1A] p-5">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="absolute right-0 top-0 h-full w-full max-w-5xl overflow-y-auto border-l border-white/10 bg-[#0A0F1A] p-5"
+      >
         <div className="mb-4 flex items-start justify-between">
           <div>
             <h2 className="font-display text-xl font-bold">
               客户号 <span className="font-mono text-brand">{customerCode}</span>
               {c.customer_name && <span className="ml-2 text-sm text-slate-400">· {c.customer_name}</span>}
               {c.route_code && (
-                <span className="ml-2 inline-flex rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-xs font-mono text-brand align-middle">线路 {c.route_code}</span>
+                <span className="ml-2 inline-flex rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-xs font-mono text-brand align-middle">
+                  线路 {c.route_code}
+                </span>
               )}
             </h2>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-              <span className={`rounded-full px-2 py-0.5 ${c.is_paid ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>
+              <span
+                className={`rounded-full px-2 py-0.5 ${c.is_paid ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}
+              >
                 {c.is_paid ? "已付款" : "未付款"}
               </span>
               <span className="rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-brand">
                 费用方案：{scheme === "merged" ? "合并收费 (A)" : "不合并 (B)"}
               </span>
-              <span className="text-slate-400">总重量 <span className="font-mono text-slate-200">{Number(c.weight_kg ?? 0).toFixed(2)} kg</span></span>
-              <span className="text-slate-400">体积 <span className="font-mono text-slate-200">{Number(c.volume_m3 ?? 0).toFixed(4)} m³</span></span>
-              <span className="text-slate-400">余额 <span className="font-mono text-emerald-300">{cad(c.balance_cad)}</span></span>
+              <span className="text-slate-400">
+                总重量 <span className="font-mono text-slate-200">{Number(c.weight_kg ?? 0).toFixed(2)} kg</span>
+              </span>
+              <span className="text-slate-400">
+                体积 <span className="font-mono text-slate-200">{Number(c.volume_m3 ?? 0).toFixed(4)} m³</span>
+              </span>
+              <span className="text-slate-400">
+                余额 <span className="font-mono text-emerald-300">{cad(c.balance_cad)}</span>
+              </span>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white"><X className="h-5 w-5"/></button>
+          <button onClick={onClose} className="text-slate-400 hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
         </div>
-
 
         <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
           {/* Left: three entity sections + customs items */}
           <div className="space-y-3">
-            <Section icon={<Truck className="h-4 w-4"/>} title="① 运单 · 直挂 / 非客户号箱内 / 非客户号托盘内"
-              count={waybills.length} sumWeight={sumWb.w} sumVolume={sumWb.v} sumFee={sumWb.fee}>
-              <WaybillTable rows={waybills}/>
+            <Section
+              icon={<Truck className="h-4 w-4" />}
+              title="① 运单 · 直挂 / 非客户号箱内 / 非客户号托盘内"
+              count={waybills.length}
+              sumWeight={sumWb.w}
+              sumVolume={sumWb.v}
+              sumFee={sumWb.fee}
+            >
+              <WaybillTable rows={waybills} />
             </Section>
-            <Section icon={<Package className="h-4 w-4"/>} title="② 箱号 · 客户号箱 / 非客户号托盘内的客户号箱"
-              count={cartons.length} sumWeight={sumCt.w} sumVolume={sumCt.v} sumFee={sumCt.fee}>
-              <ContainerTable kind="carton" rows={cartons}/>
+            <Section
+              icon={<Package className="h-4 w-4" />}
+              title="② 箱号 · 客户号箱 / 非客户号托盘内的客户号箱"
+              count={cartons.length}
+              sumWeight={sumCt.w}
+              sumVolume={sumCt.v}
+              sumFee={sumCt.fee}
+            >
+              <ContainerTable kind="carton" rows={cartons} />
             </Section>
-            <Section icon={<Layers className="h-4 w-4"/>} title="③ 托盘 · 直挂客户号托盘"
-              count={pallets.length} sumWeight={sumPl.w} sumVolume={sumPl.v} sumFee={sumPl.fee}>
-              <ContainerTable kind="pallet" rows={pallets}/>
+            <Section
+              icon={<Layers className="h-4 w-4" />}
+              title="③ 托盘 · 直挂客户号托盘"
+              count={pallets.length}
+              sumWeight={sumPl.w}
+              sumVolume={sumPl.v}
+              sumFee={sumPl.fee}
+            >
+              <ContainerTable kind="pallet" rows={pallets} />
             </Section>
 
-            <Card title={`关税明细 (${items.length}) · Σ 申报价值 ${cad(items.reduce((s,i)=>s+Number(i.declared_value_cad||0),0))} · Σ 关税 ${cad(items.reduce((s,i)=>s+Number(i.duty_cad||0),0))}`}>
+            <Card
+              title={`关税明细 (${items.length}) · Σ 申报价值 ${cad(items.reduce((s, i) => s + Number(i.declared_value_cad || 0), 0))} · Σ 关税 ${cad(items.reduce((s, i) => s + Number(i.duty_cad || 0), 0))}`}
+            >
               {(c.unmatched_hs_names?.length ?? 0) > 0 && (
                 <div className="mb-2 rounded-md border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-200">
-                  ⚠ 以下品名未匹配 HS 编码，关税按 0 计（去 <a href="/admin/hs-codes" target="_blank" rel="noreferrer" className="underline">HS 编码库</a> 添加或绑定别名）：
+                  ⚠ 以下品名未匹配 HS 编码，关税按 0 计（去{" "}
+                  <a href="/admin/hs-codes" target="_blank" rel="noreferrer" className="underline">
+                    HS 编码库
+                  </a>{" "}
+                  添加或绑定别名）：
                   <div className="mt-1 font-mono text-[11px]">{(c.unmatched_hs_names ?? []).join("、")}</div>
                 </div>
               )}
@@ -160,12 +232,24 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
                         <tr key={i} className={!it.hs_code ? "bg-amber-500/5" : ""}>
                           <td className="py-1 text-slate-200">{it.name}</td>
                           <td className="font-mono text-slate-300">
-                            {it.hs_code ?? <span className="inline-flex items-center gap-1 text-amber-300"><AlertTriangle className="h-3 w-3"/>缺</span>}
+                            {it.hs_code ?? (
+                              <span className="inline-flex items-center gap-1 text-amber-300">
+                                <AlertTriangle className="h-3 w-3" />缺
+                              </span>
+                            )}
                           </td>
-                          <td className="text-right font-mono text-slate-400">{(Number(it.mfn_rate)*100).toFixed(2)}%</td>
-                          <td className="text-right font-mono text-slate-400">{(Number(it.gst_rate)*100).toFixed(2)}%</td>
-                          <td className="text-right font-mono text-slate-400">{(Number(it.anti_dumping_rate)*100).toFixed(2)}%</td>
-                          <td className="text-right font-mono text-slate-200">{(Number(it.tax_rate)*100).toFixed(2)}%</td>
+                          <td className="text-right font-mono text-slate-400">
+                            {(Number(it.mfn_rate) * 100).toFixed(2)}%
+                          </td>
+                          <td className="text-right font-mono text-slate-400">
+                            {(Number(it.gst_rate) * 100).toFixed(2)}%
+                          </td>
+                          <td className="text-right font-mono text-slate-400">
+                            {(Number(it.anti_dumping_rate) * 100).toFixed(2)}%
+                          </td>
+                          <td className="text-right font-mono text-slate-200">
+                            {(Number(it.tax_rate) * 100).toFixed(2)}%
+                          </td>
                           <td className="text-right font-mono">{cad(it.unit_price_cad)}</td>
                           <td className="text-right font-mono">{it.quantity}</td>
                           <td className="text-right font-mono text-slate-400">{it.cartons_qty}</td>
@@ -187,78 +271,118 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
               <FeeRow
                 label={`运费${scheme === "merged" ? " · 合并计算" : " · 逐项汇总"}`}
                 value={feeFreight}
-                sub={scheme === "merged"
-                  ? `按线路 ${c.route_code ?? "—"} 汇总重量 ${Number(c.weight_kg ?? 0).toFixed(2)}kg · 体积 ${Number(c.volume_m3 ?? 0).toFixed(4)}m³ × 线路费率`
-                  : `= Σ 运单运费 + Σ 客户号箱运费 + Σ 客户号托盘运费`}
+                sub={
+                  scheme === "merged"
+                    ? `按线路 ${c.route_code ?? "—"} 汇总重量 ${Number(c.weight_kg ?? 0).toFixed(2)}kg · 体积 ${Number(c.volume_m3 ?? 0).toFixed(4)}m³ × 线路费率`
+                    : `= Σ 运单运费 + Σ 客户号箱运费 + Σ 客户号托盘运费`
+                }
               />
-              <FeeRow label="保险" value={feeInsurance}
+              <FeeRow
+                label="保险"
+                value={feeInsurance}
                 sub={`公式：Σ 各运单申报保险额　·　来源 ${Number(c.insurance_source_count ?? 0)} 条`}
-                details={(c.insurance_details ?? []).length > 0 ? (
-                  <SourceTable
-                    columns={["运单号", "金额 CA$"]}
-                    rows={(c.insurance_details as any[]).map((d) => [d.ref, cad(d.amount_cad)])}
-                    total={cad(feeInsurance)}
-                  />
-                ) : <EmptyHint text="无保险来源"/>}
+                details={
+                  (c.insurance_details ?? []).length > 0 ? (
+                    <SourceTable
+                      columns={["运单号", "金额 CA$"]}
+                      rows={(c.insurance_details as any[]).map((d) => [d.ref, cad(d.amount_cad)])}
+                      total={cad(feeInsurance)}
+                    />
+                  ) : (
+                    <EmptyHint text="无保险来源" />
+                  )
+                }
               />
-              <FeeRow label="关税" value={feeCustoms}
-                sub={items.length > 0
-                  ? `公式：Σ (单价 × 数量) × (MFN + GST + 反倾销)　·　${items.length} 项物品`
-                  : `无物品明细　关税 = 0`}
-                details={items.length > 0 ? (
-                  <SourceTable
-                    columns={["品名", "HS", "税率", "申报价值", "关税"]}
-                    rows={items.map((it: any) => [
-                      it.name,
-                      it.hs_code ?? "—",
-                      `${(Number(it.tax_rate)*100).toFixed(2)}%`,
-                      cad(it.declared_value_cad),
-                      cad(it.duty_cad),
-                    ])}
-                    total={cad(feeCustoms)}
-                  />
-                ) : <EmptyHint text="该客户在本批次无关税物品明细"/>}
+              <FeeRow
+                label="关税"
+                value={feeCustoms}
+                sub={
+                  items.length > 0
+                    ? `公式：Σ (单价 × 数量) × (MFN + GST + 反倾销)　·　${items.length} 项物品`
+                    : `无物品明细　关税 = 0`
+                }
+                details={
+                  items.length > 0 ? (
+                    <SourceTable
+                      columns={["品名", "HS", "税率", "申报价值", "关税"]}
+                      rows={items.map((it: any) => [
+                        it.name,
+                        it.hs_code ?? "—",
+                        `${(Number(it.tax_rate) * 100).toFixed(2)}%`,
+                        cad(it.declared_value_cad),
+                        cad(it.duty_cad),
+                      ])}
+                      total={cad(feeCustoms)}
+                    />
+                  ) : (
+                    <EmptyHint text="该客户在本批次无关税物品明细" />
+                  )
+                }
               />
-              <FeeRow label="清关费" value={feeClearance}
-                sub={(c.clearance_note ?? []).length > 0
-                  ? `公式：Σ 各线路清关费（批次一次性 / 逐单累计）`
-                  : `本线路未启用独立清关费`}
-                details={(c.clearance_note ?? []).length > 0 ? (
-                  <SourceTable
-                    columns={["线路", "计费方式", "单价 CA$", "次数", "小计 CA$"]}
-                    rows={(c.clearance_note as any[]).map((x: any) => [
-                      x.route_code,
-                      x.level === "batch" ? "批次一次性" : "逐单",
-                      cad(x.fee),
-                      String(x.count ?? 1),
-                      cad(Number(x.fee) * (x.level === "batch" ? 1 : Number(x.count ?? 1))),
-                    ])}
-                    total={cad(feeClearance)}
-                  />
-                ) : null}
+              <FeeRow
+                label="清关费"
+                value={feeClearance}
+                sub={
+                  (c.clearance_note ?? []).length > 0
+                    ? `公式：Σ 各线路清关费（批次一次性 / 逐单累计）`
+                    : `本线路未启用独立清关费`
+                }
+                details={
+                  (c.clearance_note ?? []).length > 0 ? (
+                    <SourceTable
+                      columns={["线路", "计费方式", "单价 CA$", "次数", "小计 CA$"]}
+                      rows={(c.clearance_note as any[]).map((x: any) => [
+                        x.route_code,
+                        x.level === "batch" ? "批次一次性" : "逐单",
+                        cad(x.fee),
+                        String(x.count ?? 1),
+                        cad(Number(x.fee) * (x.level === "batch" ? 1 : Number(x.count ?? 1))),
+                      ])}
+                      total={cad(feeClearance)}
+                    />
+                  ) : null
+                }
               />
-              <FeeRow label="附加费" value={feeSurcharge}
+              <FeeRow
+                label="附加费"
+                value={feeSurcharge}
                 sub={`公式：Σ 运单/箱/托盘/批次附加费　·　来源 ${Number(c.surcharge_source_count ?? 0)} 条`}
-                details={(c.surcharge_details ?? []).length > 0 ? (
-                  <SourceTable
-                    columns={["范围", "对象", "金额 CA$"]}
-                    rows={(c.surcharge_details as any[]).map((d) => [
-                      d.scope === "waybill" ? "运单" : d.scope === "carton" ? "箱号" : d.scope === "pallet" ? "托盘" : "批次",
-                      d.ref,
-                      cad(d.amount_cad),
-                    ])}
-                    total={cad(feeSurcharge)}
-                  />
-                ) : <EmptyHint text="无附加费"/>}
+                details={
+                  (c.surcharge_details ?? []).length > 0 ? (
+                    <SourceTable
+                      columns={["范围", "对象", "金额 CA$"]}
+                      rows={(c.surcharge_details as any[]).map((d) => [
+                        d.scope === "waybill"
+                          ? "运单"
+                          : d.scope === "carton"
+                            ? "箱号"
+                            : d.scope === "pallet"
+                              ? "托盘"
+                              : "批次",
+                        d.ref,
+                        cad(d.amount_cad),
+                      ])}
+                      total={cad(feeSurcharge)}
+                    />
+                  ) : (
+                    <EmptyHint text="无附加费" />
+                  )
+                }
               />
-
 
               <div className="mt-2 border-t border-white/5 pt-2">
-                <label className="block text-[10px] uppercase tracking-wider text-slate-500">检查费 (CAD) · 可输入</label>
-                <input type="number" step="0.01" min="0" value={inspection}
+                <label className="block text-[10px] uppercase tracking-wider text-slate-500">
+                  检查费 (CAD) · 可输入
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={inspection}
                   disabled={!canEdit}
                   onChange={(e) => setInspection(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100"/>
+                  className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100"
+                />
               </div>
               <div className="mt-2 flex justify-between border-t border-white/5 pt-2">
                 <span className="text-xs text-slate-300">小计</span>
@@ -266,10 +390,16 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
               </div>
               <div className="mt-2">
                 <label className="block text-[10px] uppercase tracking-wider text-slate-500">折扣 (CAD)</label>
-                <input type="number" step="0.01" min="0" max={subtotal} value={discount}
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={subtotal}
+                  value={discount}
                   disabled={!canEdit}
                   onChange={(e) => setDiscount(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100"/>
+                  className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100"
+                />
               </div>
               <div className="mt-2 flex justify-between border-t border-white/5 pt-2">
                 <span className="text-xs font-semibold text-slate-200">实际扣款</span>
@@ -279,17 +409,25 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
                 <label className="block text-[10px] uppercase tracking-wider text-slate-500">收款方式</label>
                 <div className="mt-1 grid grid-cols-3 gap-1">
                   {(["wallet", "emt", "cash"] as const).map((m) => (
-                    <button key={m} type="button" disabled={!canEdit}
+                    <button
+                      key={m}
+                      type="button"
+                      disabled={!canEdit}
                       onClick={() => setMethod(m)}
-                      className={`rounded-md border px-2 py-1.5 text-xs font-semibold ${method === m ? "border-brand bg-brand/10 text-brand" : "border-white/10 bg-white/5 text-slate-300"}`}>
+                      className={`rounded-md border px-2 py-1.5 text-xs font-semibold ${method === m ? "border-brand bg-brand/10 text-brand" : "border-white/10 bg-white/5 text-slate-300"}`}
+                    >
                       {m === "wallet" ? "钱包" : m === "emt" ? "EMT" : "现金"}
                     </button>
                   ))}
                 </div>
                 {method !== "wallet" && (
-                  <input value={refNo} disabled={!canEdit} onChange={(e) => setRefNo(e.target.value)}
+                  <input
+                    value={refNo}
+                    disabled={!canEdit}
+                    onChange={(e) => setRefNo(e.target.value)}
                     placeholder="凭证号 / 参考号（可选）"
-                    className="mt-2 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100 placeholder:text-slate-500"/>
+                    className="mt-2 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100 placeholder:text-slate-500"
+                  />
                 )}
                 <p className="mt-1.5 text-[10px] leading-snug text-slate-500">
                   {method === "wallet"
@@ -301,13 +439,21 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
 
             {canEdit && (
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={onSave} disabled={busy}
-                  className="inline-flex items-center justify-center gap-1 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-white/10 disabled:opacity-50">
-                  <Save className="h-3.5 w-3.5"/>保存
+                <button
+                  onClick={onSave}
+                  disabled={busy}
+                  className="inline-flex items-center justify-center gap-1 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-white/10 disabled:opacity-50"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  保存
                 </button>
-                <button onClick={onDeduct} disabled={busy || !c.user_id}
-                  className="inline-flex items-center justify-center gap-1 rounded-md bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-500 disabled:opacity-50">
-                  <Wallet className="h-3.5 w-3.5"/>扣款
+                <button
+                  onClick={onDeduct}
+                  disabled={busy || !c.user_id}
+                  className="inline-flex items-center justify-center gap-1 rounded-md bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-500 disabled:opacity-50"
+                >
+                  <Wallet className="h-3.5 w-3.5" />
+                  扣款
                 </button>
               </div>
             )}
@@ -319,27 +465,59 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
 }
 
 function sumRows(rows: any[]) {
-  return rows.reduce((s, r) => ({
-    w: s.w + Number(r.weight_kg || 0),
-    v: s.v + Number(r.volume_m3 || 0),
-    fee: s.fee + Number(r.fee_cad || 0),
-  }), { w: 0, v: 0, fee: 0 });
+  return rows.reduce(
+    (s, r) => ({
+      w: s.w + Number(r.weight_kg || 0),
+      v: s.v + Number(r.volume_m3 || 0),
+      fee: s.fee + Number(r.fee_cad || 0),
+    }),
+    { w: 0, v: 0, fee: 0 },
+  );
 }
 
-function Section({ icon, title, count, sumWeight, sumVolume, sumFee, children }: {
-  icon: React.ReactNode; title: string; count: number; sumWeight: number; sumVolume: number; sumFee: number; children: React.ReactNode;
+function Section({
+  icon,
+  title,
+  count,
+  sumWeight,
+  sumVolume,
+  sumFee,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  count: number;
+  sumWeight: number;
+  sumVolume: number;
+  sumFee: number;
+  children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(count > 0);
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02]">
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-white/5">
-        {open ? <ChevronDown className="h-3.5 w-3.5 text-slate-400"/> : <ChevronRight className="h-3.5 w-3.5 text-slate-400"/>}
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-white/5"
+      >
+        {open ? (
+          <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+        )}
         <span className="text-brand">{icon}</span>
         <span className="flex-1 text-sm text-slate-200">{title}</span>
-        <span className="text-[10px] text-slate-400">共 <span className="font-mono text-slate-100">{count}</span></span>
-        <span className="text-[10px] text-slate-400">Σ体积 <span className="font-mono text-slate-100">{sumVolume.toFixed(4)}</span></span>
-        <span className="text-[10px] text-slate-400">Σ重量 <span className="font-mono text-slate-100">{sumWeight.toFixed(2)}</span></span>
-        <span className="text-[10px] text-slate-400">Σ费用 <span className="font-mono text-emerald-300">{cad(sumFee)}</span></span>
+        <span className="text-[10px] text-slate-400">
+          共 <span className="font-mono text-slate-100">{count}</span>
+        </span>
+        <span className="text-[10px] text-slate-400">
+          Σ体积 <span className="font-mono text-slate-100">{sumVolume.toFixed(4)}</span>
+        </span>
+        <span className="text-[10px] text-slate-400">
+          Σ重量 <span className="font-mono text-slate-100">{sumWeight.toFixed(2)}</span>
+        </span>
+        <span className="text-[10px] text-slate-400">
+          Σ费用 <span className="font-mono text-emerald-300">{cad(sumFee)}</span>
+        </span>
       </button>
       {open && (
         <div className="border-t border-white/5 p-3">
@@ -367,8 +545,14 @@ function WaybillTable({ rows }: { rows: any[] }) {
       <tbody className="divide-y divide-white/5">
         {rows.map((w: any) => (
           <tr key={w.id}>
-            <td className="py-1 font-mono"><Link to="/admin/waybills/$waybillId" params={{ waybillId: w.id }} className="text-brand hover:underline">{w.waybill_no}</Link></td>
-            <td className="text-[10px] text-slate-500">{w.source === "direct" ? "直挂" : w.source === "carton" ? "箱内" : "托盘"}</td>
+            <td className="py-1 font-mono">
+              <Link to="/admin/waybills/$waybillId" params={{ waybillId: w.id }} className="text-brand hover:underline">
+                {w.waybill_no}
+              </Link>
+            </td>
+            <td className="text-[10px] text-slate-500">
+              {w.source === "direct" ? "直挂" : w.source === "carton" ? "箱内" : "托盘"}
+            </td>
             <td className="text-slate-300">{w.status}</td>
             <td className="text-slate-300">{w.payment_status}</td>
             <td className="text-right font-mono text-slate-400">{Number(w.volume_m3).toFixed(4)}</td>
@@ -381,7 +565,7 @@ function WaybillTable({ rows }: { rows: any[] }) {
   );
 }
 
-function ContainerTable({ kind, rows }: { kind: "carton"|"pallet"; rows: any[] }) {
+function ContainerTable({ kind, rows }: { kind: "carton" | "pallet"; rows: any[] }) {
   const link = kind === "carton" ? "/admin/cartons/$cartonId" : "/admin/pallets/$palletId";
   const paramKey = kind === "carton" ? "cartonId" : "palletId";
   return (
@@ -406,14 +590,24 @@ function ContainerTable({ kind, rows }: { kind: "carton"|"pallet"; rows: any[] }
               </Link>
             </td>
             <td className="text-center">
-              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${r.scheme === "A" ? "border-brand/30 bg-brand/10 text-brand" : "border-slate-500/30 bg-slate-500/10 text-slate-300"}`}>
+              <span
+                className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${r.scheme === "A" ? "border-brand/30 bg-brand/10 text-brand" : "border-slate-500/30 bg-slate-500/10 text-slate-300"}`}
+              >
                 {r.scheme}
               </span>
             </td>
             <td className="text-right font-mono text-slate-400">{Number(r.volume_m3).toFixed(4)}</td>
             <td className="text-right font-mono text-slate-400">{Number(r.weight_kg).toFixed(2)}</td>
-            <td className={`text-right font-mono ${r.scheme === "A" ? "text-emerald-300" : "text-slate-500 line-through"}`}>{cad(r.a_cad)}</td>
-            <td className={`text-right font-mono ${r.scheme === "B" ? "text-emerald-300" : "text-slate-500 line-through"}`}>{cad(r.b_cad)}</td>
+            <td
+              className={`text-right font-mono ${r.scheme === "A" ? "text-emerald-300" : "text-slate-500 line-through"}`}
+            >
+              {cad(r.a_cad)}
+            </td>
+            <td
+              className={`text-right font-mono ${r.scheme === "B" ? "text-emerald-300" : "text-slate-500 line-through"}`}
+            >
+              {cad(r.b_cad)}
+            </td>
             <td className="text-right font-mono font-semibold text-emerald-300">{cad(r.fee_cad)}</td>
           </tr>
         ))}
@@ -422,7 +616,17 @@ function ContainerTable({ kind, rows }: { kind: "carton"|"pallet"; rows: any[] }
   );
 }
 
-function FeeRow({ label, value, sub, details }: { label: string; value: number; sub?: string; details?: React.ReactNode }) {
+function FeeRow({
+  label,
+  value,
+  sub,
+  details,
+}: {
+  label: string;
+  value: number;
+  sub?: string;
+  details?: React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const hasDetails = details != null;
   return (
@@ -434,7 +638,12 @@ function FeeRow({ label, value, sub, details }: { label: string; value: number; 
           onClick={() => setOpen(!open)}
           className={`flex flex-1 items-center gap-1 text-left text-xs ${hasDetails ? "hover:text-brand" : "cursor-default"}`}
         >
-          {hasDetails && (open ? <ChevronDown className="h-3 w-3 text-slate-400"/> : <ChevronRight className="h-3 w-3 text-slate-400"/>)}
+          {hasDetails &&
+            (open ? (
+              <ChevronDown className="h-3 w-3 text-slate-400" />
+            ) : (
+              <ChevronRight className="h-3 w-3 text-slate-400" />
+            ))}
           <span>{label}</span>
         </button>
         <span className="text-xs font-mono">{cad(value)}</span>
@@ -450,21 +659,32 @@ function SourceTable({ columns, rows, total }: { columns: string[]; rows: (strin
     <div className="overflow-x-auto rounded-md border border-white/5 bg-black/20">
       <table className="w-full text-[11px]">
         <thead className="text-left text-[9px] uppercase text-slate-500">
-          <tr>{columns.map((c, i) => (
-            <th key={i} className={`px-2 py-1 ${i === columns.length - 1 ? "text-right" : ""}`}>{c}</th>
-          ))}</tr>
+          <tr>
+            {columns.map((c, i) => (
+              <th key={i} className={`px-2 py-1 ${i === columns.length - 1 ? "text-right" : ""}`}>
+                {c}
+              </th>
+            ))}
+          </tr>
         </thead>
         <tbody className="divide-y divide-white/5">
           {rows.map((r, i) => (
             <tr key={i}>
               {r.map((cell, j) => (
-                <td key={j} className={`px-2 py-1 ${j === r.length - 1 ? "text-right font-mono text-emerald-300" : "font-mono text-slate-300"}`}>{cell}</td>
+                <td
+                  key={j}
+                  className={`px-2 py-1 ${j === r.length - 1 ? "text-right font-mono text-emerald-300" : "font-mono text-slate-300"}`}
+                >
+                  {cell}
+                </td>
               ))}
             </tr>
           ))}
           {total != null && (
             <tr className="bg-white/[0.03]">
-              <td colSpan={columns.length - 1} className="px-2 py-1 text-right text-[10px] text-slate-400">合计</td>
+              <td colSpan={columns.length - 1} className="px-2 py-1 text-right text-[10px] text-slate-400">
+                合计
+              </td>
               <td className="px-2 py-1 text-right font-mono text-sm font-semibold text-emerald-300">{total}</td>
             </tr>
           )}
@@ -475,7 +695,9 @@ function SourceTable({ columns, rows, total }: { columns: string[]; rows: (strin
 }
 
 function EmptyHint({ text }: { text: string }) {
-  return <div className="rounded-md border border-dashed border-white/10 py-2 text-center text-[10px] text-slate-500">{text}</div>;
+  return (
+    <div className="rounded-md border border-dashed border-white/10 py-2 text-center text-[10px] text-slate-500">
+      {text}
+    </div>
+  );
 }
-
-

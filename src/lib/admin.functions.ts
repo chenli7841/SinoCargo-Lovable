@@ -3,9 +3,15 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { VipLevel } from "@/lib/vip-levels";
 
 export type AppRole =
-  | "owner" | "manager" | "warehouse_cn" | "warehouse_ca"
-  | "driver" | "pickup_point" | "sales" | "support" | "customer";
-
+  | "owner"
+  | "manager"
+  | "warehouse_cn"
+  | "warehouse_ca"
+  | "driver"
+  | "pickup_point"
+  | "sales"
+  | "support"
+  | "customer";
 
 async function assertStaff(supabase: any, userId: string) {
   const { data, error } = await supabase.rpc("is_staff", { _user_id: userId });
@@ -30,15 +36,17 @@ async function getCallerLevel(supabase: any, userId: string): Promise<"owner" | 
 export const getMyRoles = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("user_roles").select("role").eq("user_id", context.userId);
+    const { data, error } = await context.supabase.from("user_roles").select("role").eq("user_id", context.userId);
     if (error) throw new Error(error.message);
     return { roles: (data ?? []).map((r: any) => r.role as AppRole) };
   });
 
 export const listUsers = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { search?: string; role?: AppRole | "all"; vipLevel?: VipLevel | "all"; page?: number; pageSize?: number }) => d)
+  .inputValidator(
+    (d: { search?: string; role?: AppRole | "all"; vipLevel?: VipLevel | "all"; page?: number; pageSize?: number }) =>
+      d,
+  )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const page = Math.max(1, data.page ?? 1);
@@ -49,7 +57,10 @@ export const listUsers = createServerFn({ method: "POST" })
     // fetch profiles via admin (covers everyone)
     let q = supabaseAdmin
       .from("profiles")
-      .select("id, email, full_name, phone, customer_code, created_at, vip_level, points, is_blacklisted, blacklist_reason", { count: "exact" })
+      .select(
+        "id, email, full_name, phone, customer_code, created_at, vip_level, points, is_blacklisted, blacklist_reason",
+        { count: "exact" },
+      )
       .order("created_at", { ascending: false });
 
     if (data.search && data.search.trim()) {
@@ -58,8 +69,7 @@ export const listUsers = createServerFn({ method: "POST" })
     }
 
     if (data.role && data.role !== "all") {
-      const { data: ur, error: urE } = await supabaseAdmin
-        .from("user_roles").select("user_id").eq("role", data.role);
+      const { data: ur, error: urE } = await supabaseAdmin.from("user_roles").select("user_id").eq("role", data.role);
       if (urE) throw new Error(urE.message);
       const ids = (ur ?? []).map((r: any) => r.user_id);
       if (ids.length === 0) return { users: [], total: 0, page, pageSize };
@@ -83,15 +93,17 @@ export const listUsers = createServerFn({ method: "POST" })
       const [rolesR, walletsR, invR] = await Promise.all([
         supabaseAdmin.from("user_roles").select("user_id, role").in("user_id", ids),
         supabaseAdmin.from("wallets").select("user_id, balance_cad").in("user_id", ids),
-        supabaseAdmin.from("invoices")
+        supabaseAdmin
+          .from("invoices")
           .select("user_id, total_cny, paid_cny, status")
           .in("user_id", ids)
           .in("status", ["unpaid", "overdue"]),
       ]);
       for (const r of rolesR.data ?? []) (rolesByUser[r.user_id] ??= []).push(r.role as AppRole);
-      for (const w of walletsR.data ?? []) walletByUser[w.user_id] = {
-        balance_cad: Number(w.balance_cad ?? 0),
-      };
+      for (const w of walletsR.data ?? [])
+        walletByUser[w.user_id] = {
+          balance_cad: Number(w.balance_cad ?? 0),
+        };
       for (const inv of invR.data ?? []) {
         const due = Math.max(0, Number(inv.total_cny ?? 0) - Number(inv.paid_cny ?? 0));
         const bucket = (unpaidByUser[inv.user_id] ??= { count: 0, amount_cny: 0 });
@@ -102,8 +114,12 @@ export const listUsers = createServerFn({ method: "POST" })
 
     return {
       users: (profiles ?? []).map((p: any) => ({
-        id: p.id, email: p.email, full_name: p.full_name, phone: p.phone,
-        customer_code: p.customer_code, created_at: p.created_at,
+        id: p.id,
+        email: p.email,
+        full_name: p.full_name,
+        phone: p.phone,
+        customer_code: p.customer_code,
+        created_at: p.created_at,
         vip_level: (p.vip_level ?? "normal") as VipLevel,
         points: Number(p.points ?? 0),
         is_blacklisted: !!p.is_blacklisted,
@@ -112,10 +128,11 @@ export const listUsers = createServerFn({ method: "POST" })
         wallet: walletByUser[p.id] ?? { balance_cad: 0 },
         unpaid: unpaidByUser[p.id] ?? { count: 0, amount_cny: 0 },
       })),
-      total: count ?? 0, page, pageSize,
+      total: count ?? 0,
+      page,
+      pageSize,
     };
   });
-
 
 export const getUserDetail = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -123,24 +140,35 @@ export const getUserDetail = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const [{ data: profile }, { data: roles }, { data: wallet }, { count: ordersCount }, { data: unpaidInvoices }, { data: unpaidOrders }, { data: unpaidForwardings }] = await Promise.all([
+    const [
+      { data: profile },
+      { data: roles },
+      { data: wallet },
+      { count: ordersCount },
+      { data: unpaidInvoices },
+      { data: unpaidOrders },
+      { data: unpaidForwardings },
+    ] = await Promise.all([
       supabaseAdmin.from("profiles").select("*").eq("id", data.userId).maybeSingle(),
       supabaseAdmin.from("user_roles").select("role").eq("user_id", data.userId),
       supabaseAdmin.from("wallets").select("balance_cad").eq("user_id", data.userId).maybeSingle(),
       supabaseAdmin.from("orders").select("id", { count: "exact", head: true }).eq("user_id", data.userId),
-      supabaseAdmin.from("invoices")
+      supabaseAdmin
+        .from("invoices")
         .select("id, invoice_no, total_cny, paid_cny, status, due_date, created_at")
         .eq("user_id", data.userId)
         .in("status", ["unpaid", "overdue"])
         .order("created_at", { ascending: false }),
-      supabaseAdmin.from("orders")
+      supabaseAdmin
+        .from("orders")
         .select("id, order_no, total_cny, status, payment_status, created_at")
         .eq("user_id", data.userId)
         .neq("payment_status", "paid")
         .neq("status", "cancelled")
         .order("created_at", { ascending: false })
         .limit(50),
-      supabaseAdmin.from("forwarding_orders")
+      supabaseAdmin
+        .from("forwarding_orders")
         .select("id, status, created_at")
         .eq("user_id", data.userId)
         .order("created_at", { ascending: false })
@@ -191,7 +219,10 @@ export const setUserFeeScheme = createServerFn({ method: "POST" })
     if (level === "none") throw new Error("Forbidden: owner or manager only");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     if (data.scheme !== "merged" && data.scheme !== "split") throw new Error("Invalid scheme");
-    const { error } = await supabaseAdmin.from("profiles").update({ fee_scheme_preference: data.scheme }).eq("id", data.userId);
+    const { error } = await supabaseAdmin
+      .from("profiles")
+      .update({ fee_scheme_preference: data.scheme })
+      .eq("id", data.userId);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -204,30 +235,31 @@ export const setUserBlacklist = createServerFn({ method: "POST" })
     if (level === "none") throw new Error("Forbidden: owner or manager only");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     if (data.userId === context.userId) throw new Error("不能将自己加入黑名单");
-    const { error } = await supabaseAdmin.from("profiles").update({
-      is_blacklisted: !!data.blacklisted,
-      blacklist_reason: data.blacklisted ? (data.reason ?? null) : null,
-    }).eq("id", data.userId);
+    const { error } = await supabaseAdmin
+      .from("profiles")
+      .update({
+        is_blacklisted: !!data.blacklisted,
+        blacklist_reason: data.blacklisted ? (data.reason ?? null) : null,
+      })
+      .eq("id", data.userId);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
 
 export const adjustUserWallet = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: {
-    userId: string;
-    mode: "delta" | "set";
-    amount: number;
-    note?: string | null;
-  }) => d)
+  .inputValidator((d: { userId: string; mode: "delta" | "set"; amount: number; note?: string | null }) => d)
   .handler(async ({ data, context }) => {
     const level = await getCallerLevel(context.supabase, context.userId);
     if (level === "none") throw new Error("Forbidden: owner or manager only");
     if (!Number.isFinite(data.amount)) throw new Error("金额无效");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { data: existing } = await supabaseAdmin.from("wallets")
-      .select("balance_cad").eq("user_id", data.userId).maybeSingle();
+    const { data: existing } = await supabaseAdmin
+      .from("wallets")
+      .select("balance_cad")
+      .eq("user_id", data.userId)
+      .maybeSingle();
     const cur = Number(existing?.balance_cad ?? 0);
     const next = data.mode === "set" ? Number(data.amount) : cur + Number(data.amount);
     const delta = next - cur;
@@ -255,13 +287,12 @@ export const adjustUserWallet = createServerFn({ method: "POST" })
         operator_id: context.userId,
         note: data.note ?? null,
       });
-    } catch { /* ignore log failure */ }
+    } catch {
+      /* ignore log failure */
+    }
 
     return { ok: true, balance_cad: next };
   });
-
-
-
 
 export const setUserRoles = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -273,8 +304,7 @@ export const setUserRoles = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     // Read target's current roles to enforce manager restrictions
-    const { data: existing } = await supabaseAdmin
-      .from("user_roles").select("role").eq("user_id", data.userId);
+    const { data: existing } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", data.userId);
     const currentRoles = new Set<AppRole>((existing ?? []).map((r: any) => r.role));
     const desiredRoles = new Set<AppRole>(data.roles);
 

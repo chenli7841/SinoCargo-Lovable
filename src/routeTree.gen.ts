@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TrackRouteImport } from './routes/track'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as ShippingRouteImport } from './routes/shipping'
+import { Route as PromoRouteImport } from './routes/promo'
 import { Route as ProductsRouteImport } from './routes/products'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as CartRouteImport } from './routes/cart'
 import { Route as AuthRouteImport } from './routes/auth'
@@ -42,6 +44,8 @@ import { Route as AdminCargoTypesRouteImport } from './routes/admin/cargo-types'
 import { Route as AuthenticatedInvoicesRouteImport } from './routes/_authenticated/invoices'
 import { Route as AuthenticatedCheckoutRouteImport } from './routes/_authenticated/checkout'
 import { Route as AuthenticatedAccountRouteImport } from './routes/_authenticated/account'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as AdminWaybillsIndexRouteImport } from './routes/admin/waybills.index'
 import { Route as AdminUsersIndexRouteImport } from './routes/admin/users.index'
 import { Route as AdminShopIndexRouteImport } from './routes/admin/shop.index'
@@ -73,6 +77,8 @@ import { Route as AdminBatchesBatchIdRouteImport } from './routes/admin/batches.
 import { Route as AuthenticatedPayOrderIdRouteImport } from './routes/_authenticated/pay.$orderId'
 import { Route as AuthenticatedOrdersOrderIdRouteImport } from './routes/_authenticated/orders.$orderId'
 import { Route as AuthenticatedForwardingForwardingIdRouteImport } from './routes/_authenticated/forwarding.$forwardingId'
+import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
+import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as AdminShopProductsIndexRouteImport } from './routes/admin/shop.products.index'
 import { Route as AdminShopOrdersIndexRouteImport } from './routes/admin/shop.orders.index'
 import { Route as ApiPublicWechatCallbackRouteImport } from './routes/api/public/wechat.callback'
@@ -96,9 +102,19 @@ const ShippingRoute = ShippingRouteImport.update({
   path: '/shipping',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PromoRoute = PromoRouteImport.update({
+  id: '/promo',
+  path: '/promo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProductsRoute = ProductsRouteImport.update({
   id: '/products',
   path: '/products',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContactRoute = ContactRouteImport.update({
@@ -245,6 +261,18 @@ const AuthenticatedAccountRoute = AuthenticatedAccountRouteImport.update({
   path: '/account',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char91DotmcpChar93ListToolsRoute =
+  Char91DotmcpChar93ListToolsRouteImport.update({
+    id: '/.mcp/list-tools',
+    path: '/.mcp/list-tools',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AdminWaybillsIndexRoute = AdminWaybillsIndexRouteImport.update({
   id: '/waybills/',
   path: '/waybills/',
@@ -406,6 +434,17 @@ const AuthenticatedForwardingForwardingIdRoute =
     path: '/forwarding/$forwardingId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const Char91DotmcpChar93InvokeToolToolRoute =
+  Char91DotmcpChar93InvokeToolToolRouteImport.update({
+    id: '/.mcp/invoke-tool/$tool',
+    path: '/.mcp/invoke-tool/$tool',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminShopProductsIndexRoute = AdminShopProductsIndexRouteImport.update({
   id: '/shop/products/',
   path: '/shop/products/',
@@ -453,10 +492,14 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/cart': typeof CartRoute
   '/contact': typeof ContactRoute
+  '/mcp': typeof McpRoute
   '/products': typeof ProductsRouteWithChildren
+  '/promo': typeof PromoRoute
   '/shipping': typeof ShippingRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/track': typeof TrackRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/account': typeof AuthenticatedAccountRoute
   '/checkout': typeof AuthenticatedCheckoutRoute
   '/invoices': typeof AuthenticatedInvoicesRoute
@@ -478,6 +521,8 @@ export interface FileRoutesByFullPath {
   '/products/$slug': typeof ProductsSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/products/': typeof ProductsIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/forwarding/$forwardingId': typeof AuthenticatedForwardingForwardingIdRoute
   '/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/pay/$orderId': typeof AuthenticatedPayOrderIdRoute
@@ -524,9 +569,13 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/cart': typeof CartRoute
   '/contact': typeof ContactRoute
+  '/mcp': typeof McpRoute
+  '/promo': typeof PromoRoute
   '/shipping': typeof ShippingRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/track': typeof TrackRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/account': typeof AuthenticatedAccountRoute
   '/checkout': typeof AuthenticatedCheckoutRoute
   '/invoices': typeof AuthenticatedInvoicesRoute
@@ -548,6 +597,8 @@ export interface FileRoutesByTo {
   '/products/$slug': typeof ProductsSlugRoute
   '/admin': typeof AdminIndexRoute
   '/products': typeof ProductsIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/forwarding/$forwardingId': typeof AuthenticatedForwardingForwardingIdRoute
   '/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/pay/$orderId': typeof AuthenticatedPayOrderIdRoute
@@ -597,10 +648,14 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/cart': typeof CartRoute
   '/contact': typeof ContactRoute
+  '/mcp': typeof McpRoute
   '/products': typeof ProductsRouteWithChildren
+  '/promo': typeof PromoRoute
   '/shipping': typeof ShippingRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/track': typeof TrackRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/_authenticated/account': typeof AuthenticatedAccountRoute
   '/_authenticated/checkout': typeof AuthenticatedCheckoutRoute
   '/_authenticated/invoices': typeof AuthenticatedInvoicesRoute
@@ -622,6 +677,8 @@ export interface FileRoutesById {
   '/products/$slug': typeof ProductsSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/products/': typeof ProductsIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/_authenticated/forwarding/$forwardingId': typeof AuthenticatedForwardingForwardingIdRoute
   '/_authenticated/orders/$orderId': typeof AuthenticatedOrdersOrderIdRoute
   '/_authenticated/pay/$orderId': typeof AuthenticatedPayOrderIdRoute
@@ -671,10 +728,14 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cart'
     | '/contact'
+    | '/mcp'
     | '/products'
+    | '/promo'
     | '/shipping'
     | '/sitemap.xml'
     | '/track'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/account'
     | '/checkout'
     | '/invoices'
@@ -696,6 +757,8 @@ export interface FileRouteTypes {
     | '/products/$slug'
     | '/admin/'
     | '/products/'
+    | '/.lovable/oauth/consent'
+    | '/.mcp/invoke-tool/$tool'
     | '/forwarding/$forwardingId'
     | '/orders/$orderId'
     | '/pay/$orderId'
@@ -742,9 +805,13 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cart'
     | '/contact'
+    | '/mcp'
+    | '/promo'
     | '/shipping'
     | '/sitemap.xml'
     | '/track'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/account'
     | '/checkout'
     | '/invoices'
@@ -766,6 +833,8 @@ export interface FileRouteTypes {
     | '/products/$slug'
     | '/admin'
     | '/products'
+    | '/.lovable/oauth/consent'
+    | '/.mcp/invoke-tool/$tool'
     | '/forwarding/$forwardingId'
     | '/orders/$orderId'
     | '/pay/$orderId'
@@ -814,10 +883,14 @@ export interface FileRouteTypes {
     | '/auth'
     | '/cart'
     | '/contact'
+    | '/mcp'
     | '/products'
+    | '/promo'
     | '/shipping'
     | '/sitemap.xml'
     | '/track'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/_authenticated/account'
     | '/_authenticated/checkout'
     | '/_authenticated/invoices'
@@ -839,6 +912,8 @@ export interface FileRouteTypes {
     | '/products/$slug'
     | '/admin/'
     | '/products/'
+    | '/.lovable/oauth/consent'
+    | '/.mcp/invoke-tool/$tool'
     | '/_authenticated/forwarding/$forwardingId'
     | '/_authenticated/orders/$orderId'
     | '/_authenticated/pay/$orderId'
@@ -888,10 +963,16 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   CartRoute: typeof CartRoute
   ContactRoute: typeof ContactRoute
+  McpRoute: typeof McpRoute
   ProductsRoute: typeof ProductsRouteWithChildren
+  PromoRoute: typeof PromoRoute
   ShippingRoute: typeof ShippingRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TrackRoute: typeof TrackRoute
+  Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
+  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
+  Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
   ApiPublicHooksMarkOverdueRoute: typeof ApiPublicHooksMarkOverdueRoute
   ApiPublicWechatCallbackRoute: typeof ApiPublicWechatCallbackRoute
 }
@@ -919,11 +1000,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShippingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/promo': {
+      id: '/promo'
+      path: '/promo'
+      fullPath: '/promo'
+      preLoaderRoute: typeof PromoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/products': {
       id: '/products'
       path: '/products'
       fullPath: '/products'
       preLoaderRoute: typeof ProductsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/contact': {
@@ -1128,6 +1223,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/account'
       preLoaderRoute: typeof AuthenticatedAccountRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.mcp/list-tools': {
+      id: '/.mcp/list-tools'
+      path: '/.mcp/list-tools'
+      fullPath: '/.mcp/list-tools'
+      preLoaderRoute: typeof Char91DotmcpChar93ListToolsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/waybills/': {
       id: '/admin/waybills/'
@@ -1346,6 +1455,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedForwardingForwardingIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/.mcp/invoke-tool/$tool': {
+      id: '/.mcp/invoke-tool/$tool'
+      path: '/.mcp/invoke-tool/$tool'
+      fullPath: '/.mcp/invoke-tool/$tool'
+      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.lovable/oauth/consent': {
+      id: '/.lovable/oauth/consent'
+      path: '/.lovable/oauth/consent'
+      fullPath: '/.lovable/oauth/consent'
+      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/shop/products/': {
       id: '/admin/shop/products/'
       path: '/shop/products'
@@ -1551,10 +1674,17 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   CartRoute: CartRoute,
   ContactRoute: ContactRoute,
+  McpRoute: McpRoute,
   ProductsRoute: ProductsRouteWithChildren,
+  PromoRoute: PromoRoute,
   ShippingRoute: ShippingRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TrackRoute: TrackRoute,
+  Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
+  Char91DotwellKnownChar93OauthProtectedResourceRoute:
+    Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
+  Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
   ApiPublicHooksMarkOverdueRoute: ApiPublicHooksMarkOverdueRoute,
   ApiPublicWechatCallbackRoute: ApiPublicWechatCallbackRoute,
 }

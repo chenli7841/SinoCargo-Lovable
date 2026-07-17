@@ -16,7 +16,10 @@ export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
       { title: "登录 / Sign In — SinoCargo" },
-      { name: "description", content: "Sign in or create your SinoCargo account to manage orders and track shipments." },
+      {
+        name: "description",
+        content: "Sign in or create your SinoCargo account to manage orders and track shipments.",
+      },
     ],
   }),
   component: AuthPage,
@@ -70,11 +73,13 @@ function AuthPage() {
         if (phoneError) throw phoneError;
         if (!phoneAvailable) throw new Error(tr("手机号已被注册", "Phone number is already registered"));
 
+        const returnTo =
+          search.redirect && search.redirect.startsWith("/") ? search.redirect : "/";
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            emailRedirectTo: window.location.origin,
+            emailRedirectTo: window.location.origin + returnTo,
             data: { full_name: fullName, username, phone },
           },
         });
@@ -101,7 +106,11 @@ function AuthPage() {
   const handleGoogle = async () => {
     setBusy(true);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+      const returnTo =
+        search.redirect && search.redirect.startsWith("/") ? search.redirect : "/";
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: window.location.origin + returnTo,
+      });
       if (result.error) throw new Error(result.error.message || "Google sign-in failed");
       if (result.redirected) return;
     } catch (err: any) {
@@ -131,11 +140,15 @@ function AuthPage() {
             <button
               onClick={() => setMode("signin")}
               className={`rounded-full py-2 transition ${mode === "signin" ? "bg-background text-foreground shadow-sm" : "text-ink-soft"}`}
-            >{tr("登录", "Sign in")}</button>
+            >
+              {tr("登录", "Sign in")}
+            </button>
             <button
               onClick={() => setMode("signup")}
               className={`rounded-full py-2 transition ${mode === "signup" ? "bg-background text-foreground shadow-sm" : "text-ink-soft"}`}
-            >{tr("注册", "Sign up")}</button>
+            >
+              {tr("注册", "Sign up")}
+            </button>
           </div>
 
           <button
@@ -143,16 +156,42 @@ function AuthPage() {
             disabled={busy}
             className="mb-3 flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium transition hover:bg-accent disabled:opacity-50"
           >
-            <svg className="h-4 w-4" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.3 35.1 26.8 36 24 36c-5.2 0-9.6-3.1-11.3-7.5l-6.5 5C9.6 39.6 16.3 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.3 4.1-4.1 5.5l6.2 5.2c-.4.4 6.6-4.8 6.6-14.7 0-1.3-.1-2.4-.4-3.5z"/></svg>
+            <svg className="h-4 w-4" viewBox="0 0 48 48">
+              <path
+                fill="#FFC107"
+                d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"
+              />
+              <path
+                fill="#FF3D00"
+                d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"
+              />
+              <path
+                fill="#4CAF50"
+                d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.3 35.1 26.8 36 24 36c-5.2 0-9.6-3.1-11.3-7.5l-6.5 5C9.6 39.6 16.3 44 24 44z"
+              />
+              <path
+                fill="#1976D2"
+                d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.3 4.1-4.1 5.5l6.2 5.2c-.4.4 6.6-4.8 6.6-14.7 0-1.3-.1-2.4-.4-3.5z"
+              />
+            </svg>
             {tr("使用 Google 继续", "Continue with Google")}
           </button>
 
           <button
-            onClick={() => toast.info(tr("微信登录即将开放：管理员需在微信开放平台申请网页应用并填入 AppID/AppSecret", "WeChat sign-in coming soon — admin must register a WeChat Open Platform web app and add AppID/AppSecret"))}
+            onClick={() =>
+              toast.info(
+                tr(
+                  "微信登录即将开放：管理员需在微信开放平台申请网页应用并填入 AppID/AppSecret",
+                  "WeChat sign-in coming soon — admin must register a WeChat Open Platform web app and add AppID/AppSecret",
+                ),
+              )
+            }
             disabled={busy}
             className="mb-3 flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium transition hover:bg-accent disabled:opacity-50"
           >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="#07C160"><path d="M8.5 4C4.36 4 1 6.91 1 10.5c0 2.08 1.13 3.92 2.88 5.12L3 18l2.5-1.32c.79.21 1.63.32 2.5.32.2 0 .4-.01.6-.02-.06-.32-.1-.65-.1-.98 0-3.31 3.13-6 7-6 .27 0 .53.01.79.04C15.92 6.97 12.55 4 8.5 4zM6 8.5a1 1 0 110 2 1 1 0 010-2zm5 0a1 1 0 110 2 1 1 0 010-2zM16 10c-3.31 0-6 2.24-6 5s2.69 5 6 5c.74 0 1.45-.11 2.1-.32L20 21l-.5-1.8C21.07 18.27 22 16.74 22 15c0-2.76-2.69-5-6-5zm-2 4a.75.75 0 110 1.5.75.75 0 010-1.5zm4 0a.75.75 0 110 1.5.75.75 0 010-1.5z"/></svg>
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="#07C160">
+              <path d="M8.5 4C4.36 4 1 6.91 1 10.5c0 2.08 1.13 3.92 2.88 5.12L3 18l2.5-1.32c.79.21 1.63.32 2.5.32.2 0 .4-.01.6-.02-.06-.32-.1-.65-.1-.98 0-3.31 3.13-6 7-6 .27 0 .53.01.79.04C15.92 6.97 12.55 4 8.5 4zM6 8.5a1 1 0 110 2 1 1 0 010-2zm5 0a1 1 0 110 2 1 1 0 010-2zM16 10c-3.31 0-6 2.24-6 5s2.69 5 6 5c.74 0 1.45-.11 2.1-.32L20 21l-.5-1.8C21.07 18.27 22 16.74 22 15c0-2.76-2.69-5-6-5zm-2 4a.75.75 0 110 1.5.75.75 0 010-1.5zm4 0a.75.75 0 110 1.5.75.75 0 010-1.5z" />
+            </svg>
             {tr("使用微信登录", "Continue with WeChat")}
           </button>
 
@@ -169,7 +208,9 @@ function AuthPage() {
                 <div className="relative">
                   <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
                   <input
-                    required value={username} onChange={(e) => setUsername(stripSpaces(e.target.value))}
+                    required
+                    value={username}
+                    onChange={(e) => setUsername(stripSpaces(e.target.value))}
                     placeholder={tr("登录名（不含空格，不区分大小写）", "Login name (no spaces, case-insensitive)")}
                     className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
                   />
@@ -177,7 +218,10 @@ function AuthPage() {
                 <div className="relative">
                   <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
                   <input
-                    required type="email" value={email} onChange={(e) => setEmail(stripSpaces(e.target.value))}
+                    required
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(stripSpaces(e.target.value))}
                     placeholder={tr("邮箱", "Email")}
                     className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
                   />
@@ -185,8 +229,14 @@ function AuthPage() {
                 <div className="relative">
                   <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
                   <input
-                    required type="tel" value={phone} onChange={(e) => setPhone(stripSpaces(e.target.value))}
-                    placeholder={tr("手机号（如 6478917666 或 +1-647-891-7666）", "Phone, e.g. 6478917666 or +1-647-891-7666")}
+                    required
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(stripSpaces(e.target.value))}
+                    placeholder={tr(
+                      "手机号（如 6478917666 或 +1-647-891-7666）",
+                      "Phone, e.g. 6478917666 or +1-647-891-7666",
+                    )}
                     className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
                   />
                 </div>
@@ -195,7 +245,11 @@ function AuthPage() {
               <div className="relative">
                 <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
                 <input
-                  required type="text" autoComplete="username" value={identifier} onChange={(e) => setIdentifier(stripSpaces(e.target.value))}
+                  required
+                  type="text"
+                  autoComplete="username"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(stripSpaces(e.target.value))}
                   placeholder={tr("登录名 / 邮箱 / 手机号", "Login name / Email / Phone")}
                   className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
                 />
@@ -204,13 +258,18 @@ function AuthPage() {
             <div className="relative">
               <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
               <input
-                required type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
+                required
+                type="password"
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder={tr("密码（至少6位）", "Password (min 6)")}
                 className="h-11 w-full rounded-xl border border-border bg-background pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
               />
             </div>
             <button
-              type="submit" disabled={busy}
+              type="submit"
+              disabled={busy}
               className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-cta-gradient text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
@@ -220,9 +279,13 @@ function AuthPage() {
 
           <p className="mt-6 text-center text-xs text-ink-soft">
             {tr("继续即表示同意我们的", "By continuing you agree to our")}{" "}
-            <Link to="/about" className="underline">{tr("服务条款", "Terms")}</Link>
+            <Link to="/about" className="underline">
+              {tr("服务条款", "Terms")}
+            </Link>
             {" · "}
-            <Link to="/contact" className="underline">{tr("帮助", "Help")}</Link>
+            <Link to="/contact" className="underline">
+              {tr("帮助", "Help")}
+            </Link>
           </p>
         </div>
       </div>

@@ -9,7 +9,11 @@ export const Route = createFileRoute("/shipping")({
   head: () => ({
     meta: [
       { title: "集运服务 / Shipping — SinoCargo" },
-      { name: "description", content: "International consolidation from China to Canada. Air 7-12 days, sea 30-45 days. Free freight calculator inside." },
+      {
+        name: "description",
+        content:
+          "International consolidation from China to Canada. Air 7-12 days, sea 30-45 days. Free freight calculator inside.",
+      },
       { property: "og:title", content: "China → Canada Consolidation — SinoCargo" },
       { property: "og:description", content: "Air & sea freight from China to Canada with a free calculator." },
     ],
@@ -18,14 +22,26 @@ export const Route = createFileRoute("/shipping")({
 });
 
 type RouteTypeKey = "air" | "sea" | "express" | "truck" | "storage";
-interface RouteTypeCfg { enabled: boolean; unit_price_cad: number; transit: string; route: string; dim_divisor: number }
+interface RouteTypeCfg {
+  enabled: boolean;
+  unit_price_cad: number;
+  transit: string;
+  route: string;
+  dim_divisor: number;
+}
 const ROUTE_TYPE_KEYS: RouteTypeKey[] = ["air", "sea", "express", "truck", "storage"];
 // Shown until /admin → 系统设置 → 线路类型设置 has been saved at least once (seeded by migration).
 const ROUTE_TYPE_FALLBACK: Record<RouteTypeKey, RouteTypeCfg> = {
   air: { enabled: true, unit_price_cad: 14.5, transit: "7-12 天", route: "广州 → 多伦多 / 温哥华", dim_divisor: 6000 },
   sea: { enabled: true, unit_price_cad: 4.2, transit: "30-45 天", route: "广州 → 温哥华，整柜海运", dim_divisor: 6000 },
   express: { enabled: false, unit_price_cad: 18.5, transit: "4-7 天", route: "广州 → 全加拿大", dim_divisor: 5000 },
-  truck: { enabled: false, unit_price_cad: 2.9, transit: "15-25 天", route: "广州 → 多伦多，陆运整柜", dim_divisor: 6000 },
+  truck: {
+    enabled: false,
+    unit_price_cad: 2.9,
+    transit: "15-25 天",
+    route: "广州 → 多伦多，陆运整柜",
+    dim_divisor: 6000,
+  },
   storage: { enabled: false, unit_price_cad: 0, transit: "", route: "广州 / 义乌仓代为仓储", dim_divisor: 6000 },
 };
 const ROUTE_TYPE_META: Record<RouteTypeKey, { label: string; labelEn: string; icon: typeof Plane }> = {
@@ -49,10 +65,18 @@ function ShippingPage() {
   const [result, setResult] = useState<number | null>(null);
 
   useEffect(() => {
-    (supabase as any).from("app_settings").select("value").eq("key", "route_type_display").maybeSingle()
+    (supabase as any)
+      .from("app_settings")
+      .select("value")
+      .eq("key", "route_type_display")
+      .maybeSingle()
       .then(({ data }: any) => {
         if (!data?.value) return;
-        setRouteTypes(Object.fromEntries(ROUTE_TYPE_KEYS.map((k) => [k, { ...ROUTE_TYPE_FALLBACK[k], ...(data.value[k] ?? {}) }])) as Record<RouteTypeKey, RouteTypeCfg>);
+        setRouteTypes(
+          Object.fromEntries(
+            ROUTE_TYPE_KEYS.map((k) => [k, { ...ROUTE_TYPE_FALLBACK[k], ...(data.value[k] ?? {}) }]),
+          ) as Record<RouteTypeKey, RouteTypeCfg>,
+        );
       });
   }, []);
 
@@ -104,11 +128,29 @@ function ShippingPage() {
           const cfg = routeTypes[m];
           const Icon = ROUTE_TYPE_META[m].icon;
           return (
-            <div key={m} className={i === 0 ? "rounded-2xl border border-border bg-hero p-6 text-white" : "rounded-2xl border border-border bg-surface p-6"}>
-              <div className={`flex items-center gap-2 text-xs uppercase tracking-wider ${i === 0 ? "text-white/60" : "text-ink-soft"}`}>
-                <Icon className="h-3.5 w-3.5" /> {lang === "zh" ? ROUTE_TYPE_META[m].label : ROUTE_TYPE_META[m].labelEn} ({cfg.transit})
+            <div
+              key={m}
+              className={
+                i === 0
+                  ? "rounded-2xl border border-border bg-hero p-6 text-white"
+                  : "rounded-2xl border border-border bg-surface p-6"
+              }
+            >
+              <div
+                className={`flex items-center gap-2 text-xs uppercase tracking-wider ${i === 0 ? "text-white/60" : "text-ink-soft"}`}
+              >
+                <Icon className="h-3.5 w-3.5" /> {lang === "zh" ? ROUTE_TYPE_META[m].label : ROUTE_TYPE_META[m].labelEn}{" "}
+                ({cfg.transit})
               </div>
-              <div className={i === 0 ? "mt-3 font-display text-3xl font-bold" : "mt-3 font-display text-3xl font-bold text-brand-gradient"}>CA${cfg.unit_price_cad} / kg</div>
+              <div
+                className={
+                  i === 0
+                    ? "mt-3 font-display text-3xl font-bold"
+                    : "mt-3 font-display text-3xl font-bold text-brand-gradient"
+                }
+              >
+                CA${cfg.unit_price_cad} / kg
+              </div>
               <p className={`mt-2 text-sm ${i === 0 ? "text-white/70" : "text-ink-soft"}`}>{cfg.route}</p>
             </div>
           );
@@ -125,7 +167,10 @@ function ShippingPage() {
           <div className="space-y-5">
             <div>
               <label className="mb-2 block text-sm font-medium">{t("shipping.method")}</label>
-              <div className="grid gap-2 rounded-full bg-accent p-1" style={{ gridTemplateColumns: `repeat(${Math.max(enabledMethods.length, 1)}, minmax(0,1fr))` }}>
+              <div
+                className="grid gap-2 rounded-full bg-accent p-1"
+                style={{ gridTemplateColumns: `repeat(${Math.max(enabledMethods.length, 1)}, minmax(0,1fr))` }}
+              >
                 {enabledMethods.map((m) => (
                   <button
                     key={m}
@@ -140,8 +185,11 @@ function ShippingPage() {
             <div>
               <label className="mb-2 block text-sm font-medium">{t("shipping.weight_label")}</label>
               <input
-                type="number" step="0.1" min="0"
-                value={weight} onChange={(e) => setWeight(e.target.value)}
+                type="number"
+                step="0.1"
+                min="0"
+                value={weight}
+                onChange={(e) => setWeight(e.target.value)}
                 className="h-11 w-full rounded-md border border-border bg-background px-3 outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
               />
             </div>
@@ -155,11 +203,15 @@ function ShippingPage() {
                 ].map((f) => (
                   <div key={f.p} className="relative">
                     <input
-                      type="number" min="0"
-                      value={f.v} onChange={(e) => f.set(e.target.value)}
+                      type="number"
+                      min="0"
+                      value={f.v}
+                      onChange={(e) => f.set(e.target.value)}
                       className="h-11 w-full rounded-md border border-border bg-background pl-8 pr-2 outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
                     />
-                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-ink-soft">{f.p}</span>
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-ink-soft">
+                      {f.p}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -176,9 +228,7 @@ function ShippingPage() {
             <div className="mt-2 font-display text-5xl font-bold">
               {result === null ? "CA$ — " : `CA$${result.toFixed(2)}`}
             </div>
-            {result !== null && (
-              <div className="mt-1 text-sm text-white/70">{formatCad(result)}</div>
-            )}
+            {result !== null && <div className="mt-1 text-sm text-white/70">{formatCad(result)}</div>}
             <p className="mt-6 text-xs leading-relaxed text-white/60">
               {lang === "zh"
                 ? `* 实际运费以入库实测为准，体积重 = 长×宽×高/${routeTypes[method].dim_divisor}`

@@ -81,10 +81,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return [
         ...prev,
         {
-          slug: p.slug, nameZh: p.name.zh, nameEn: p.name.en, image: p.image,
-          priceCNY: p.priceCNY, weightKg: p.weightKg,
-          purchaseType: p.purchaseType, moq: p.moq, packQty: p.packQty, packWeightKg: p.packWeightKg,
-          availableRouteCodes: p.availableRouteCodes ?? [], quantity: minQty,
+          slug: p.slug,
+          nameZh: p.name.zh,
+          nameEn: p.name.en,
+          image: p.image,
+          priceCNY: p.priceCNY,
+          weightKg: p.weightKg,
+          purchaseType: p.purchaseType,
+          moq: p.moq,
+          packQty: p.packQty,
+          packWeightKg: p.packWeightKg,
+          availableRouteCodes: p.availableRouteCodes ?? [],
+          quantity: minQty,
         },
       ];
     });
@@ -105,19 +113,29 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
   const remove = (slug: string) => {
     setItems((prev) => prev.filter((i) => i.slug !== slug));
-    setSelected((s) => { const n = { ...s }; delete n[slug]; return n; });
+    setSelected((s) => {
+      const n = { ...s };
+      delete n[slug];
+      return n;
+    });
   };
-  const clear = () => { setItems([]); setSelected({}); };
+  const clear = () => {
+    setItems([]);
+    setSelected({});
+  };
   const clearSlugs = (slugs: string[]) => {
     const set = new Set(slugs);
     setItems((prev) => prev.filter((i) => !set.has(i.slug)));
-    setSelected((s) => { const n = { ...s }; for (const x of slugs) delete n[x]; return n; });
+    setSelected((s) => {
+      const n = { ...s };
+      for (const x of slugs) delete n[x];
+      return n;
+    });
   };
 
   const isSelected = (slug: string) => selected[slug] !== false; // default selected
   const toggleSelect = (slug: string) => setSelected((s) => ({ ...s, [slug]: !isSelected(slug) }));
-  const setAllSelected = (v: boolean) =>
-    setSelected(Object.fromEntries(items.map((i) => [i.slug, v])));
+  const setAllSelected = (v: boolean) => setSelected(Object.fromEntries(items.map((i) => [i.slug, v])));
 
   const count = items.reduce((n, i) => n + i.quantity, 0);
   const subtotalCNY = items.reduce((s, i) => s + i.priceCNY * i.quantity, 0);
@@ -129,12 +147,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const selectedWeightKg = selectedItems.reduce((w, i) => w + lineWeightKg(i), 0);
 
   return (
-    <Ctx.Provider value={{
-      items, count, subtotalCNY, totalWeightKg,
-      selected, selectedItems, selectedCount, selectedSubtotalCNY, selectedWeightKg,
-      toggleSelect, setAllSelected, isSelected,
-      add, update, remove, clear, clearSlugs,
-    }}>
+    <Ctx.Provider
+      value={{
+        items,
+        count,
+        subtotalCNY,
+        totalWeightKg,
+        selected,
+        selectedItems,
+        selectedCount,
+        selectedSubtotalCNY,
+        selectedWeightKg,
+        toggleSelect,
+        setAllSelected,
+        isSelected,
+        add,
+        update,
+        remove,
+        clear,
+        clearSlugs,
+      }}
+    >
       {children}
     </Ctx.Provider>
   );

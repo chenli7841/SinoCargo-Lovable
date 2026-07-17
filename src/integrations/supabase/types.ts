@@ -539,6 +539,48 @@ export type Database = {
         }
         Relationships: []
       }
+      customer_hs_items: {
+        Row: {
+          created_at: string
+          ctns: number | null
+          description: string
+          hs_code: string | null
+          id: string
+          items_per_carton: number | null
+          note: string | null
+          sku: string | null
+          unit_price_cad: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          ctns?: number | null
+          description: string
+          hs_code?: string | null
+          id?: string
+          items_per_carton?: number | null
+          note?: string | null
+          sku?: string | null
+          unit_price_cad?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          ctns?: number | null
+          description?: string
+          hs_code?: string | null
+          id?: string
+          items_per_carton?: number | null
+          note?: string | null
+          sku?: string | null
+          unit_price_cad?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       customs_rules: {
         Row: {
           created_at: string
@@ -809,6 +851,7 @@ export type Database = {
           route_id: string | null
           shipping_method: string
           status: string
+          storage_fee_from: string | null
           tracking_no: string | null
           updated_at: string
           user_id: string
@@ -853,6 +896,7 @@ export type Database = {
           route_id?: string | null
           shipping_method: string
           status?: string
+          storage_fee_from?: string | null
           tracking_no?: string | null
           updated_at?: string
           user_id: string
@@ -897,6 +941,7 @@ export type Database = {
           route_id?: string | null
           shipping_method?: string
           status?: string
+          storage_fee_from?: string | null
           tracking_no?: string | null
           updated_at?: string
           user_id?: string
@@ -1239,6 +1284,7 @@ export type Database = {
           paid_at: string | null
           paid_cad: number
           paid_cny: number
+          payment_method: string
           period_end: string | null
           period_start: string | null
           status: Database["public"]["Enums"]["invoice_status"]
@@ -1265,6 +1311,7 @@ export type Database = {
           paid_at?: string | null
           paid_cad?: number
           paid_cny?: number
+          payment_method?: string
           period_end?: string | null
           period_start?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
@@ -1291,6 +1338,7 @@ export type Database = {
           paid_at?: string | null
           paid_cad?: number
           paid_cny?: number
+          payment_method?: string
           period_end?: string | null
           period_start?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
@@ -3086,26 +3134,6 @@ export type Database = {
         }
         Returns: string
       }
-      check_username_available: {
-        Args: { p_username: string }
-        Returns: boolean
-      }
-      check_email_available: {
-        Args: { p_email: string }
-        Returns: boolean
-      }
-      check_phone_available: {
-        Args: { p_phone: string }
-        Returns: boolean
-      }
-      normalize_phone: {
-        Args: { p_phone: string }
-        Returns: string
-      }
-      resolve_login_email: {
-        Args: { p_identifier: string }
-        Returns: string
-      }
       admin_change_route: {
         Args: {
           _entity_id: string
@@ -3117,19 +3145,19 @@ export type Database = {
         Returns: Json
       }
       admin_ship_shop_order: { Args: { _order_id: string }; Returns: Json }
-      batch_payment_status: { Args: { _batch_id: string }; Returns: string }
-      resolve_hs_code_rates: {
-        Args: {
-          p_gst_rate: number
-          p_hs_code: string
-          p_mfn_rate: number
-          p_name_zh: string
-          p_sima_involved: boolean
-          p_unit: string
-        }
-        Returns: Json
+      award_points_for_spend: {
+        Args: { _amount_cad: number; _user_id: string }
+        Returns: number
       }
+      batch_payment_status: { Args: { _batch_id: string }; Returns: string }
       carton_payment_status: { Args: { _carton_id: string }; Returns: string }
+      check_email_available: { Args: { p_email: string }; Returns: boolean }
+      check_phone_available: { Args: { p_phone: string }; Returns: boolean }
+      check_username_available: {
+        Args: { p_username: string }
+        Returns: boolean
+      }
+      current_fx_cny_to_cad: { Args: never; Returns: number }
       find_by_any_no: { Args: { _input: string }; Returns: Json }
       gen_customer_code: { Args: never; Returns: string }
       gen_waybill_no: {
@@ -3150,15 +3178,17 @@ export type Database = {
       }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
       lookup_shipment: { Args: { _tracking_no: string }; Returns: Json }
-      track_by_any_no: { Args: { _input: string }; Returns: Json }
       mark_invoices_overdue: { Args: never; Returns: number }
       normalize_no: { Args: { _input: string }; Returns: string }
+      normalize_phone: { Args: { p_phone: string }; Returns: string }
       pallet_payment_status: { Args: { _pallet_id: string }; Returns: string }
       pay_batch: { Args: { _batch_no: string }; Returns: Json }
       pay_invoice: { Args: { _invoice_id: string }; Returns: Json }
       pay_order_items: { Args: { _item_ids: string[] }; Returns: Json }
+      pay_storage_fees: { Args: never; Returns: Json }
       place_forwarding: { Args: { _payload: Json }; Returns: Json }
       place_shop_order: { Args: { _payload: Json }; Returns: Json }
+      preview_storage_fees: { Args: never; Returns: Json }
       quote_shop_order: { Args: { _payload: Json }; Returns: Json }
       recompute_mark_nos_for_parent: {
         Args: { _forwarding_id: string; _order_id: string }
@@ -3168,8 +3198,21 @@ export type Database = {
         Args: { _waybill_id: string }
         Returns: undefined
       }
+      resolve_hs_code_rates: {
+        Args: {
+          p_gst_rate: number
+          p_hs_code: string
+          p_mfn_rate: number
+          p_name_zh: string
+          p_sima_involved: boolean
+          p_unit: string
+        }
+        Returns: Json
+      }
+      resolve_login_email: { Args: { p_identifier: string }; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      track_by_any_no: { Args: { _input: string }; Returns: Json }
       unpaid_batches_summary: {
         Args: never
         Returns: {

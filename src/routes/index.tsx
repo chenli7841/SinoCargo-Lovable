@@ -17,14 +17,19 @@ const homeCatsQO = queryOptions({
 });
 
 export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "SinoCargo — 中国到加拿大跨境采购 + 集运" },
-      { name: "description", content: "自营商城 + 国际集运一站搞定。源头好物、双币结算、全程可追踪，平均 7–12 天送达加拿大。" },
-      { property: "og:title", content: "SinoCargo — China to Canada Sourcing" },
-      { property: "og:description", content: "Self-operated marketplace plus international consolidation, 7-12 day air to Canada." },
-    ],
-  }),
+  head: () => {
+    const img = "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ececec33-843a-4443-a70f-61d8d276a071/id-preview-09d32aaf--d5d0f95a-a75a-4a1e-b677-98fa89e2c8c6.lovable.app-1784083834318.png";
+    return {
+      meta: [
+        { title: "SinoCargo — 中国到加拿大跨境采购 + 集运" },
+        { name: "description", content: "自营商城 + 国际集运一站搞定。源头好物、双币结算、全程可追踪，平均 7–12 天送达加拿大。" },
+        { property: "og:title", content: "SinoCargo — 中国到加拿大跨境采购 + 集运" },
+        { property: "og:description", content: "自营商城 + 国际集运一站搞定。源头好物、双币结算、全程可追踪，平均 7–12 天送达加拿大。" },
+        { property: "og:image", content: img },
+        { name: "twitter:image", content: img },
+      ],
+    };
+  },
   loader: ({ context }) => {
     context.queryClient.ensureQueryData(homeProductsQO);
     context.queryClient.ensureQueryData(homeCatsQO);

@@ -24,12 +24,16 @@ export const listInvoices = createServerFn({ method: "POST" })
     const { data: rows, error, count } = await q.range(from, from + pageSize - 1);
     if (error) throw new Error(error.message);
     const userIds = Array.from(new Set((rows ?? []).map((r: any) => r.user_id)));
-    const { data: profs } = await supabaseAdmin.from("profiles").select("id, full_name, customer_code, email").in("id", userIds.length ? userIds : ["00000000-0000-0000-0000-000000000000"]);
+    const { data: profs } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name, customer_code, email")
+      .in("id", userIds.length ? userIds : ["00000000-0000-0000-0000-000000000000"]);
     const profMap = new Map((profs ?? []).map((p: any) => [p.id, p]));
     return {
       items: (rows ?? []).map((r: any) => ({ ...r, customer: profMap.get(r.user_id) ?? null })),
       total: count ?? 0,
-      page, pageSize,
+      page,
+      pageSize,
     };
   });
 
@@ -40,8 +44,11 @@ export const listMyInvoices = createServerFn({ method: "POST" })
     const page = Math.max(1, data.page ?? 1);
     const pageSize = Math.min(100, data.pageSize ?? 20);
     const from = (page - 1) * pageSize;
-    let q = context.supabase.from("invoices").select("*", { count: "exact" })
-      .eq("user_id", context.userId).order("created_at", { ascending: false });
+    let q = context.supabase
+      .from("invoices")
+      .select("*", { count: "exact" })
+      .eq("user_id", context.userId)
+      .order("created_at", { ascending: false });
     if (data.status) q = q.eq("status", data.status as any);
     const { data: rows, error, count } = await q.range(from, from + pageSize - 1);
     if (error) throw new Error(error.message);
@@ -58,7 +65,11 @@ export const getInvoice = createServerFn({ method: "POST" })
     if (!inv) throw new Error("Not found");
     const { data: items } = await context.supabase.from("invoice_items").select("*").eq("invoice_id", data.id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: prof } = await supabaseAdmin.from("profiles").select("id, full_name, customer_code, email, phone").eq("id", inv.user_id).maybeSingle();
+    const { data: prof } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name, customer_code, email, phone")
+      .eq("id", inv.user_id)
+      .maybeSingle();
     return { invoice: inv, items: items ?? [], customer: prof ?? null };
   });
 
@@ -69,11 +80,19 @@ async function computeWaybillFees(admin: any, waybillId: string, fx: number) {
   let route_id: string | null = null;
   let declared_cad = 0;
   if (wb.order_id) {
-    const { data: ord } = await admin.from("orders").select("route_id, subtotal_cny").eq("id", wb.order_id).maybeSingle();
+    const { data: ord } = await admin
+      .from("orders")
+      .select("route_id, subtotal_cny")
+      .eq("id", wb.order_id)
+      .maybeSingle();
     route_id = ord?.route_id ?? null;
     declared_cad = +(Number(ord?.subtotal_cny ?? 0) * fx).toFixed(2);
   } else if (wb.forwarding_id) {
-    const { data: fo } = await admin.from("forwarding_orders").select("route_id, declared_value_cad").eq("id", wb.forwarding_id).maybeSingle();
+    const { data: fo } = await admin
+      .from("forwarding_orders")
+      .select("route_id, declared_value_cad")
+      .eq("id", wb.forwarding_id)
+      .maybeSingle();
     route_id = fo?.route_id ?? null;
     declared_cad = Number(fo?.declared_value_cad ?? 0);
   }
@@ -91,11 +110,13 @@ async function computeWaybillFees(admin: any, waybillId: string, fx: number) {
   const chargeable = rule.weight_mode === "actual" ? w : rule.weight_mode === "volumetric" ? volW : Math.max(w, volW);
   let freight_cny = chargeable * Number(rule.unit_price_cny) + Number(rule.extra_fee_cny);
   if (freight_cny < Number(rule.min_charge_cny)) freight_cny = Number(rule.min_charge_cny);
-  const insurance_cny = declared_cad && Number(rule.insurance_rate_pct ?? 0) > 0
-    ? +(declared_cad * (Number(rule.insurance_rate_pct) / 100) / fx).toFixed(2) : 0;
+  const insurance_cny =
+    declared_cad && Number(rule.insurance_rate_pct ?? 0) > 0
+      ? +((declared_cad * (Number(rule.insurance_rate_pct) / 100)) / fx).toFixed(2)
+      : 0;
   let customs_cny = 0;
   if (customs?.enabled && declared_cad >= Number(customs.threshold_cad)) {
-    customs_cny = +(declared_cad * (Number(customs.rate_pct) / 100) / fx).toFixed(2);
+    customs_cny = +((declared_cad * (Number(customs.rate_pct) / 100)) / fx).toFixed(2);
   }
   return { freight_cny: +freight_cny.toFixed(2), customs_cny, insurance_cny, ref: { wb, route_id } };
 }
@@ -115,19 +136,23 @@ export const generateInvoiceForWaybill = createServerFn({ method: "POST" })
     const total = fees.freight_cny + fees.customs_cny + fees.insurance_cny;
     if (total <= 0) throw new Error("无法计算费用，请检查线路与重量");
 
-    const { data: inv, error } = await supabaseAdmin.from("invoices").insert({
-      user_id: wb.user_id,
-      type: "waybill",
-      subtotal_cny: total,
-      freight_cny: fees.freight_cny,
-      customs_cny: fees.customs_cny,
-      insurance_cny: fees.insurance_cny,
-      total_cny: total,
-      fx_rate: fx,
-      due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
-      created_by: context.userId,
-      note: `运单 ${wb.waybill_no}`,
-    } as any).select("*").single();
+    const { data: inv, error } = await supabaseAdmin
+      .from("invoices")
+      .insert({
+        user_id: wb.user_id,
+        type: "waybill",
+        subtotal_cny: total,
+        freight_cny: fees.freight_cny,
+        customs_cny: fees.customs_cny,
+        insurance_cny: fees.insurance_cny,
+        total_cny: total,
+        fx_rate: fx,
+        due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+        created_by: context.userId,
+        note: `运单 ${wb.waybill_no}`,
+      } as any)
+      .select("*")
+      .single();
     if (error) throw new Error(error.message);
 
     await supabaseAdmin.from("invoice_items").insert({
@@ -163,31 +188,54 @@ export const generateBatchInvoice = createServerFn({ method: "POST" })
       byUser.get(w.user_id)!.push(w);
     }
 
-    const { data: batch } = await supabaseAdmin.from("batches").select("batch_no").eq("id", data.batch_id).maybeSingle();
+    const { data: batch } = await supabaseAdmin
+      .from("batches")
+      .select("batch_no")
+      .eq("id", data.batch_id)
+      .maybeSingle();
     const fx = await getFxCadPerCny(supabaseAdmin);
     const created: any[] = [];
     for (const [uid, items] of byUser.entries()) {
-      let f = 0, c = 0, ins = 0;
+      let f = 0,
+        c = 0,
+        ins = 0;
       const lineItems: any[] = [];
       for (const w of items) {
         const fees = await computeWaybillFees(supabaseAdmin, w.id, fx);
-        f += fees.freight_cny; c += fees.customs_cny; ins += fees.insurance_cny;
+        f += fees.freight_cny;
+        c += fees.customs_cny;
+        ins += fees.insurance_cny;
         lineItems.push({
-          waybill_id: w.id, order_id: w.order_id, forwarding_id: w.forwarding_id,
+          waybill_id: w.id,
+          order_id: w.order_id,
+          forwarding_id: w.forwarding_id,
           description: `运单 ${w.waybill_no}`,
-          freight_cny: fees.freight_cny, customs_cny: fees.customs_cny, insurance_cny: fees.insurance_cny,
+          freight_cny: fees.freight_cny,
+          customs_cny: fees.customs_cny,
+          insurance_cny: fees.insurance_cny,
           amount_cny: fees.freight_cny + fees.customs_cny + fees.insurance_cny,
         });
       }
       const total = +(f + c + ins).toFixed(2);
       if (total <= 0) continue;
-      const { data: inv } = await supabaseAdmin.from("invoices").insert({
-        user_id: uid, type: "batch",
-        subtotal_cny: total, freight_cny: +f.toFixed(2), customs_cny: +c.toFixed(2), insurance_cny: +ins.toFixed(2),
-        total_cny: total, fx_rate: fx, batch_no: batch?.batch_no ?? null,
-        due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
-        created_by: context.userId, note: `批次 ${batch?.batch_no ?? data.batch_id}`,
-      } as any).select("*").single();
+      const { data: inv } = await supabaseAdmin
+        .from("invoices")
+        .insert({
+          user_id: uid,
+          type: "batch",
+          subtotal_cny: total,
+          freight_cny: +f.toFixed(2),
+          customs_cny: +c.toFixed(2),
+          insurance_cny: +ins.toFixed(2),
+          total_cny: total,
+          fx_rate: fx,
+          batch_no: batch?.batch_no ?? null,
+          due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+          created_by: context.userId,
+          note: `批次 ${batch?.batch_no ?? data.batch_id}`,
+        } as any)
+        .select("*")
+        .single();
       if (inv) {
         await supabaseAdmin.from("invoice_items").insert(lineItems.map((li) => ({ ...li, invoice_id: inv.id })));
         created.push(inv);
@@ -241,19 +289,36 @@ export const financeSummary = createServerFn({ method: "POST" })
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const since = new Date(Date.now() - (data.days ?? 30) * 86400000).toISOString();
-    let q = supabaseAdmin.from("invoices").select("status, total_cny, paid_cny, created_at, user_id").gte("created_at", since);
+    let q = supabaseAdmin
+      .from("invoices")
+      .select("status, total_cny, paid_cny, created_at, user_id")
+      .gte("created_at", since);
     if (data.userId) q = q.eq("user_id", data.userId);
     const { data: rows, error } = await q;
     if (error) throw new Error(error.message);
-    let total = 0, paid = 0, unpaid = 0, overdue = 0, count = 0, paidCount = 0;
+    let total = 0,
+      paid = 0,
+      unpaid = 0,
+      overdue = 0,
+      count = 0,
+      paidCount = 0;
     for (const r of rows ?? []) {
       total += Number(r.total_cny);
       count++;
-      if (r.status === "paid") { paid += Number(r.paid_cny || r.total_cny); paidCount++; }
-      else if (r.status === "overdue") overdue += Number(r.total_cny);
+      if (r.status === "paid") {
+        paid += Number(r.paid_cny || r.total_cny);
+        paidCount++;
+      } else if (r.status === "overdue") overdue += Number(r.total_cny);
       else if (r.status === "unpaid") unpaid += Number(r.total_cny);
     }
-    return { total_cny: +total.toFixed(2), paid_cny: +paid.toFixed(2), unpaid_cny: +unpaid.toFixed(2), overdue_cny: +overdue.toFixed(2), count, paid_count: paidCount };
+    return {
+      total_cny: +total.toFixed(2),
+      paid_cny: +paid.toFixed(2),
+      unpaid_cny: +unpaid.toFixed(2),
+      overdue_cny: +overdue.toFixed(2),
+      count,
+      paid_count: paidCount,
+    };
   });
 
 // ---- Merge unpaid invoices of the same user into one ----
@@ -267,28 +332,39 @@ export const mergeInvoices = createServerFn({ method: "POST" })
     const { data: invs } = await supabaseAdmin.from("invoices").select("*").in("id", data.ids);
     if (!invs || invs.length !== data.ids.length) throw new Error("账单不存在");
     const uid = invs[0].user_id;
-    if (!invs.every(i => i.user_id === uid)) throw new Error("只能合并同一客户的账单");
-    if (!invs.every(i => i.status === "unpaid")) throw new Error("仅支持合并未付账单");
+    if (!invs.every((i) => i.user_id === uid)) throw new Error("只能合并同一客户的账单");
+    if (!invs.every((i) => i.status === "unpaid")) throw new Error("仅支持合并未付账单");
 
     const sum = (k: string) => invs.reduce((s, i) => s + Number((i as any)[k] || 0), 0);
     const total = +sum("total_cny").toFixed(2);
     const fx = invs[0].fx_rate ?? 0.19;
 
-    const { data: newInv, error } = await supabaseAdmin.from("invoices").insert({
-      user_id: uid, type: "merge",
-      subtotal_cny: total, freight_cny: +sum("freight_cny").toFixed(2),
-      customs_cny: +sum("customs_cny").toFixed(2), insurance_cny: +sum("insurance_cny").toFixed(2),
-      total_cny: total, fx_rate: fx,
-      due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
-      created_by: context.userId,
-      note: data.note ?? `合并: ${invs.map(i => i.invoice_no).join(", ")}`,
-    } as any).select("*").single();
+    const { data: newInv, error } = await supabaseAdmin
+      .from("invoices")
+      .insert({
+        user_id: uid,
+        type: "merge",
+        subtotal_cny: total,
+        freight_cny: +sum("freight_cny").toFixed(2),
+        customs_cny: +sum("customs_cny").toFixed(2),
+        insurance_cny: +sum("insurance_cny").toFixed(2),
+        total_cny: total,
+        fx_rate: fx,
+        due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+        created_by: context.userId,
+        note: data.note ?? `合并: ${invs.map((i) => i.invoice_no).join(", ")}`,
+      } as any)
+      .select("*")
+      .single();
     if (error) throw new Error(error.message);
 
     // Move items
     await supabaseAdmin.from("invoice_items").update({ invoice_id: newInv.id }).in("invoice_id", data.ids);
     // Void originals
-    await supabaseAdmin.from("invoices").update({ status: "void", note: `合并到 ${newInv.invoice_no}` }).in("id", data.ids);
+    await supabaseAdmin
+      .from("invoices")
+      .update({ status: "void", note: `合并到 ${newInv.invoice_no}` })
+      .in("id", data.ids);
     return { ok: true, invoice: newInv };
   });
 
@@ -305,35 +381,47 @@ export const splitInvoice = createServerFn({ method: "POST" })
     if (inv.status !== "unpaid") throw new Error("仅未付账单可拆分");
     const { data: items } = await supabaseAdmin.from("invoice_items").select("*").eq("invoice_id", data.id);
     if (!items?.length) throw new Error("无明细");
-    const toMove = items.filter(i => data.item_ids.includes(i.id));
-    const remain = items.filter(i => !data.item_ids.includes(i.id));
+    const toMove = items.filter((i) => data.item_ids.includes(i.id));
+    const remain = items.filter((i) => !data.item_ids.includes(i.id));
     if (!toMove.length || !remain.length) throw new Error("拆分后两边都需保留至少一条明细");
 
     const sum = (rows: any[], k: string) => rows.reduce((s, r) => s + Number(r[k] || 0), 0);
     const newTotal = +sum(toMove, "amount_cny").toFixed(2);
 
-    const { data: newInv, error } = await supabaseAdmin.from("invoices").insert({
-      user_id: inv.user_id, type: "split",
-      subtotal_cny: newTotal, freight_cny: +sum(toMove, "freight_cny").toFixed(2),
-      customs_cny: +sum(toMove, "customs_cny").toFixed(2), insurance_cny: +sum(toMove, "insurance_cny").toFixed(2),
-      total_cny: newTotal, fx_rate: inv.fx_rate,
-      due_date: inv.due_date, created_by: context.userId,
-      note: data.note ?? `从 ${inv.invoice_no} 拆出`,
-    } as any).select("*").single();
+    const { data: newInv, error } = await supabaseAdmin
+      .from("invoices")
+      .insert({
+        user_id: inv.user_id,
+        type: "split",
+        subtotal_cny: newTotal,
+        freight_cny: +sum(toMove, "freight_cny").toFixed(2),
+        customs_cny: +sum(toMove, "customs_cny").toFixed(2),
+        insurance_cny: +sum(toMove, "insurance_cny").toFixed(2),
+        total_cny: newTotal,
+        fx_rate: inv.fx_rate,
+        due_date: inv.due_date,
+        created_by: context.userId,
+        note: data.note ?? `从 ${inv.invoice_no} 拆出`,
+      } as any)
+      .select("*")
+      .single();
     if (error) throw new Error(error.message);
 
     await supabaseAdmin.from("invoice_items").update({ invoice_id: newInv.id }).in("id", data.item_ids);
 
     // Recompute original totals
     const remainTotal = +sum(remain, "amount_cny").toFixed(2);
-    await supabaseAdmin.from("invoices").update({
-      subtotal_cny: remainTotal,
-      freight_cny: +sum(remain, "freight_cny").toFixed(2),
-      customs_cny: +sum(remain, "customs_cny").toFixed(2),
-      insurance_cny: +sum(remain, "insurance_cny").toFixed(2),
-      total_cny: remainTotal,
-      note: (inv.note ? inv.note + " · " : "") + `拆分: 新出 ${newInv.invoice_no}`,
-    } as any).eq("id", data.id);
+    await supabaseAdmin
+      .from("invoices")
+      .update({
+        subtotal_cny: remainTotal,
+        freight_cny: +sum(remain, "freight_cny").toFixed(2),
+        customs_cny: +sum(remain, "customs_cny").toFixed(2),
+        insurance_cny: +sum(remain, "insurance_cny").toFixed(2),
+        total_cny: remainTotal,
+        note: (inv.note ? inv.note + " · " : "") + `拆分: 新出 ${newInv.invoice_no}`,
+      } as any)
+      .eq("id", data.id);
 
     return { ok: true, invoice: newInv };
   });
@@ -343,28 +431,46 @@ export const listOfflinePayments = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { invoice_id: string }) => d)
   .handler(async ({ data, context }) => {
-    const { data: rows, error } = await context.supabase.from("offline_payments")
-      .select("*").eq("invoice_id", data.invoice_id).order("paid_at", { ascending: false });
+    const { data: rows, error } = await context.supabase
+      .from("offline_payments")
+      .select("*")
+      .eq("invoice_id", data.invoice_id)
+      .order("paid_at", { ascending: false });
     if (error) throw new Error(error.message);
     return { items: rows ?? [] };
   });
 
 export const addOfflinePayment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: {
-    invoice_id: string; method: string; amount_cad: number;
-    reference?: string; paid_at?: string; attachment_url?: string; note?: string;
-  }) => d)
+  .inputValidator(
+    (d: {
+      invoice_id: string;
+      method: string;
+      amount_cad: number;
+      reference?: string;
+      paid_at?: string;
+      attachment_url?: string;
+      note?: string;
+    }) => d,
+  )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     if (!(data.amount_cad > 0)) throw new Error("金额必须 > 0");
-    const { data: row, error } = await supabaseAdmin.from("offline_payments").insert({
-      invoice_id: data.invoice_id, method: data.method, amount_cad: data.amount_cad,
-      reference: data.reference || null, paid_at: data.paid_at || new Date().toISOString(),
-      attachment_url: data.attachment_url || null, note: data.note || null,
-      recorded_by: context.userId,
-    }).select("*").single();
+    const { data: row, error } = await supabaseAdmin
+      .from("offline_payments")
+      .insert({
+        invoice_id: data.invoice_id,
+        method: data.method,
+        amount_cad: data.amount_cad,
+        reference: data.reference || null,
+        paid_at: data.paid_at || new Date().toISOString(),
+        attachment_url: data.attachment_url || null,
+        note: data.note || null,
+        recorded_by: context.userId,
+      })
+      .select("*")
+      .single();
     if (error) throw new Error(error.message);
     return { ok: true, payment: row };
   });
@@ -379,4 +485,3 @@ export const deleteOfflinePayment = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
-

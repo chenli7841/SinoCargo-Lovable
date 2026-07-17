@@ -16,15 +16,26 @@ export const Route = createFileRoute("/_authenticated/checkout")({
 });
 
 interface Address {
-  id: string; recipient: string; phone: string;
-  line1: string; line2: string | null;
-  city: string; province: string; postal_code: string; country: string;
+  id: string;
+  recipient: string;
+  phone: string;
+  line1: string;
+  line2: string | null;
+  city: string;
+  province: string;
+  postal_code: string;
+  country: string;
   is_default: boolean;
 }
 interface RouteRow {
-  id: string; code: string; name_zh: string; name_en: string | null;
-  shipping_method: string; destination_code: string | null;
-  transit_days_min: number | null; transit_days_max: number | null;
+  id: string;
+  code: string;
+  name_zh: string;
+  name_en: string | null;
+  shipping_method: string;
+  destination_code: string | null;
+  transit_days_min: number | null;
+  transit_days_max: number | null;
 }
 
 const sb = supabase as any;
@@ -63,16 +74,21 @@ function CheckoutPage() {
   const [couponMsg, setCouponMsg] = useState<string>("");
 
   useEffect(() => {
-    sb.from("addresses").select("*").order("is_default", { ascending: false }).then(({ data }: any) => {
-      const list = (data as any[]) ?? [];
-      setAddresses(list);
-      const def = list.find((a) => a.is_default) ?? list[0];
-      if (def) setAddrId(def.id);
-    });
+    sb.from("addresses")
+      .select("*")
+      .order("is_default", { ascending: false })
+      .then(({ data }: any) => {
+        const list = (data as any[]) ?? [];
+        setAddresses(list);
+        const def = list.find((a) => a.is_default) ?? list[0];
+        if (def) setAddrId(def.id);
+      });
   }, []);
 
   const fetchRoutes = useServerFn(listPublicRoutes);
-  useEffect(() => { fetchRoutes().then((r: any) => setRoutes(r.items ?? [])); }, []);
+  useEffect(() => {
+    fetchRoutes().then((r: any) => setRoutes(r.items ?? []));
+  }, []);
 
   // Every selected item is guaranteed (by the cart page) to share at least one route — the
   // whole point of picking a shared route up front is that ALL lines resolve to the SAME
@@ -81,10 +97,11 @@ function CheckoutPage() {
   const allCodes = useMemo(() => (routes ?? []).map((r) => r.code), [routes]);
   const commonRoutes = useMemo(() => {
     if (!routes || items.length === 0) return [];
-    const codes = items.reduce<string[] | null>((acc, i) => {
-      const mine = allowedCodes(i, allCodes);
-      return acc === null ? mine : acc.filter((c) => mine.includes(c));
-    }, null) ?? [];
+    const codes =
+      items.reduce<string[] | null>((acc, i) => {
+        const mine = allowedCodes(i, allCodes);
+        return acc === null ? mine : acc.filter((c) => mine.includes(c));
+      }, null) ?? [];
     return routes.filter((r) => codes.includes(r.code));
   }, [items, routes, allCodes]);
 
@@ -99,7 +116,10 @@ function CheckoutPage() {
   // Live quote — an explicit route_code makes every line resolve to the SAME route, so the
   // backend pools them into one freight calculation instead of resolving a route per product.
   useEffect(() => {
-    if (items.length === 0 || !routeCode) { setQuote(null); return; }
+    if (items.length === 0 || !routeCode) {
+      setQuote(null);
+      return;
+    }
     setQuoting(true);
     sb.rpc("quote_shop_order", {
       _payload: {
@@ -108,21 +128,28 @@ function CheckoutPage() {
         items: items.map((i) => ({ slug: i.slug, quantity: i.quantity, mode: i.purchaseType })),
         coupon_code: couponCode || undefined,
       },
-    }).then(({ data, error }: any) => {
-      if (error || !data?.ok) {
-        setQuote(null);
-        const reason = data?.reason;
-        if (reason === "no_route_for_product") {
-          toast.error(tr(`商品 ${data.slug} 未配置 ${data.mode}/${data.method} 线路`, `Product ${data.slug} missing ${data.mode}/${data.method} route`));
-        } else if (reason === "below_moq") {
-          toast.error(tr(`${data.slug} 未达起订量 ${data.moq}`, `${data.slug} below MOQ ${data.moq}`));
-        } else if (reason) {
-          toast.error(tr(`报价失败: ${reason}`, `Quote failed: ${reason}`));
+    })
+      .then(({ data, error }: any) => {
+        if (error || !data?.ok) {
+          setQuote(null);
+          const reason = data?.reason;
+          if (reason === "no_route_for_product") {
+            toast.error(
+              tr(
+                `商品 ${data.slug} 未配置 ${data.mode}/${data.method} 线路`,
+                `Product ${data.slug} missing ${data.mode}/${data.method} route`,
+              ),
+            );
+          } else if (reason === "below_moq") {
+            toast.error(tr(`${data.slug} 未达起订量 ${data.moq}`, `${data.slug} below MOQ ${data.moq}`));
+          } else if (reason) {
+            toast.error(tr(`报价失败: ${reason}`, `Quote failed: ${reason}`));
+          }
+        } else {
+          setQuote(data);
         }
-      } else {
-        setQuote(data);
-      }
-    }).finally(() => setQuoting(false));
+      })
+      .finally(() => setQuoting(false));
   }, [routeCode, couponCode, items.map((i) => `${i.slug}:${i.quantity}:${i.purchaseType}`).join(",")]);
 
   const subtotal = quote?.subtotal_cny ?? items.reduce((s, i) => s + i.priceCNY * i.quantity, 0);
@@ -138,7 +165,9 @@ function CheckoutPage() {
     const { data } = await sb.rpc("validate_coupon", { _code: code, _subtotal_cny: subtotal });
     if (data?.ok) {
       setCouponCode(code);
-      setCouponMsg(tr(`已应用：-${formatPrice(Number(data.discount_cny))}`, `Applied: -${formatPrice(Number(data.discount_cny))}`));
+      setCouponMsg(
+        tr(`已应用：-${formatPrice(Number(data.discount_cny))}`, `Applied: -${formatPrice(Number(data.discount_cny))}`),
+      );
     } else {
       setCouponCode("");
       const reasonMap: Record<string, [string, string]> = {
@@ -147,13 +176,20 @@ function CheckoutPage() {
         not_started: ["活动尚未开始", "Not started yet"],
         expired: ["优惠码已过期", "Coupon expired"],
         limit_reached: ["使用次数已用完", "Usage limit reached"],
-        min_order: [`未达最低消费 ${formatPrice(Number(data?.min_order_cny ?? 0))}`, `Below min order ${formatPrice(Number(data?.min_order_cny ?? 0))}`],
+        min_order: [
+          `未达最低消费 ${formatPrice(Number(data?.min_order_cny ?? 0))}`,
+          `Below min order ${formatPrice(Number(data?.min_order_cny ?? 0))}`,
+        ],
       };
       const m = reasonMap[data?.reason] ?? ["无效", "Invalid"];
       setCouponMsg(tr(m[0], m[1]));
     }
   };
-  const clearCoupon = () => { setCouponCode(""); setCouponInput(""); setCouponMsg(""); };
+  const clearCoupon = () => {
+    setCouponCode("");
+    setCouponInput("");
+    setCouponMsg("");
+  };
 
   const placeOrder = async () => {
     if (items.length === 0) return;
@@ -174,26 +210,32 @@ function CheckoutPage() {
       if (error) throw error;
       if (!data?.ok) {
         if (data?.reason === "insufficient") {
-          toast.error(tr(
-            `账户余额不足（需 CA$${Number(data.need_cad).toFixed(2)}，当前 CA$${Number(data.balance_cad).toFixed(2)}），请先充值`,
-            `Insufficient balance (need CA$${Number(data.need_cad).toFixed(2)}, have CA$${Number(data.balance_cad).toFixed(2)}) — please top up`
-          ), {
-            action: {
-              label: tr("去充值", "Top up"),
-              onClick: () => navigate({ to: "/account", search: { tab: "wallet" } }),
+          toast.error(
+            tr(
+              `账户余额不足（需 CA$${Number(data.need_cad).toFixed(2)}，当前 CA$${Number(data.balance_cad).toFixed(2)}），请先充值`,
+              `Insufficient balance (need CA$${Number(data.need_cad).toFixed(2)}, have CA$${Number(data.balance_cad).toFixed(2)}) — please top up`,
+            ),
+            {
+              action: {
+                label: tr("去充值", "Top up"),
+                onClick: () => navigate({ to: "/account", search: { tab: "wallet" } }),
+              },
             },
-          });
+          );
           setBusy(false);
           return;
         }
         throw new Error(data?.reason ?? "下单失败");
       }
       clearSlugs(items.map((i) => i.slug));
-      const pointsMsg = data.points_earned > 0 ? tr(`，获得 ${data.points_earned} 积分`, `, earned ${data.points_earned} points`) : "";
-      toast.success(tr(
-        `已生成 ${data.orders_count} 个订单，账单 ${data.invoice_no}${pointsMsg}`,
-        `${data.orders_count} order(s) created, invoice ${data.invoice_no}${pointsMsg}`
-      ));
+      const pointsMsg =
+        data.points_earned > 0 ? tr(`，获得 ${data.points_earned} 积分`, `, earned ${data.points_earned} points`) : "";
+      toast.success(
+        tr(
+          `已生成 ${data.orders_count} 个订单，账单 ${data.invoice_no}${pointsMsg}`,
+          `${data.orders_count} order(s) created, invoice ${data.invoice_no}${pointsMsg}`,
+        ),
+      );
       navigate({ to: "/invoices" });
     } catch (err: any) {
       toast.error(err.message ?? tr("下单失败", "Failed to place order"));
@@ -206,7 +248,9 @@ function CheckoutPage() {
     return (
       <div className="mx-auto max-w-2xl px-4 py-20 text-center">
         <h1 className="font-display text-2xl font-bold">{tr("没有要结算的商品", "Nothing to checkout")}</h1>
-        <Link to="/cart" className="mt-4 inline-block text-brand hover:underline">{tr("← 返回购物车", "← Back to cart")}</Link>
+        <Link to="/cart" className="mt-4 inline-block text-brand hover:underline">
+          {tr("← 返回购物车", "← Back to cart")}
+        </Link>
       </div>
     );
   }
@@ -218,20 +262,36 @@ function CheckoutPage() {
       <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
         <div className="space-y-6">
           <section className="rounded-2xl border border-border bg-surface p-6">
-            <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-bold"><MapPin className="h-5 w-5 text-brand" />{tr("收货地址", "Shipping address")}</h2>
+            <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-bold">
+              <MapPin className="h-5 w-5 text-brand" />
+              {tr("收货地址", "Shipping address")}
+            </h2>
             {addresses.length === 0 ? (
-              <Link to="/account" className="inline-flex items-center gap-2 rounded-full border border-dashed border-border px-4 py-3 text-sm text-ink-soft hover:border-brand">
+              <Link
+                to="/account"
+                className="inline-flex items-center gap-2 rounded-full border border-dashed border-border px-4 py-3 text-sm text-ink-soft hover:border-brand"
+              >
                 {tr("还没有地址，先去添加 →", "No address yet — add one →")}
               </Link>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {addresses.map((a) => (
-                  <button key={a.id} onClick={() => setAddrId(a.id)}
-                    className={`relative rounded-xl border p-4 text-left transition ${addrId === a.id ? "border-brand bg-brand/5" : "border-border hover:border-brand/40"}`}>
+                  <button
+                    key={a.id}
+                    onClick={() => setAddrId(a.id)}
+                    className={`relative rounded-xl border p-4 text-left transition ${addrId === a.id ? "border-brand bg-brand/5" : "border-border hover:border-brand/40"}`}
+                  >
                     {addrId === a.id && <CheckCircle2 className="absolute right-3 top-3 h-5 w-5 text-brand" />}
-                    <div className="font-semibold">{a.recipient} · {a.phone}</div>
-                    <div className="mt-1 text-sm">{a.line1}{a.line2 ? `, ${a.line2}` : ""}</div>
-                    <div className="text-sm text-ink-soft">{a.city}, {a.province} {a.postal_code}</div>
+                    <div className="font-semibold">
+                      {a.recipient} · {a.phone}
+                    </div>
+                    <div className="mt-1 text-sm">
+                      {a.line1}
+                      {a.line2 ? `, ${a.line2}` : ""}
+                    </div>
+                    <div className="text-sm text-ink-soft">
+                      {a.city}, {a.province} {a.postal_code}
+                    </div>
                   </button>
                 ))}
               </div>
@@ -239,12 +299,18 @@ function CheckoutPage() {
           </section>
 
           <section className="rounded-2xl border border-border bg-surface p-6">
-            <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-bold"><RouteIcon className="h-5 w-5 text-brand" />{tr("运输线路", "Shipping route")}</h2>
+            <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-bold">
+              <RouteIcon className="h-5 w-5 text-brand" />
+              {tr("运输线路", "Shipping route")}
+            </h2>
             {routes === null ? (
               <p className="text-sm text-ink-soft">{tr("加载线路中…", "Loading routes…")}</p>
             ) : commonRoutes.length === 0 ? (
               <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                {tr("所选商品没有共同可用的线路，无法一起结算，请返回购物车分开结算", "Selected items don't share a common route — go back to cart and check out separately")}
+                {tr(
+                  "所选商品没有共同可用的线路，无法一起结算，请返回购物车分开结算",
+                  "Selected items don't share a common route — go back to cart and check out separately",
+                )}
               </p>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
@@ -252,9 +318,16 @@ function CheckoutPage() {
                   const Icon = r.shipping_method === "sea" ? Ship : r.shipping_method === "truck" ? Truck : Plane;
                   const active = routeCode === r.code;
                   return (
-                    <button key={r.code} onClick={() => setRouteCode(r.code)}
-                      className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${active ? "border-brand bg-brand/5" : "border-border hover:border-brand/40"}`}>
-                      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${active ? "bg-brand text-brand-foreground" : "bg-accent text-ink-soft"}`}><Icon className="h-4 w-4" /></span>
+                    <button
+                      key={r.code}
+                      onClick={() => setRouteCode(r.code)}
+                      className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${active ? "border-brand bg-brand/5" : "border-border hover:border-brand/40"}`}
+                    >
+                      <span
+                        className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${active ? "bg-brand text-brand-foreground" : "bg-accent text-ink-soft"}`}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </span>
                       <div className="flex-1">
                         <div className="font-semibold">{lang === "zh" ? r.name_zh : (r.name_en ?? r.name_zh)}</div>
                         {(r.transit_days_min || r.transit_days_max) && (
@@ -277,87 +350,115 @@ function CheckoutPage() {
               <div className="space-y-5">
                 {groupLinesByRoute(quote.lines).map((g) => {
                   const modes = Array.from(new Set(g.lines.map((l: any) => l.mode)));
-                  const modeLabel = modes.map((m) => m === "business" ? tr("商业采购", "Business") : tr("个人采购", "Personal")).join(" / ");
+                  const modeLabel = modes
+                    .map((m) => (m === "business" ? tr("商业采购", "Business") : tr("个人采购", "Personal")))
+                    .join(" / ");
                   return (
-                  <div key={g.route_code} className="rounded-xl border border-border">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/40 px-4 py-2.5">
-                      <div className="flex items-center gap-2 text-sm">
-                        <RouteIcon className="h-4 w-4 text-brand" />
-                        <span className="font-mono font-semibold">{g.route_code}</span>
-                        <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand">{modeLabel}</span>
-                        <span className="text-xs text-ink-soft">· {g.lines.length} {tr("件商品", "items")}</span>
+                    <div key={g.route_code} className="rounded-xl border border-border">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-accent/40 px-4 py-2.5">
+                        <div className="flex items-center gap-2 text-sm">
+                          <RouteIcon className="h-4 w-4 text-brand" />
+                          <span className="font-mono font-semibold">{g.route_code}</span>
+                          <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold text-brand">
+                            {modeLabel}
+                          </span>
+                          <span className="text-xs text-ink-soft">
+                            · {g.lines.length} {tr("件商品", "items")}
+                          </span>
+                        </div>
+                        <div className="text-xs text-ink-soft">
+                          {tr("线路小计", "Route subtotal")}：
+                          <span className="ml-1 font-semibold text-foreground">{formatPrice(g.subtotal)}</span>
+                        </div>
                       </div>
-                      <div className="text-xs text-ink-soft">
-                        {tr("线路小计", "Route subtotal")}：
-                        <span className="ml-1 font-semibold text-foreground">{formatPrice(g.subtotal)}</span>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="text-left text-xs text-ink-soft">
+                            <tr>
+                              <th className="px-4 py-2">{tr("商品", "Item")}</th>
+                              <th className="py-2">{tr("箱数", "Cartons")}</th>
+                              <th className="py-2">{tr("计费重", "Chargeable")}</th>
+                              <th className="py-2">{tr("运费", "Freight")}</th>
+                              <th className="py-2">{tr("关税", "Duty")}</th>
+                              <th className="px-4 py-2 text-right">{tr("保险", "Insurance")}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.lines.map((l: any) => {
+                              const it = items.find((x) => x.slug === l.slug);
+                              return (
+                                <tr key={l.slug} className="border-t border-border">
+                                  <td className="px-4 py-1.5">
+                                    <div className="line-clamp-1">
+                                      {it ? (lang === "zh" ? it.nameZh : it.nameEn) : l.slug}
+                                    </div>
+                                    <div className="text-[10px] text-ink-soft">
+                                      {l.mode === "business" ? tr("商业", "Business") : tr("个人", "Personal")}
+                                    </div>
+                                  </td>
+                                  <td>{Number(l.units ?? 0)}</td>
+                                  <td>{Number(l.chargeable_kg ?? 0).toFixed(2)} kg</td>
+                                  <td>{formatPrice(l.freight_cny)}</td>
+                                  <td>{formatPrice(l.customs_cny)}</td>
+                                  <td className="px-4 text-right">{formatPrice(l.insurance_cny)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot className="text-xs">
+                            <tr className="border-t border-border bg-accent/20">
+                              <td className="px-4 py-2 font-semibold" colSpan={3}>
+                                {tr("线路合计", "Route total")}
+                              </td>
+                              <td className="py-2 font-semibold">{formatPrice(g.freight)}</td>
+                              <td className="py-2 font-semibold">{formatPrice(g.customs)}</td>
+                              <td className="px-4 py-2 text-right font-semibold">{formatPrice(g.insurance)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
                       </div>
                     </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="text-left text-xs text-ink-soft">
-                          <tr>
-                            <th className="px-4 py-2">{tr("商品", "Item")}</th>
-                            <th className="py-2">{tr("箱数", "Cartons")}</th>
-                            <th className="py-2">{tr("计费重", "Chargeable")}</th>
-                            <th className="py-2">{tr("运费", "Freight")}</th>
-                            <th className="py-2">{tr("关税", "Duty")}</th>
-                            <th className="px-4 py-2 text-right">{tr("保险", "Insurance")}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {g.lines.map((l: any) => {
-                            const it = items.find((x) => x.slug === l.slug);
-                            return (
-                              <tr key={l.slug} className="border-t border-border">
-                                <td className="px-4 py-1.5">
-                                  <div className="line-clamp-1">{it ? (lang === "zh" ? it.nameZh : it.nameEn) : l.slug}</div>
-                                  <div className="text-[10px] text-ink-soft">{l.mode === "business" ? tr("商业", "Business") : tr("个人", "Personal")}</div>
-                                </td>
-                                <td>{Number(l.units ?? 0)}</td>
-                                <td>{Number(l.chargeable_kg ?? 0).toFixed(2)} kg</td>
-                                <td>{formatPrice(l.freight_cny)}</td>
-                                <td>{formatPrice(l.customs_cny)}</td>
-                                <td className="px-4 text-right">{formatPrice(l.insurance_cny)}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                        <tfoot className="text-xs">
-                          <tr className="border-t border-border bg-accent/20">
-                            <td className="px-4 py-2 font-semibold" colSpan={3}>{tr("线路合计", "Route total")}</td>
-                            <td className="py-2 font-semibold">{formatPrice(g.freight)}</td>
-                            <td className="py-2 font-semibold">{formatPrice(g.customs)}</td>
-                            <td className="px-4 py-2 text-right font-semibold">{formatPrice(g.insurance)}</td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
                   );
                 })}
               </div>
               {!quote.has_freight_rule && (
-                <p className="mt-3 text-xs text-amber-500">{tr("部分线路未配置运费规则，运费按 0 计算", "Some routes have no freight rule; freight = 0")}</p>
+                <p className="mt-3 text-xs text-amber-500">
+                  {tr("部分线路未配置运费规则，运费按 0 计算", "Some routes have no freight rule; freight = 0")}
+                </p>
               )}
             </section>
           )}
 
           <section className="rounded-2xl border border-border bg-surface p-6">
-            <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-bold"><Tag className="h-5 w-5 text-brand"/>{tr("优惠码", "Coupon")}</h2>
+            <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-bold">
+              <Tag className="h-5 w-5 text-brand" />
+              {tr("优惠码", "Coupon")}
+            </h2>
             {couponCode ? (
               <div className="flex items-center gap-3 rounded-xl border border-brand/40 bg-brand/5 p-3">
-                <Tag className="h-4 w-4 text-brand"/>
+                <Tag className="h-4 w-4 text-brand" />
                 <span className="font-mono text-sm font-semibold">{couponCode}</span>
                 <span className="text-xs text-success">{couponMsg}</span>
-                <button onClick={clearCoupon} className="ml-auto grid h-6 w-6 place-items-center rounded-full hover:bg-accent"><X className="h-3 w-3"/></button>
+                <button
+                  onClick={clearCoupon}
+                  className="ml-auto grid h-6 w-6 place-items-center rounded-full hover:bg-accent"
+                >
+                  <X className="h-3 w-3" />
+                </button>
               </div>
             ) : (
               <div className="flex gap-2">
-                <input value={couponInput} onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                <input
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
                   placeholder={tr("输入优惠码", "Enter coupon code")}
-                  className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm font-mono uppercase outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"/>
-                <button onClick={applyCoupon} disabled={!couponInput.trim()}
-                  className="rounded-xl border border-border bg-foreground px-4 py-2 text-sm font-semibold text-background hover:bg-foreground/90 disabled:opacity-40">
+                  className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm font-mono uppercase outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+                />
+                <button
+                  onClick={applyCoupon}
+                  disabled={!couponInput.trim()}
+                  className="rounded-xl border border-border bg-foreground px-4 py-2 text-sm font-semibold text-background hover:bg-foreground/90 disabled:opacity-40"
+                >
                   {tr("应用", "Apply")}
                 </button>
               </div>
@@ -368,7 +469,9 @@ function CheckoutPage() {
           <section className="rounded-2xl border border-border bg-surface p-6">
             <h2 className="mb-4 font-display text-lg font-bold">{tr("备注", "Order note")}</h2>
             <textarea
-              value={note} onChange={(e) => setNote(e.target.value)} rows={3}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={3}
               placeholder={tr("特殊要求、合箱备注等（可选）", "Special instructions (optional)")}
               className="w-full resize-none rounded-xl border border-border bg-background p-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
             />
@@ -380,7 +483,9 @@ function CheckoutPage() {
           <div className="mb-4 max-h-48 space-y-2 overflow-y-auto text-sm">
             {items.map((i) => (
               <div key={i.slug} className="flex justify-between gap-3">
-                <span className="line-clamp-1">{lang === "zh" ? i.nameZh : i.nameEn} × {i.quantity}</span>
+                <span className="line-clamp-1">
+                  {lang === "zh" ? i.nameZh : i.nameEn} × {i.quantity}
+                </span>
                 <span className="shrink-0 font-medium">{formatPrice(i.priceCNY * i.quantity)}</span>
               </div>
             ))}
@@ -398,7 +503,9 @@ function CheckoutPage() {
                     </div>
                     <div className="flex justify-between text-ink-soft">
                       <span>{tr("运/税/险", "Frt/Duty/Ins")}</span>
-                      <span>{formatPrice(g.freight)} / {formatPrice(g.customs)} / {formatPrice(g.insurance)}</span>
+                      <span>
+                        {formatPrice(g.freight)} / {formatPrice(g.customs)} / {formatPrice(g.insurance)}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -407,8 +514,29 @@ function CheckoutPage() {
             <Row label={tr("运费合计", "Shipping")} value={quoting ? "…" : formatPrice(freight)} />
             <Row label={tr("关税合计", "Duty")} value={quoting ? "…" : formatPrice(customs)} />
             <Row label={tr("保险合计", "Insurance")} value={quoting ? "…" : formatPrice(insurance)} />
-            {discount > 0 && <Row label={<span className="text-success">{tr("优惠", "Discount")} ({couponCode})</span> as any} value={<span className="text-success">-{formatPrice(discount)}</span> as any} />}
-            <Row label={tr("线路", "Route")} value={selectedRoute ? (lang === "zh" ? selectedRoute.name_zh : (selectedRoute.name_en ?? selectedRoute.name_zh)) : "—"} muted />
+            {discount > 0 && (
+              <Row
+                label={
+                  (
+                    <span className="text-success">
+                      {tr("优惠", "Discount")} ({couponCode})
+                    </span>
+                  ) as any
+                }
+                value={(<span className="text-success">-{formatPrice(discount)}</span>) as any}
+              />
+            )}
+            <Row
+              label={tr("线路", "Route")}
+              value={
+                selectedRoute
+                  ? lang === "zh"
+                    ? selectedRoute.name_zh
+                    : (selectedRoute.name_en ?? selectedRoute.name_zh)
+                  : "—"
+              }
+              muted
+            />
           </div>
           <div className="my-4 h-px bg-border" />
           <div className="flex items-baseline justify-between">
@@ -419,13 +547,16 @@ function CheckoutPage() {
             </div>
           </div>
           <button
-            onClick={placeOrder} disabled={busy || !addrId || !routeCode || quoting || !quote?.ok}
+            onClick={placeOrder}
+            disabled={busy || !addrId || !routeCode || quoting || !quote?.ok}
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-cta-gradient px-6 py-3.5 text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {tr("提交订单并付款", "Place order & pay")}
           </button>
-          <p className="mt-3 text-center text-[11px] text-ink-soft">{tr("提交后从账户余额扣款并生成账单", "Submit deducts wallet balance and creates an invoice")}</p>
+          <p className="mt-3 text-center text-[11px] text-ink-soft">
+            {tr("提交后从账户余额扣款并生成账单", "Submit deducts wallet balance and creates an invoice")}
+          </p>
         </aside>
       </div>
     </div>
@@ -433,7 +564,12 @@ function CheckoutPage() {
 }
 
 function Row({ label, value, muted }: { label: React.ReactNode; value: React.ReactNode; muted?: boolean }) {
-  return <div className={`flex justify-between ${muted ? "text-ink-soft" : ""}`}><span>{label}</span><span>{value}</span></div>;
+  return (
+    <div className={`flex justify-between ${muted ? "text-ink-soft" : ""}`}>
+      <span>{label}</span>
+      <span>{value}</span>
+    </div>
+  );
 }
 
 interface RouteGroup {

@@ -12,7 +12,10 @@ export const Route = createFileRoute("/contact")({
   head: () => ({
     meta: [
       { title: "联系我们 / Contact — SinoCargo" },
-      { name: "description", content: "Contact SinoCargo — offices in Toronto and Guangzhou. Bilingual support, hours 9-21 EST / 21-09 CST." },
+      {
+        name: "description",
+        content: "Contact SinoCargo — offices in Toronto and Guangzhou. Bilingual support, hours 9-21 EST / 21-09 CST.",
+      },
       { property: "og:title", content: "Contact SinoCargo" },
       { property: "og:description", content: "Reach our bilingual team in Toronto and Guangzhou." },
     ],
@@ -22,23 +25,47 @@ export const Route = createFileRoute("/contact")({
 
 const sb = supabase as any;
 
-interface OfficeCfg { label_zh: string; label_en: string; address: string; phone: string; email: string; hours_zh: string; hours_en: string }
+interface OfficeCfg {
+  label_zh: string;
+  label_en: string;
+  address: string;
+  phone: string;
+  email: string;
+  hours_zh: string;
+  hours_en: string;
+}
 const OFFICE_FALLBACK: Record<"ca" | "cn", OfficeCfg> = {
   ca: {
-    label_zh: "多伦多总部", label_en: "Toronto HQ",
+    label_zh: "多伦多总部",
+    label_en: "Toronto HQ",
     address: "200 King St W, Toronto, ON M5H 3T4",
-    phone: "+1 (416) 000-0000", email: "",
-    hours_zh: "周一至周六 9:00–21:00 EST", hours_en: "Mon–Sat 9:00–21:00 EST",
+    phone: "+1 (416) 000-0000",
+    email: "",
+    hours_zh: "周一至周六 9:00–21:00 EST",
+    hours_en: "Mon–Sat 9:00–21:00 EST",
   },
   cn: {
-    label_zh: "广州集运中心", label_en: "Guangzhou Warehouse",
+    label_zh: "广州集运中心",
+    label_en: "Guangzhou Warehouse",
     address: "广东省广州市白云区机场路 88 号",
-    phone: "+86 20 0000-0000", email: "",
-    hours_zh: "周一至周六 9:00–18:00 CST", hours_en: "Mon–Sat 9:00–18:00 CST",
+    phone: "+86 20 0000-0000",
+    email: "",
+    hours_zh: "周一至周六 9:00–18:00 CST",
+    hours_en: "Mon–Sat 9:00–18:00 CST",
   },
 };
 
-function QrCard({ label, handle, qrUrl, onZoom }: { label: string; handle: string; qrUrl: string; onZoom: () => void }) {
+function QrCard({
+  label,
+  handle,
+  qrUrl,
+  onZoom,
+}: {
+  label: string;
+  handle: string;
+  qrUrl: string;
+  onZoom: () => void;
+}) {
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-border bg-surface p-5">
       {qrUrl ? (
@@ -64,16 +91,26 @@ function QrCard({ label, handle, qrUrl, onZoom }: { label: string; handle: strin
 }
 
 function OfficeCard({ cfg, lang, region }: { cfg: OfficeCfg; lang: "zh" | "en"; region: "ca" | "cn" }) {
-  const regionLabel = region === "ca" ? (lang === "zh" ? "加拿大" : "Canada") : (lang === "zh" ? "中国" : "China");
+  const regionLabel = region === "ca" ? (lang === "zh" ? "加拿大" : "Canada") : lang === "zh" ? "中国" : "China";
   return (
     <div className="rounded-2xl border border-border bg-surface p-6">
       <div className="text-xs font-semibold uppercase tracking-wider text-brand">{regionLabel}</div>
       <h2 className="mt-2 font-display text-xl font-bold">{lang === "zh" ? cfg.label_zh : cfg.label_en}</h2>
       <ul className="mt-4 space-y-2 text-sm text-ink-soft">
-        <li className="flex items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0" /> {cfg.address}</li>
-        <li className="flex items-center gap-2"><Phone className="h-4 w-4" /> {cfg.phone}</li>
-        {cfg.email && <li className="flex items-center gap-2"><Mail className="h-4 w-4" /> {cfg.email}</li>}
-        <li className="flex items-center gap-2"><Clock className="h-4 w-4" /> {lang === "zh" ? cfg.hours_zh : cfg.hours_en}</li>
+        <li className="flex items-start gap-2">
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0" /> {cfg.address}
+        </li>
+        <li className="flex items-center gap-2">
+          <Phone className="h-4 w-4" /> {cfg.phone}
+        </li>
+        {cfg.email && (
+          <li className="flex items-center gap-2">
+            <Mail className="h-4 w-4" /> {cfg.email}
+          </li>
+        )}
+        <li className="flex items-center gap-2">
+          <Clock className="h-4 w-4" /> {lang === "zh" ? cfg.hours_zh : cfg.hours_en}
+        </li>
       </ul>
     </div>
   );
@@ -102,13 +139,18 @@ function ContactPage() {
 
   useEffect(() => {
     if (!zoomedQr) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setZoomedQr(null); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setZoomedQr(null);
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [zoomedQr]);
 
   useEffect(() => {
-    sb.from("app_settings").select("value").eq("key", "contact_offices").maybeSingle()
+    sb.from("app_settings")
+      .select("value")
+      .eq("key", "contact_offices")
+      .maybeSingle()
       .then(({ data }: any) => {
         if (!data?.value) return;
         setOffices({
@@ -129,7 +171,10 @@ function ContactPage() {
     try {
       await submitMessage({ data: { name, email, phone, message } });
       toast.success(lang === "zh" ? "已收到！我们会尽快回复。" : "Received! We'll get back to you shortly.");
-      setName(""); setEmail(""); setPhone(""); setMessage("");
+      setName("");
+      setEmail("");
+      setPhone("");
+      setMessage("");
     } catch (err: any) {
       toast.error(err.message ?? (lang === "zh" ? "提交失败，请稍后重试" : "Submit failed, please try again"));
     } finally {
@@ -153,20 +198,21 @@ function ContactPage() {
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <QrCard
-          label={lang === "zh" ? "微信" : "WeChat"} handle={company.wechat} qrUrl={company.wechat_qr_url}
+          label={lang === "zh" ? "微信" : "WeChat"}
+          handle={company.wechat}
+          qrUrl={company.wechat_qr_url}
           onZoom={() => setZoomedQr({ url: company.wechat_qr_url, label: lang === "zh" ? "微信" : "WeChat" })}
         />
         <QrCard
-          label="WhatsApp" handle={company.whatsapp} qrUrl={company.whatsapp_qr_url}
+          label="WhatsApp"
+          handle={company.whatsapp}
+          qrUrl={company.whatsapp_qr_url}
           onZoom={() => setZoomedQr({ url: company.whatsapp_qr_url, label: "WhatsApp" })}
         />
       </div>
 
       {zoomedQr && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-6"
-          onClick={() => setZoomedQr(null)}
-        >
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-6" onClick={() => setZoomedQr(null)}>
           <div className="relative" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
@@ -187,20 +233,46 @@ function ContactPage() {
       <form className="mt-10 rounded-3xl border border-border bg-surface p-6 sm:p-8" onSubmit={submit}>
         <h2 className="font-display text-xl font-bold">{lang === "zh" ? "在线留言" : "Send a message"}</h2>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)}
+          <input
+            required
+            maxLength={80}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             placeholder={lang === "zh" ? "您的姓名" : "Your name"}
-            className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30" />
-          <input required type="email" maxLength={120} value={email} onChange={(e) => setEmail(e.target.value)}
+            className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+          />
+          <input
+            required
+            type="email"
+            maxLength={120}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="Email"
-            className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30" />
-          <input type="tel" maxLength={40} value={phone} onChange={(e) => setPhone(e.target.value)}
+            className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+          />
+          <input
+            type="tel"
+            maxLength={40}
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
             placeholder={lang === "zh" ? "电话号码（可选）" : "Phone number (optional)"}
-            className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30 sm:col-span-2" />
+            className="h-11 rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30 sm:col-span-2"
+          />
         </div>
-        <textarea required maxLength={1000} rows={5} value={message} onChange={(e) => setMessage(e.target.value)}
+        <textarea
+          required
+          maxLength={1000}
+          rows={5}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
           placeholder={lang === "zh" ? "想咨询什么？" : "Tell us what you need…"}
-          className="mt-4 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30" />
-        <button type="submit" disabled={busy} className="mt-4 inline-flex items-center gap-2 rounded-full bg-cta-gradient px-6 py-3 text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50">
+          className="mt-4 w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          className="mt-4 inline-flex items-center gap-2 rounded-full bg-cta-gradient px-6 py-3 text-sm font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50"
+        >
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
           {lang === "zh" ? "提交" : "Submit"}
         </button>

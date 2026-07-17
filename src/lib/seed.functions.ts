@@ -42,8 +42,10 @@ export const resetAndSeedWaybills = createServerFn({ method: "POST" })
     const { data: prof } = await supabaseAdmin.from("profiles").select("customer_code").eq("id", uid).maybeSingle();
 
     // 3. 路线
-    const { data: routes } = await supabaseAdmin.from("shipping_routes")
-      .select("id, code, destination_code, shipping_method").eq("is_active", true);
+    const { data: routes } = await supabaseAdmin
+      .from("shipping_routes")
+      .select("id, code, destination_code, shipping_method")
+      .eq("is_active", true);
     if (!routes?.length) throw new Error("no active routes — create at least one route first");
 
     // 4. 创建集运订单 + 物品 + 运单（30% 多运单）
@@ -55,18 +57,24 @@ export const resetAndSeedWaybills = createServerFn({ method: "POST" })
     const ensureBatch = async (route: any) => {
       const key = `${route.shipping_method}|${route.destination_code}|${route.code}`;
       if (batchCache[key]) return batchCache[key];
-      const { data: b, error: be } = await supabaseAdmin.from("batches").insert({
-        shipping_method: route.shipping_method,
-        destination_code: route.destination_code,
-        planned_ship_date: new Date().toISOString().slice(0, 10),
-        status: "planning",
-      } as any).select("id, batch_no").single();
+      const { data: b, error: be } = await supabaseAdmin
+        .from("batches")
+        .insert({
+          shipping_method: route.shipping_method,
+          destination_code: route.destination_code,
+          planned_ship_date: new Date().toISOString().slice(0, 10),
+          status: "planning",
+        } as any)
+        .select("id, batch_no")
+        .single();
       if (be) throw new Error(be.message);
       batchCache[key] = { id: (b as any).id, batch_no: (b as any).batch_no };
       return batchCache[key];
     };
 
-    let fwCreated = 0, wbCreated = 0, itemsCreated = 0;
+    let fwCreated = 0,
+      wbCreated = 0,
+      itemsCreated = 0;
     for (let i = 0; i < target; i++) {
       const route: any = routes[i % routes.length];
       const status = FW_STATUSES[i % FW_STATUSES.length];
@@ -81,21 +89,25 @@ export const resetAndSeedWaybills = createServerFn({ method: "POST" })
       const declared = picked.reduce((s, p) => s + p.unit_price * p.qty, 0);
 
       // create forwarding_orders
-      const { data: fo, error: foe } = await supabaseAdmin.from("forwarding_orders").insert({
-        user_id: uid,
-        warehouse: ["guangzhou", "yiwu", "shenzhen"][i % 3],
-        shipping_method: route.shipping_method,
-        status,
-        customer_code: prof?.customer_code ?? null,
-        route_id: route.id,
-        route_code: route.code,
-        destination_code: route.destination_code,
-        domestic_tracking_no: "SF" + Math.floor(Math.random() * 1e10),
-        items_desc: picked.map(p => `${p.name}×${p.qty}`).join(", "),
-        declared_value_cad: +(declared * 0.19).toFixed(2),
-        payment_status: i % 3 === 0 ? "paid" : "unpaid",
-        box_count: itemCount,
-      } as any).select("id").single();
+      const { data: fo, error: foe } = await supabaseAdmin
+        .from("forwarding_orders")
+        .insert({
+          user_id: uid,
+          warehouse: ["guangzhou", "yiwu", "shenzhen"][i % 3],
+          shipping_method: route.shipping_method,
+          status,
+          customer_code: prof?.customer_code ?? null,
+          route_id: route.id,
+          route_code: route.code,
+          destination_code: route.destination_code,
+          domestic_tracking_no: "SF" + Math.floor(Math.random() * 1e10),
+          items_desc: picked.map((p) => `${p.name}×${p.qty}`).join(", "),
+          declared_value_cad: +(declared * 0.19).toFixed(2),
+          payment_status: i % 3 === 0 ? "paid" : "unpaid",
+          box_count: itemCount,
+        } as any)
+        .select("id")
+        .single();
       if (foe) throw new Error(foe.message);
       const foId = (fo as any).id;
       fwCreated++;
@@ -209,9 +221,11 @@ export const seedShopData = createServerFn({ method: "POST" })
     const catMap: Record<string, string> = {};
     for (let i = 0; i < CATS.length; i++) {
       const c = CATS[i];
-      const { data: row, error } = await supabaseAdmin.from("product_categories")
+      const { data: row, error } = await supabaseAdmin
+        .from("product_categories")
         .insert({ name: c.name, name_en: c.name_en, slug: c.slug, sort_order: i, is_active: true } as any)
-        .select("id").single();
+        .select("id")
+        .single();
       if (error) throw new Error(error.message);
       catMap[c.slug] = (row as any).id;
     }
@@ -226,33 +240,43 @@ export const seedShopData = createServerFn({ method: "POST" })
         const isBusiness = pIdx % 4 === 0;
         const seed1 = `${slug}-${pIdx}`;
         const cover = `https://picsum.photos/seed/${seed1}/800/800`;
-        const gallery = [1, 2, 3].map(n => `https://picsum.photos/seed/${seed1}-${n}/800/800`);
-        const { data: p, error } = await supabaseAdmin.from("products").insert({
-          sku, name: tpl.name, slug: `${slug}-${pIdx}`,
-          category_id: catMap[slug], brand: tpl.brand ?? null,
-          cover_url: cover, images: gallery,
-          description: `${tpl.name} — 高品质精选，正品保证，全球直邮。`,
-          status: "active", price_cny: tpl.price, compare_price_cny: tpl.price * 1.3,
-          weight_kg: +(0.2 + Math.random() * 2).toFixed(2),
-          length_cm: 20 + Math.floor(Math.random() * 30),
-          width_cm: 15 + Math.floor(Math.random() * 20),
-          height_cm: 10 + Math.floor(Math.random() * 15),
-          tags: [slug, tpl.brand ?? "general"].filter(Boolean) as string[],
-          hs_code: ["6109.10", "8517.62", "3304.99", "0901.21", "9405.40"][pIdx % 5],
-          manufacturer: tpl.brand ? `${tpl.brand} 制造商` : "广东深圳制造",
-          purchase_type: isBusiness ? "business" : "personal",
-          moq: isBusiness ? 10 : 1,
-          customs_mfn_rate: isBusiness ? 0.05 : 0,
-          customs_gst_rate: isBusiness ? 0.03 : 0,
-          customs_antidumping_rate: 0,
-          freight_cny: +(20 + Math.random() * 80).toFixed(2),
-          pack_qty: isBusiness ? 10 : 1,
-          pack_weight_kg: +(0.5 + Math.random() * 5).toFixed(2),
-          pack_length_cm: 30 + Math.floor(Math.random() * 30),
-          pack_width_cm: 20 + Math.floor(Math.random() * 20),
-          pack_height_cm: 15 + Math.floor(Math.random() * 25),
-          pack_volume_m3: +(0.01 + Math.random() * 0.05).toFixed(4),
-        } as any).select("id").single();
+        const gallery = [1, 2, 3].map((n) => `https://picsum.photos/seed/${seed1}-${n}/800/800`);
+        const { data: p, error } = await supabaseAdmin
+          .from("products")
+          .insert({
+            sku,
+            name: tpl.name,
+            slug: `${slug}-${pIdx}`,
+            category_id: catMap[slug],
+            brand: tpl.brand ?? null,
+            cover_url: cover,
+            images: gallery,
+            description: `${tpl.name} — 高品质精选，正品保证，全球直邮。`,
+            status: "active",
+            price_cny: tpl.price,
+            compare_price_cny: tpl.price * 1.3,
+            weight_kg: +(0.2 + Math.random() * 2).toFixed(2),
+            length_cm: 20 + Math.floor(Math.random() * 30),
+            width_cm: 15 + Math.floor(Math.random() * 20),
+            height_cm: 10 + Math.floor(Math.random() * 15),
+            tags: [slug, tpl.brand ?? "general"].filter(Boolean) as string[],
+            hs_code: ["6109.10", "8517.62", "3304.99", "0901.21", "9405.40"][pIdx % 5],
+            manufacturer: tpl.brand ? `${tpl.brand} 制造商` : "广东深圳制造",
+            purchase_type: isBusiness ? "business" : "personal",
+            moq: isBusiness ? 10 : 1,
+            customs_mfn_rate: isBusiness ? 0.05 : 0,
+            customs_gst_rate: isBusiness ? 0.03 : 0,
+            customs_antidumping_rate: 0,
+            freight_cny: +(20 + Math.random() * 80).toFixed(2),
+            pack_qty: isBusiness ? 10 : 1,
+            pack_weight_kg: +(0.5 + Math.random() * 5).toFixed(2),
+            pack_length_cm: 30 + Math.floor(Math.random() * 30),
+            pack_width_cm: 20 + Math.floor(Math.random() * 20),
+            pack_height_cm: 15 + Math.floor(Math.random() * 25),
+            pack_volume_m3: +(0.01 + Math.random() * 0.05).toFixed(4),
+          } as any)
+          .select("id")
+          .single();
         if (error) throw new Error(error.message);
         productIds.push({ id: (p as any).id, price: tpl.price });
 
@@ -268,12 +292,19 @@ export const seedShopData = createServerFn({ method: "POST" })
             stock: 0,
             is_active: true,
           } as any);
-          const { data: vrow } = await supabaseAdmin.from("product_variants")
-            .select("id").eq("sku", `${sku}-V${v + 1}`).single();
+          const { data: vrow } = await supabaseAdmin
+            .from("product_variants")
+            .select("id")
+            .eq("sku", `${sku}-V${v + 1}`)
+            .single();
           if (vrow) {
             await supabaseAdmin.from("inventory_movements").insert({
-              variant_id: (vrow as any).id, qty_delta: stock, reason: "in",
-              ref_type: "seed", note: "初始库存", operator_id: uid,
+              variant_id: (vrow as any).id,
+              qty_delta: stock,
+              reason: "in",
+              ref_type: "seed",
+              note: "初始库存",
+              operator_id: uid,
             } as any);
           }
         }
@@ -281,14 +312,20 @@ export const seedShopData = createServerFn({ method: "POST" })
     }
 
     // 4. Customers + routes
-    const { data: customers } = await supabaseAdmin.from("profiles")
-      .select("id, customer_code, full_name, email").like("customer_code", "%").limit(5);
+    const { data: customers } = await supabaseAdmin
+      .from("profiles")
+      .select("id, customer_code, full_name, email")
+      .like("customer_code", "%")
+      .limit(5);
     if (!customers?.length) throw new Error("No customers found");
-    const { data: routes } = await supabaseAdmin.from("shipping_routes")
-      .select("id, code, destination_code, shipping_method").eq("is_active", true);
+    const { data: routes } = await supabaseAdmin
+      .from("shipping_routes")
+      .select("id, code, destination_code, shipping_method")
+      .eq("is_active", true);
     if (!routes?.length) throw new Error("No active routes — create at least one route first");
 
-    const { data: allVariants } = await supabaseAdmin.from("product_variants")
+    const { data: allVariants } = await supabaseAdmin
+      .from("product_variants")
       .select("id, product_id, sku, price_cny, attrs, product:products(name, slug, cover_url)");
 
     // 5. 50 shop orders, mixed statuses, ~30% with multiple waybills
@@ -311,12 +348,16 @@ export const seedShopData = createServerFn({ method: "POST" })
     async function getBatch(route: any): Promise<{ id: string; batch_no: string }> {
       const key = `${route.shipping_method}|${route.destination_code}|${route.code}`;
       if (batchCache[key]) return batchCache[key];
-      const { data: b, error } = await supabaseAdmin.from("batches").insert({
-        shipping_method: route.shipping_method,
-        destination_code: route.destination_code,
-        planned_ship_date: new Date().toISOString().slice(0, 10),
-        status: "planning",
-      } as any).select("id, batch_no").single();
+      const { data: b, error } = await supabaseAdmin
+        .from("batches")
+        .insert({
+          shipping_method: route.shipping_method,
+          destination_code: route.destination_code,
+          planned_ship_date: new Date().toISOString().slice(0, 10),
+          status: "planning",
+        } as any)
+        .select("id, batch_no")
+        .single();
       if (error) throw new Error(error.message);
       batchCache[key] = { id: (b as any).id, batch_no: (b as any).batch_no };
       return batchCache[key];
@@ -342,21 +383,32 @@ export const seedShopData = createServerFn({ method: "POST" })
 
       const orderPatch: any = {
         source: "shop",
-        user_id: cust.id, status,
-        subtotal_cny: subtotal, shipping_cny: shipping, total_cny: total,
-        display_currency: "CNY", fx_rate: 1,
+        user_id: cust.id,
+        status,
+        subtotal_cny: subtotal,
+        shipping_cny: shipping,
+        total_cny: total,
+        display_currency: "CNY",
+        fx_rate: 1,
         address_snapshot: { name: cust.full_name ?? "测试客户", phone: "13800138000", address: "测试地址 #" + (i + 1) },
         shipping_method: route.shipping_method,
-        route_id: route.id, route_code: route.code, destination_code: route.destination_code,
+        route_id: route.id,
+        route_code: route.code,
+        destination_code: route.destination_code,
         customer_code: cust.customer_code,
         payment_status: status === "pending" || status === "cancelled" ? "unpaid" : "paid",
       };
-      if (status !== "pending" && status !== "cancelled") orderPatch.paid_at = new Date(Date.now() - i * 86400000).toISOString();
-      if (status === "shipped" || status === "delivered") orderPatch.shipped_at = new Date(Date.now() - i * 3600_000).toISOString();
+      if (status !== "pending" && status !== "cancelled")
+        orderPatch.paid_at = new Date(Date.now() - i * 86400000).toISOString();
+      if (status === "shipped" || status === "delivered")
+        orderPatch.shipped_at = new Date(Date.now() - i * 3600_000).toISOString();
       if (status === "delivered") orderPatch.completed_at = new Date().toISOString();
 
-      const { data: order, error: oe } = await supabaseAdmin.from("orders")
-        .insert(orderPatch).select("id, order_no").single();
+      const { data: order, error: oe } = await supabaseAdmin
+        .from("orders")
+        .insert(orderPatch)
+        .select("id, order_no")
+        .single();
       if (oe) throw new Error(oe.message);
       const orderId = (order as any).id;
       ordersCreated++;
@@ -387,9 +439,7 @@ export const seedShopData = createServerFn({ method: "POST" })
         if (status === "shipped" || status === "delivered") batch = await getBatch(route);
 
         for (let w = 0; w < wbCount; w++) {
-          const wbStatus =
-            status === "paid" ? "received" :
-            status === "shipped" ? "in_transit" : "delivered";
+          const wbStatus = status === "paid" ? "received" : status === "shipped" ? "in_transit" : "delivered";
           await supabaseAdmin.from("waybills").insert({
             user_id: cust.id,
             order_id: orderId,

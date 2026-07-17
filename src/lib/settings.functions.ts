@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { VipLevel } from "@/lib/vip-levels";
 
-
 export type Warehouse = {
   id: string;
   code: string;
@@ -26,17 +25,26 @@ export type Warehouse = {
   updated_at: string;
 };
 
-
-export type ShippingMethod = "air" | "sea" | "express" | "truck";
+export type ShippingMethod = "air" | "sea" | "express" | "truck" | "storage";
 export type WeightMode = "actual" | "volumetric" | "max";
 export type PricingMode = "weight" | "pallet";
 
 export type CargoType = "general" | "sensitive";
 export type RouteUsageScope = "shop" | "forwarding" | "both";
 export type ItemFieldKey =
-  | "name" | "hscode" | "box_count" | "inner_qty"
-  | "material" | "origin" | "unit_price" | "quantity" | "brand"
-  | "length_cm" | "width_cm" | "height_cm" | "weight_kg";
+  | "name"
+  | "hscode"
+  | "box_count"
+  | "inner_qty"
+  | "material"
+  | "origin"
+  | "unit_price"
+  | "quantity"
+  | "brand"
+  | "length_cm"
+  | "width_cm"
+  | "height_cm"
+  | "weight_kg";
 export type ShippingRoute = {
   id: string;
   code: string;
@@ -71,7 +79,6 @@ export type ShippingRoute = {
 
 export type FreightDirection = "forward" | "reverse";
 
-
 export type FreightRule = {
   id?: string;
   weight_mode: WeightMode;
@@ -105,12 +112,23 @@ export type FreightRule = {
  *  - missing dimensions / limits → fallback 1, reason='missing_dims'
  */
 export function computePallets(input: {
-  L?: number | null; W?: number | null; H?: number | null; kg?: number | null;
-  rule: Pick<FreightRule,
-    "pallet_max_length_cm" | "pallet_max_width_cm" | "pallet_max_height_cm" |
-    "pallet_max_weight_kg" | "pallet_overflow_factor">;
+  L?: number | null;
+  W?: number | null;
+  H?: number | null;
+  kg?: number | null;
+  rule: Pick<
+    FreightRule,
+    | "pallet_max_length_cm"
+    | "pallet_max_width_cm"
+    | "pallet_max_height_cm"
+    | "pallet_max_weight_kg"
+    | "pallet_overflow_factor"
+  >;
 }): { pallets: number; reason?: string } {
-  const L = Number(input.L) || 0, W = Number(input.W) || 0, H = Number(input.H) || 0, kg = Number(input.kg) || 0;
+  const L = Number(input.L) || 0,
+    W = Number(input.W) || 0,
+    H = Number(input.H) || 0,
+    kg = Number(input.kg) || 0;
   const maxL = Number(input.rule.pallet_max_length_cm) || 0;
   const maxW = Number(input.rule.pallet_max_width_cm) || 0;
   const maxH = Number(input.rule.pallet_max_height_cm) || 0;
@@ -154,8 +172,10 @@ export const listWarehouses = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await assertStaff(context.supabase, context.userId);
     const { data, error } = await context.supabase
-      .from("warehouses").select("*")
-      .order("sort_order", { ascending: true }).order("code", { ascending: true });
+      .from("warehouses")
+      .select("*")
+      .order("sort_order", { ascending: true })
+      .order("code", { ascending: true });
     if (error) throw new Error(error.message);
     return { warehouses: (data ?? []) as Warehouse[] };
   });
@@ -172,8 +192,7 @@ export const upsertWarehouse = createServerFn({ method: "POST" })
       if (error) throw new Error(error.message);
       return { ok: true, id: data.id };
     } else {
-      const { data: inserted, error } = await supabaseAdmin
-        .from("warehouses").insert(row).select("id").single();
+      const { data: inserted, error } = await supabaseAdmin.from("warehouses").insert(row).select("id").single();
       if (error) throw new Error(error.message);
       return { ok: true, id: inserted!.id };
     }
@@ -196,8 +215,11 @@ export const listRoutes = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await assertStaff(context.supabase, context.userId);
     const [routesR, freightR, customsR, whR] = await Promise.all([
-      context.supabase.from("shipping_routes").select("*")
-        .order("sort_order", { ascending: true }).order("code", { ascending: true }),
+      context.supabase
+        .from("shipping_routes")
+        .select("*")
+        .order("sort_order", { ascending: true })
+        .order("code", { ascending: true }),
       context.supabase.from("freight_rules").select("*").eq("is_active", true),
       context.supabase.from("customs_rules").select("*"),
       context.supabase.from("warehouses").select("id, code, name_zh, country, type, can_origin, can_destination"),
@@ -220,8 +242,8 @@ export const listRoutes = createServerFn({ method: "GET" })
 
     const rows = (routesR.data ?? []).map((r: any) => ({
       ...r,
-      origin: r.origin_warehouse_id ? whById.get(r.origin_warehouse_id) ?? null : null,
-      destination: r.destination_warehouse_id ? whById.get(r.destination_warehouse_id) ?? null : null,
+      origin: r.origin_warehouse_id ? (whById.get(r.origin_warehouse_id) ?? null) : null,
+      destination: r.destination_warehouse_id ? (whById.get(r.destination_warehouse_id) ?? null) : null,
       freight: freightByRoute.get(r.id) ?? null,
       freight_reverse: freightReverseByRoute.get(r.id) ?? null,
       customs: customsByRoute.get(r.id) ?? null,
@@ -231,13 +253,15 @@ export const listRoutes = createServerFn({ method: "GET" })
 
 export const upsertRoute = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: {
-    id?: string;
-    route: Omit<ShippingRoute, "id">;
-    freight: FreightRule;
-    freight_reverse?: FreightRule | null;
-    customs: CustomsRule;
-  }) => d)
+  .inputValidator(
+    (d: {
+      id?: string;
+      route: Omit<ShippingRoute, "id">;
+      freight: FreightRule;
+      freight_reverse?: FreightRule | null;
+      customs: CustomsRule;
+    }) => d,
+  )
   .handler(async ({ data, context }) => {
     await assertManagerOrOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -247,8 +271,7 @@ export const upsertRoute = createServerFn({ method: "POST" })
       const { error } = await supabaseAdmin.from("shipping_routes").update(data.route).eq("id", routeId);
       if (error) throw new Error(error.message);
     } else {
-      const { data: ins, error } = await supabaseAdmin
-        .from("shipping_routes").insert(data.route).select("id").single();
+      const { data: ins, error } = await supabaseAdmin.from("shipping_routes").insert(data.route).select("id").single();
       if (error) throw new Error(error.message);
       routeId = ins!.id;
     }
@@ -280,21 +303,28 @@ export const upsertRoute = createServerFn({ method: "POST" })
 
     // Deactivate all prior rules for this route, then insert the active set
     await supabaseAdmin.from("freight_rules").update({ is_active: false }).eq("route_id", routeId);
-    const { error: fErr } = await supabaseAdmin.from("freight_rules").insert(freightRow(data.freight, "forward") as any);
+    const { error: fErr } = await supabaseAdmin
+      .from("freight_rules")
+      .insert(freightRow(data.freight, "forward") as any);
     if (fErr) throw new Error(fErr.message);
     if (data.route.is_bidirectional && data.freight_reverse) {
-      const { error: frErr } = await supabaseAdmin.from("freight_rules").insert(freightRow(data.freight_reverse, "reverse") as any);
+      const { error: frErr } = await supabaseAdmin
+        .from("freight_rules")
+        .insert(freightRow(data.freight_reverse, "reverse") as any);
       if (frErr) throw new Error(frErr.message);
     }
 
     // upsert customs (unique on route_id)
-    const { error: cErr } = await supabaseAdmin.from("customs_rules").upsert({
-      route_id: routeId,
-      enabled: data.customs.enabled,
-      rate_pct: data.customs.rate_pct,
-      threshold_cad: data.customs.threshold_cad,
-      note: data.customs.note ?? null,
-    }, { onConflict: "route_id" });
+    const { error: cErr } = await supabaseAdmin.from("customs_rules").upsert(
+      {
+        route_id: routeId,
+        enabled: data.customs.enabled,
+        rate_pct: data.customs.rate_pct,
+        threshold_cad: data.customs.threshold_cad,
+        note: data.customs.note ?? null,
+      },
+      { onConflict: "route_id" },
+    );
     if (cErr) throw new Error(cErr.message);
 
     return { ok: true, id: routeId };
@@ -313,20 +343,37 @@ export const deleteRoute = createServerFn({ method: "POST" })
 
 export const quoteFreight = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: {
-    route_id: string; weight_kg: number; volume_cm3: number; declared_cad?: number;
-    length_cm?: number; width_cm?: number; height_cm?: number;
-    direction?: FreightDirection;
-  }) => d)
+  .inputValidator(
+    (d: {
+      route_id: string;
+      weight_kg: number;
+      volume_cm3: number;
+      declared_cad?: number;
+      length_cm?: number;
+      width_cm?: number;
+      height_cm?: number;
+      direction?: FreightDirection;
+    }) => d,
+  )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const dir: FreightDirection = data.direction === "reverse" ? "reverse" : "forward";
     const [{ data: rule, error: e1 }, { data: customs }, { data: route }] = await Promise.all([
-      context.supabase.from("freight_rules").select("*")
-        .eq("route_id", data.route_id).eq("is_active", true).eq("direction", dir)
-        .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      context.supabase
+        .from("freight_rules")
+        .select("*")
+        .eq("route_id", data.route_id)
+        .eq("is_active", true)
+        .eq("direction", dir)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
       context.supabase.from("customs_rules").select("*").eq("route_id", data.route_id).maybeSingle(),
-      context.supabase.from("shipping_routes").select("sales_tax_enabled, sales_tax_rate_pct").eq("id", data.route_id).maybeSingle(),
+      context.supabase
+        .from("shipping_routes")
+        .select("sales_tax_enabled, sales_tax_rate_pct")
+        .eq("id", data.route_id)
+        .maybeSingle(),
     ]);
     if (e1) throw new Error(e1.message);
     if (!rule) return { ok: false, reason: "no_active_rule" as const };
@@ -334,10 +381,7 @@ export const quoteFreight = createServerFn({ method: "POST" })
     const w = Math.max(0, Number(data.weight_kg) || 0);
     const v = Math.max(0, Number(data.volume_cm3) || 0);
     const volW = rule.volumetric_divisor > 0 ? v / Number(rule.volumetric_divisor) : 0;
-    const chargeable =
-      rule.weight_mode === "actual" ? w :
-      rule.weight_mode === "volumetric" ? volW :
-      Math.max(w, volW);
+    const chargeable = rule.weight_mode === "actual" ? w : rule.weight_mode === "volumetric" ? volW : Math.max(w, volW);
     // Prefer CAD columns; fall back to legacy CNY * 0.19 for older rows.
     const fx = 0.19;
     const unit_cad = Number(rule.unit_price_cad ?? 0) || Number(rule.unit_price_cny ?? 0) * fx;
@@ -351,7 +395,10 @@ export const quoteFreight = createServerFn({ method: "POST" })
     if (pricing_mode === "pallet") {
       try {
         const r = computePallets({
-          L: data.length_cm, W: data.width_cm, H: data.height_cm, kg: w,
+          L: data.length_cm,
+          W: data.width_cm,
+          H: data.height_cm,
+          kg: w,
           rule: rule as any,
         });
         pallets = r.pallets;
@@ -371,15 +418,12 @@ export const quoteFreight = createServerFn({ method: "POST" })
     }
 
     const insurance_rate_pct = Number(rule.insurance_rate_pct ?? 0);
-    const insurance_cad = data.declared_cad && insurance_rate_pct > 0
-      ? +(data.declared_cad * (insurance_rate_pct / 100)).toFixed(2)
-      : 0;
+    const insurance_cad =
+      data.declared_cad && insurance_rate_pct > 0 ? +(data.declared_cad * (insurance_rate_pct / 100)).toFixed(2) : 0;
 
     const sales_tax_rate_pct = route?.sales_tax_enabled ? Number(route?.sales_tax_rate_pct ?? 0) : 0;
     const taxable_base = freight_cad + clearance_cad + duty_cad + insurance_cad;
-    const sales_tax_cad = sales_tax_rate_pct > 0
-      ? +(taxable_base * (sales_tax_rate_pct / 100)).toFixed(2)
-      : 0;
+    const sales_tax_cad = sales_tax_rate_pct > 0 ? +(taxable_base * (sales_tax_rate_pct / 100)).toFixed(2) : 0;
 
     return {
       ok: true as const,
@@ -400,7 +444,6 @@ export const quoteFreight = createServerFn({ method: "POST" })
       total_cad: +(taxable_base + sales_tax_cad).toFixed(2),
     };
   });
-
 
 // =================== Oversize Rules ===================
 export type OversizeRule = {
@@ -426,7 +469,8 @@ export const listOversizeRules = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await assertStaff(context.supabase, context.userId);
     const { data, error } = await context.supabase
-      .from("oversize_rules").select("*")
+      .from("oversize_rules")
+      .select("*")
       .order("route_id", { ascending: true, nullsFirst: false })
       .order("shipping_method", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: false });
@@ -443,7 +487,15 @@ export const upsertOversizeRule = createServerFn({ method: "POST" })
     const row: any = { ...data.payload };
     // Normalize empty strings to null
     for (const k of ["shipping_method", "route_id", "notes"]) if (row[k] === "") row[k] = null;
-    for (const k of ["max_length_cm","max_width_cm","max_height_cm","max_single_side_cm","max_weight_kg","max_volume_m3","max_girth_cm"]) {
+    for (const k of [
+      "max_length_cm",
+      "max_width_cm",
+      "max_height_cm",
+      "max_single_side_cm",
+      "max_weight_kg",
+      "max_volume_m3",
+      "max_girth_cm",
+    ]) {
       if (row[k] === "" || row[k] == null || Number.isNaN(Number(row[k]))) row[k] = null;
       else row[k] = Number(row[k]);
     }
@@ -492,7 +544,13 @@ export function pickOversizeRule(
  */
 export function judgeOversize(
   rule: OversizeRule | null,
-  item: { length_cm?: number | null; width_cm?: number | null; height_cm?: number | null; weight_kg?: number | null; volume_m3?: number | null },
+  item: {
+    length_cm?: number | null;
+    width_cm?: number | null;
+    height_cm?: number | null;
+    weight_kg?: number | null;
+    volume_m3?: number | null;
+  },
 ): { oversize: boolean; reasons: string[] } {
   if (!rule) return { oversize: false, reasons: [] };
   const reasons: string[] = [];
@@ -503,9 +561,10 @@ export function judgeOversize(
   const vol = Number(item.volume_m3 ?? 0);
   const single = Math.max(L, W, H);
   if (rule.max_length_cm && L > rule.max_length_cm) reasons.push(`长 ${L} > ${rule.max_length_cm}`);
-  if (rule.max_width_cm  && W > rule.max_width_cm)  reasons.push(`宽 ${W} > ${rule.max_width_cm}`);
+  if (rule.max_width_cm && W > rule.max_width_cm) reasons.push(`宽 ${W} > ${rule.max_width_cm}`);
   if (rule.max_height_cm && H > rule.max_height_cm) reasons.push(`高 ${H} > ${rule.max_height_cm}`);
-  if (rule.max_single_side_cm && single > rule.max_single_side_cm) reasons.push(`单边 ${single} > ${rule.max_single_side_cm}`);
+  if (rule.max_single_side_cm && single > rule.max_single_side_cm)
+    reasons.push(`单边 ${single} > ${rule.max_single_side_cm}`);
   if (rule.max_weight_kg && kg > rule.max_weight_kg) reasons.push(`重量 ${kg}kg > ${rule.max_weight_kg}`);
   if (rule.max_volume_m3 && vol > rule.max_volume_m3) reasons.push(`体积 ${vol}m³ > ${rule.max_volume_m3}`);
   if (rule.max_girth_cm && L && W && H) {
@@ -514,4 +573,3 @@ export function judgeOversize(
   }
   return { oversize: reasons.length > 0, reasons };
 }
-
