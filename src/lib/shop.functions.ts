@@ -94,6 +94,13 @@ export const saveProduct = createServerFn({ method: "POST" })
     const { id, variants, category, total_stock, sold_count, created_at, updated_at, ...rest } = data;
     // strip joined / computed fields that are not real columns on products
     void category; void total_stock; void sold_count; void created_at; void updated_at;
+    if (rest.is_featured) {
+      let countQ = supabaseAdmin.from("products").select("id", { count: "exact", head: true }).eq("is_featured", true);
+      if (id) countQ = countQ.neq("id", id);
+      const { count, error: countErr } = await countQ;
+      if (countErr) throw new Error(countErr.message);
+      if ((count ?? 0) >= 12) throw new Error("本周精选最多只能选择 12 个商品，请先取消其他商品的精选");
+    }
     let pid = id;
     if (id) {
       const { error } = await supabaseAdmin.from("products").update(rest).eq("id", id);

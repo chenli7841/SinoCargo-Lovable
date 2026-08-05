@@ -48,10 +48,11 @@ export type PublicProduct = {
   pack_height_cm: number | null;
   pack_volume_m3: number | null;
   available_route_codes: string[] | null;
+  is_featured: boolean;
 };
 
 const SELECT_COLS =
-  "id,slug,name,name_en,subtitle,subtitle_en,description,description_en,brand,price_cny,compare_price_cny,compare_price_cad,weight_kg,cover_url,images,tags,total_stock,sold_count,hs_code,manufacturer,detail_blocks,purchase_type,allow_personal,allow_business,moq,customs_mfn_rate,customs_gst_rate,customs_antidumping_rate,freight_cny,personal_freight_mode,personal_per_unit_freight_cny,pack_qty,pack_weight_kg,pack_length_cm,pack_width_cm,pack_height_cm,pack_volume_m3,available_route_codes,category:product_categories(slug,name,name_en)";
+  "id,slug,name,name_en,subtitle,subtitle_en,description,description_en,brand,price_cny,compare_price_cny,compare_price_cad,weight_kg,cover_url,images,tags,total_stock,sold_count,hs_code,manufacturer,detail_blocks,purchase_type,allow_personal,allow_business,moq,customs_mfn_rate,customs_gst_rate,customs_antidumping_rate,freight_cny,personal_freight_mode,personal_per_unit_freight_cny,pack_qty,pack_weight_kg,pack_length_cm,pack_width_cm,pack_height_cm,pack_volume_m3,available_route_codes,is_featured,category:product_categories(slug,name,name_en)";
 
 export const listPublicCategories = createServerFn({ method: "GET" }).handler(async () => {
   const sb = pubClient();
@@ -65,19 +66,31 @@ export const listPublicCategories = createServerFn({ method: "GET" }).handler(as
 });
 
 export const listPublicProducts = createServerFn({ method: "POST" })
-  .inputValidator((d: { category?: string; q?: string; limit?: number } = {}) => d)
+  .inputValidator((d: { category?: string; q?: string; limit?: number; featuredOnly?: boolean } = {}) => d)
   .handler(async ({ data }) => {
     const sb = pubClient();
+    const limit = Math.min(200, data.limit ?? 100);
     let q = sb
       .from("products")
       .select(SELECT_COLS)
-      .eq("status", "active" as any)
-      .order("created_at", { ascending: false })
-      .limit(Math.min(200, data.limit ?? 100));
+      .eq("status", "active" as any);
+    if (data.featuredOnly) q = q.eq("is_featured", true as any);
+    q = q.order("created_at", { ascending: false }).limit(limit);
     if (data.q) q = q.ilike("name", `%${data.q}%`);
     const { data: rows, error } = await q;
     if (error) throw new Error(error.message);
     let items = (rows ?? []) as any as PublicProduct[];
+    if (data.featuredOnly && items.length === 0) {
+      // no products marked as featured yet — fall back to the most recent active products
+      const { data: fallbackRows, error: fbErr } = await sb
+        .from("products")
+        .select(SELECT_COLS)
+        .eq("status", "active" as any)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (fbErr) throw new Error(fbErr.message);
+      items = (fallbackRows ?? []) as any as PublicProduct[];
+    }
     if (data.category && data.category !== "all") {
       items = items.filter((p) => p.category?.slug === data.category);
     }

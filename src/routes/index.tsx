@@ -8,8 +8,8 @@ import heroImg from "@/assets/hero-logistics.jpg";
 import { ArrowRight, Package, ShieldCheck, Plane, Ship, Truck, Warehouse } from "lucide-react";
 
 const homeProductsQO = queryOptions({
-  queryKey: ["public", "products", "home"],
-  queryFn: () => listPublicProducts({ data: { limit: 12 } }),
+  queryKey: ["public", "products", "home-featured"],
+  queryFn: () => listPublicProducts({ data: { limit: 12, featuredOnly: true } }),
 });
 const homeCatsQO = queryOptions({
   queryKey: ["public", "categories"],
@@ -43,7 +43,7 @@ function Home() {
   const { t, lang } = useApp();
   const { data: prodData } = useSuspenseQuery(homeProductsQO);
   const { data: catData } = useSuspenseQuery(homeCatsQO);
-  const featured = prodData.items.slice(0, 8).map(adaptProduct);
+  const featured = prodData.items.slice(0, 12).map(adaptProduct);
   const categories = adaptCategories(catData.items);
 
 

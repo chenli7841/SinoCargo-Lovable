@@ -69,12 +69,24 @@ function ProductEdit() {
     pack_height_cm: null,
     pack_volume_m3: null,
     available_route_codes: [],
+    is_featured: false,
   });
 
   const [routes, setRoutes] = useState<any[]>([]);
   const [variants, setVariants] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [featuredCount, setFeaturedCount] = useState(0);
+
+  useEffect(() => {
+    import("@/integrations/supabase/client").then(({ supabase }) =>
+      (supabase as any)
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("is_featured", true)
+        .then(({ count }: any) => setFeaturedCount(count ?? 0)),
+    );
+  }, [q.data]);
 
   useEffect(() => {
     if (q.data) {
@@ -231,6 +243,19 @@ function ProductEdit() {
               <option value="active">在售</option>
               <option value="archived">下架</option>
             </select>
+          </Field>
+          <Field label={`本周精选（已选 ${featuredCount}/12）`}>
+            <label
+              className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm cursor-pointer ${form.is_featured ? "border-brand bg-brand/10" : "border-white/10 bg-white/5"} ${!form.is_featured && featuredCount >= 12 ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              <input
+                type="checkbox"
+                checked={!!form.is_featured}
+                disabled={!form.is_featured && featuredCount >= 12}
+                onChange={(e) => setForm({ ...form, is_featured: e.target.checked })}
+              />
+              加入首页「本周精选」
+            </label>
           </Field>
           <Field label="价格 CNY">
             <Input

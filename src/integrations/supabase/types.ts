@@ -2032,6 +2032,7 @@ export type Database = {
           hs_code: string | null
           id: string
           images: Json
+          is_featured: boolean
           length_cm: number | null
           manufacturer: string | null
           moq: number
@@ -2087,6 +2088,7 @@ export type Database = {
           hs_code?: string | null
           id?: string
           images?: Json
+          is_featured?: boolean
           length_cm?: number | null
           manufacturer?: string | null
           moq?: number
@@ -2142,6 +2144,7 @@ export type Database = {
           hs_code?: string | null
           id?: string
           images?: Json
+          is_featured?: boolean
           length_cm?: number | null
           manufacturer?: string | null
           moq?: number
