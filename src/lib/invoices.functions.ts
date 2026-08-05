@@ -10,14 +10,20 @@ async function assertStaff(supabase: any, userId: string) {
 // ---- List ----
 export const listInvoices = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { page?: number; pageSize?: number; status?: string; q?: string; userId?: string } = {}) => d)
+  .inputValidator(
+    (d: { page?: number; pageSize?: number; status?: string; q?: string; userId?: string } = {}) =>
+      d,
+  )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const page = Math.max(1, data.page ?? 1);
     const pageSize = Math.min(100, data.pageSize ?? 20);
     const from = (page - 1) * pageSize;
-    let q = supabaseAdmin.from("invoices").select("*", { count: "exact" }).order("created_at", { ascending: false });
+    let q = supabaseAdmin
+      .from("invoices")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false });
     if (data.status) q = q.eq("status", data.status as any);
     if (data.userId) q = q.eq("user_id", data.userId);
     if (data.q) q = q.ilike("invoice_no", `%${data.q}%`);
@@ -26,7 +32,9 @@ export const listInvoices = createServerFn({ method: "POST" })
     const userIds = Array.from(new Set((rows ?? []).map((r: any) => r.user_id)));
     const { data: profs } = await supabaseAdmin
       .from("profiles")
-      .select("id, full_name, customer_code, email")
+      .select(
+        "id, full_name, customer_code, email, phone, invoice_title, invoice_phone, invoice_email, invoice_address",
+      )
       .in("id", userIds.length ? userIds : ["00000000-0000-0000-0000-000000000000"]);
     const profMap = new Map((profs ?? []).map((p: any) => [p.id, p]));
     return {
@@ -60,20 +68,36 @@ export const getInvoice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => d)
   .handler(async ({ data, context }) => {
-    const { data: inv, error } = await context.supabase.from("invoices").select("*").eq("id", data.id).maybeSingle();
+    const { data: inv, error } = await context.supabase
+      .from("invoices")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
     if (error) throw new Error(error.message);
     if (!inv) throw new Error("Not found");
-    const { data: items } = await context.supabase.from("invoice_items").select("*").eq("invoice_id", data.id);
+    const { data: items } = await context.supabase
+      .from("invoice_items")
+      .select("*")
+      .eq("invoice_id", data.id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: prof } = await supabaseAdmin
       .from("profiles")
-      .select("id, full_name, customer_code, email, phone")
+      .select(
+        "id, full_name, customer_code, email, phone, invoice_title, invoice_phone, invoice_email, invoice_address",
+      )
       .eq("id", inv.user_id)
       .maybeSingle();
     return { invoice: inv, items: items ?? [], customer: prof ?? null };
   });
 
 // ---- Compute freight breakdown for a waybill ----
+// freight_cny/insurance_cny are computed directly against the route's
+// freight_rules (unchanged from before); customs_cny now comes from
+// computeAnyWaybillDutyBreakdown (duty.server.ts) — the HS-code/product-rate
+// per-item calculation that settleBatchForCustomer's persisted waybill
+// columns are also built from, rather than the deprecated flat
+// customs_rules.rate_pct. `meta` carries what the invoice's 运费/关税/GST
+// tables need to itemize (buildInvoiceLineMeta, same helper).
 async function computeWaybillFees(admin: any, waybillId: string, fx: number) {
   const { data: wb } = await admin.from("waybills").select("*").eq("id", waybillId).maybeSingle();
   if (!wb) throw new Error("waybill not found");
@@ -96,29 +120,45 @@ async function computeWaybillFees(admin: any, waybillId: string, fx: number) {
     route_id = fo?.route_id ?? null;
     declared_cad = Number(fo?.declared_value_cad ?? 0);
   }
-  if (!route_id) return { freight_cny: 0, customs_cny: 0, insurance_cny: 0, ref: { wb } };
+  if (!route_id)
+    return { freight_cny: 0, customs_cny: 0, insurance_cny: 0, meta: null, ref: { wb } };
 
-  const [{ data: rule }, { data: customs }] = await Promise.all([
-    admin.from("freight_rules").select("*").eq("route_id", route_id).eq("is_active", true).maybeSingle(),
-    admin.from("customs_rules").select("*").eq("route_id", route_id).maybeSingle(),
-  ]);
-  if (!rule) return { freight_cny: 0, customs_cny: 0, insurance_cny: 0, ref: { wb } };
+  const { data: rule } = await admin
+    .from("freight_rules")
+    .select("*")
+    .eq("route_id", route_id)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!rule) return { freight_cny: 0, customs_cny: 0, insurance_cny: 0, meta: null, ref: { wb } };
 
   const w = Number(wb.weight_kg ?? 0);
   const v = Number(wb.length_cm ?? 0) * Number(wb.width_cm ?? 0) * Number(wb.height_cm ?? 0);
   const volW = rule.volumetric_divisor > 0 ? v / Number(rule.volumetric_divisor) : 0;
-  const chargeable = rule.weight_mode === "actual" ? w : rule.weight_mode === "volumetric" ? volW : Math.max(w, volW);
+  const chargeable =
+    rule.weight_mode === "actual"
+      ? w
+      : rule.weight_mode === "volumetric"
+        ? volW
+        : Math.max(w, volW);
   let freight_cny = chargeable * Number(rule.unit_price_cny) + Number(rule.extra_fee_cny);
   if (freight_cny < Number(rule.min_charge_cny)) freight_cny = Number(rule.min_charge_cny);
   const insurance_cny =
     declared_cad && Number(rule.insurance_rate_pct ?? 0) > 0
       ? +((declared_cad * (Number(rule.insurance_rate_pct) / 100)) / fx).toFixed(2)
       : 0;
-  let customs_cny = 0;
-  if (customs?.enabled && declared_cad >= Number(customs.threshold_cad)) {
-    customs_cny = +((declared_cad * (Number(customs.rate_pct) / 100)) / fx).toFixed(2);
-  }
-  return { freight_cny: +freight_cny.toFixed(2), customs_cny, insurance_cny, ref: { wb, route_id } };
+
+  const { computeAnyWaybillDutyBreakdown, buildInvoiceLineMeta } = await import("./duty.server");
+  const duty = await computeAnyWaybillDutyBreakdown(admin, wb);
+  const customs_cny = fx > 0 ? +(duty.duty_cad / fx).toFixed(2) : 0;
+  const meta = await buildInvoiceLineMeta(admin, wb).catch(() => null);
+
+  return {
+    freight_cny: +freight_cny.toFixed(2),
+    customs_cny,
+    insurance_cny,
+    meta,
+    ref: { wb, route_id },
+  };
 }
 
 // ---- Generate invoice for a single waybill ----
@@ -128,7 +168,11 @@ export const generateInvoiceForWaybill = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: wb } = await supabaseAdmin.from("waybills").select("*").eq("id", data.waybill_id).maybeSingle();
+    const { data: wb } = await supabaseAdmin
+      .from("waybills")
+      .select("*")
+      .eq("id", data.waybill_id)
+      .maybeSingle();
     if (!wb) throw new Error("waybill not found");
 
     const fx = await getFxCadPerCny(supabaseAdmin);
@@ -165,6 +209,7 @@ export const generateInvoiceForWaybill = createServerFn({ method: "POST" })
       customs_cny: fees.customs_cny,
       insurance_cny: fees.insurance_cny,
       amount_cny: total,
+      meta: fees.meta,
     });
     return { ok: true, invoice: inv };
   });
@@ -214,6 +259,7 @@ export const generateBatchInvoice = createServerFn({ method: "POST" })
           customs_cny: fees.customs_cny,
           insurance_cny: fees.insurance_cny,
           amount_cny: fees.freight_cny + fees.customs_cny + fees.insurance_cny,
+          meta: fees.meta,
         });
       }
       const total = +(f + c + ins).toFixed(2);
@@ -237,7 +283,9 @@ export const generateBatchInvoice = createServerFn({ method: "POST" })
         .select("*")
         .single();
       if (inv) {
-        await supabaseAdmin.from("invoice_items").insert(lineItems.map((li) => ({ ...li, invoice_id: inv.id })));
+        await supabaseAdmin
+          .from("invoice_items")
+          .insert(lineItems.map((li) => ({ ...li, invoice_id: inv.id })));
         created.push(inv);
       }
     }
@@ -257,7 +305,9 @@ export const payInvoice = createServerFn({ method: "POST" })
 // ---- Mark paid (staff manual) / void ----
 export const updateInvoiceStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { id: string; status: "unpaid" | "paid" | "overdue" | "void"; note?: string }) => d)
+  .inputValidator(
+    (d: { id: string; status: "unpaid" | "paid" | "overdue" | "void"; note?: string }) => d,
+  )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -359,7 +409,10 @@ export const mergeInvoices = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
 
     // Move items
-    await supabaseAdmin.from("invoice_items").update({ invoice_id: newInv.id }).in("invoice_id", data.ids);
+    await supabaseAdmin
+      .from("invoice_items")
+      .update({ invoice_id: newInv.id })
+      .in("invoice_id", data.ids);
     // Void originals
     await supabaseAdmin
       .from("invoices")
@@ -376,10 +429,17 @@ export const splitInvoice = createServerFn({ method: "POST" })
     await assertStaff(context.supabase, context.userId);
     if (!data.item_ids?.length) throw new Error("请选择要拆出的明细");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: inv } = await supabaseAdmin.from("invoices").select("*").eq("id", data.id).maybeSingle();
+    const { data: inv } = await supabaseAdmin
+      .from("invoices")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
     if (!inv) throw new Error("账单不存在");
     if (inv.status !== "unpaid") throw new Error("仅未付账单可拆分");
-    const { data: items } = await supabaseAdmin.from("invoice_items").select("*").eq("invoice_id", data.id);
+    const { data: items } = await supabaseAdmin
+      .from("invoice_items")
+      .select("*")
+      .eq("invoice_id", data.id);
     if (!items?.length) throw new Error("无明细");
     const toMove = items.filter((i) => data.item_ids.includes(i.id));
     const remain = items.filter((i) => !data.item_ids.includes(i.id));
@@ -407,7 +467,10 @@ export const splitInvoice = createServerFn({ method: "POST" })
       .single();
     if (error) throw new Error(error.message);
 
-    await supabaseAdmin.from("invoice_items").update({ invoice_id: newInv.id }).in("id", data.item_ids);
+    await supabaseAdmin
+      .from("invoice_items")
+      .update({ invoice_id: newInv.id })
+      .in("id", data.item_ids);
 
     // Recompute original totals
     const remainTotal = +sum(remain, "amount_cny").toFixed(2);

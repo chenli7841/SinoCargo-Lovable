@@ -7,6 +7,7 @@ import { useApp } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
 import { rechargeWallet } from "@/lib/wallet.functions";
 import { listMyBatches, payMyBatch } from "@/lib/orders.functions";
+import { startWechatBind, unbindWechat } from "@/lib/wechat.functions";
 import { toast } from "sonner";
 import { TrackingTimeline } from "@/components/tracking-timeline";
 import {
@@ -34,11 +35,18 @@ import {
   Warehouse,
   Send,
   Tags,
+  Mail,
+  KeyRound,
+  MessageCircle,
+  Link2Off,
+  ChevronDown,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/account")({
   head: () => ({ meta: [{ title: "我的账户 / My Account — SinoCargo" }] }),
-  validateSearch: (s: Record<string, unknown>) => {
+  validateSearch: (
+    s: Record<string, unknown>,
+  ): { tab?: Tab; wechat?: "bound" | "taken" | "failed" } => {
     const raw = typeof s.tab === "string" ? s.tab : "";
     const allowed = [
       "overview",
@@ -50,13 +58,27 @@ export const Route = createFileRoute("/_authenticated/account")({
       "inventory",
       "myItems",
     ] as const;
-    const tab = (allowed as readonly string[]).includes(raw) ? (raw as (typeof allowed)[number]) : undefined;
-    return { tab };
+    const tab = (allowed as readonly string[]).includes(raw)
+      ? (raw as (typeof allowed)[number])
+      : undefined;
+    const rawWechat = typeof s.wechat === "string" ? s.wechat : "";
+    const wechat = (["bound", "taken", "failed"] as const).includes(rawWechat as any)
+      ? (rawWechat as "bound" | "taken" | "failed")
+      : undefined;
+    return { tab, wechat };
   },
   component: AccountPage,
 });
 
-type Tab = "overview" | "profile" | "addresses" | "batches" | "myOrders" | "wallet" | "inventory" | "myItems";
+type Tab =
+  | "overview"
+  | "profile"
+  | "addresses"
+  | "batches"
+  | "myOrders"
+  | "wallet"
+  | "inventory"
+  | "myItems";
 
 const sb = supabase as any;
 
@@ -68,6 +90,12 @@ interface Profile {
   username: string | null;
   preferred_lang: string;
   preferred_currency: string;
+  wechat_openid: string | null;
+  wechat_nickname: string | null;
+  invoice_title: string | null;
+  invoice_phone: string | null;
+  invoice_email: string | null;
+  invoice_address: string | null;
 }
 interface Address {
   id: string;
@@ -106,17 +134,36 @@ interface WalletTx {
 function AccountPage() {
   const { user, signOut } = useAuth();
   const { lang } = useApp();
+  const navigate = useNavigate();
   const search = Route.useSearch();
   const [tab, setTab] = useState<Tab>(search.tab ?? "overview");
   useEffect(() => {
     if (search.tab) setTab(search.tab as Tab);
   }, [search.tab]);
-  const [ordersFilter, setOrdersFilter] = useState<"all" | "order" | "forwarding" | "unwarehoused">("all");
+  const [ordersFilter, setOrdersFilter] = useState<"all" | "order" | "forwarding" | "unwarehoused">(
+    "all",
+  );
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
+
+  // Land here after the WeChat OAuth redirect (see wechat.callback.ts).
+  useEffect(() => {
+    if (!search.wechat) return;
+    if (search.wechat === "bound") toast.success(tr("微信绑定成功", "WeChat account linked"));
+    else if (search.wechat === "taken")
+      toast.error(
+        tr("该微信号已绑定其他账号", "This WeChat account is already linked to another user"),
+      );
+    else toast.error(tr("微信绑定失败，请重试", "WeChat binding failed — please try again"));
+    navigate({ to: "/account", search: { tab: "profile" }, replace: true });
+  }, [search.wechat]);
 
   const nav: { k: Tab; l: string; i: React.ReactNode }[] = [
     { k: "overview", l: tr("概览", "Overview"), i: <LayoutDashboard className="h-4 w-4" /> },
-    { k: "myOrders", l: tr("我的订单/运单", "My orders/waybills"), i: <Package className="h-4 w-4" /> },
+    {
+      k: "myOrders",
+      l: tr("我的订单/运单", "My orders/waybills"),
+      i: <Package className="h-4 w-4" />,
+    },
     { k: "inventory", l: tr("我的库存", "My inventory"), i: <Warehouse className="h-4 w-4" /> },
     { k: "myItems", l: tr("我的物品", "My items"), i: <Tags className="h-4 w-4" /> },
     { k: "batches", l: tr("我的批次", "My batches"), i: <Layers className="h-4 w-4" /> },
@@ -129,7 +176,9 @@ function AccountPage() {
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:py-14">
       <div className="mb-8 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="font-display text-3xl font-bold sm:text-4xl">{tr("我的账户", "My Account")}</h1>
+          <h1 className="font-display text-3xl font-bold sm:text-4xl">
+            {tr("我的账户", "My Account")}
+          </h1>
           <p className="mt-1 text-sm text-ink-soft">{user?.email}</p>
         </div>
         <button
@@ -142,7 +191,9 @@ function AccountPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
-        <nav className="flex gap-2 overflow-x-auto lg:flex-col">
+        <AccountNavDropdown nav={nav} tab={tab} onSelect={setTab} />
+
+        <nav className="hidden gap-2 lg:flex lg:flex-col">
           {nav.map((it) => (
             <button
               key={it.k}
@@ -166,6 +217,61 @@ function AccountPage() {
           {tab === "wallet" && <WalletTab />}
         </section>
       </div>
+    </div>
+  );
+}
+
+// Mobile-only replacement for the horizontal-scrolling tab strip: a tap target
+// that opens a full-width list of sections. Hidden at lg: the desktop sidebar
+// nav takes over there.
+function AccountNavDropdown({
+  nav,
+  tab,
+  onSelect,
+}: {
+  nav: { k: Tab; l: string; i: React.ReactNode }[];
+  tab: Tab;
+  onSelect: (t: Tab) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = nav.find((it) => it.k === tab) ?? nav[0];
+
+  return (
+    <div className="relative lg:hidden">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-sm font-medium text-brand"
+      >
+        {current.i}
+        <span className="flex-1 text-left">{current.l}</span>
+        <ChevronDown className={`h-4 w-4 text-ink-soft transition ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <>
+          <button
+            aria-hidden
+            tabIndex={-1}
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-10 cursor-default"
+          />
+          <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-border bg-surface shadow-elevated">
+            {nav.map((it) => (
+              <button
+                key={it.k}
+                onClick={() => {
+                  onSelect(it.k);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium transition ${tab === it.k ? "bg-brand/5 text-brand" : "text-ink-soft hover:bg-accent"}`}
+              >
+                {it.i}
+                {it.l}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -210,7 +316,11 @@ function OverviewTab({
       setUnpaidBatches(
         all
           .filter((b) => !b.is_paid)
-          .map((b) => ({ batch_no: b.batch_no, total_cad: b.subtotal_cad, shipping_method: b.shipping_method })),
+          .map((b) => ({
+            batch_no: b.batch_no,
+            total_cad: b.subtotal_cad,
+            shipping_method: b.shipping_method,
+          })),
       );
     });
     Promise.all([
@@ -242,7 +352,9 @@ function OverviewTab({
               <div className="text-[11px] uppercase tracking-wider text-ink-soft">
                 {tr("个人账户编号", "Personal account number")}
               </div>
-              <div className="font-display text-xl font-bold tracking-widest text-brand">{customerCode}</div>
+              <div className="font-display text-xl font-bold tracking-widest text-brand">
+                {customerCode}
+              </div>
             </div>
           </div>
           <button
@@ -272,11 +384,17 @@ function OverviewTab({
           tone="brand"
           action={
             <div className="flex items-center justify-between gap-2">
-              <button onClick={() => onJump("wallet")} className="text-xs font-medium text-brand hover:underline">
+              <button
+                onClick={() => onJump("wallet")}
+                className="text-xs font-medium text-brand hover:underline"
+              >
                 {tr("充值 →", "Top up →")}
               </button>
               {unpaidTotalCad > 0 && (
-                <button onClick={() => onJump("batches")} className="text-xs font-medium text-cta hover:underline">
+                <button
+                  onClick={() => onJump("batches")}
+                  className="text-xs font-medium text-cta hover:underline"
+                >
                   {tr("去付款 →", "Pay now →")}
                 </button>
               )}
@@ -289,7 +407,10 @@ function OverviewTab({
           sub={inTransit > 0 ? tr(`${inTransit} 件运输中`, `${inTransit} in transit`) : ""}
           icon={<Package className="h-5 w-5" />}
           action={
-            <button onClick={() => onJump("myOrders")} className="text-xs font-medium text-brand hover:underline">
+            <button
+              onClick={() => onJump("myOrders")}
+              className="text-xs font-medium text-brand hover:underline"
+            >
               {tr("查看 →", "View →")}
             </button>
           }
@@ -317,7 +438,10 @@ function OverviewTab({
           sub={tr("发货批次数量", "Shipping batches")}
           icon={<Layers className="h-5 w-5" />}
           action={
-            <button onClick={() => onJump("batches")} className="text-xs font-medium text-brand hover:underline">
+            <button
+              onClick={() => onJump("batches")}
+              className="text-xs font-medium text-brand hover:underline"
+            >
               {tr("查看批次 →", "View batches →")}
             </button>
           }
@@ -331,7 +455,10 @@ function OverviewTab({
               <CreditCard className="h-4 w-4 text-warning" />
               {tr("待付批次明细", "Unpaid batches")}
             </div>
-            <button onClick={() => onJump("batches")} className="text-xs font-medium text-brand hover:underline">
+            <button
+              onClick={() => onJump("batches")}
+              className="text-xs font-medium text-brand hover:underline"
+            >
               {tr("前往结算 →", "Settle →")}
             </button>
           </div>
@@ -342,7 +469,11 @@ function OverviewTab({
                 className="flex flex-wrap items-center gap-3 rounded-xl bg-surface px-3 py-2 text-sm"
               >
                 <span className="grid h-6 w-6 place-items-center rounded-full bg-brand/10 text-brand">
-                  {b.shipping_method === "air" ? <Plane className="h-3 w-3" /> : <Ship className="h-3 w-3" />}
+                  {b.shipping_method === "air" ? (
+                    <Plane className="h-3 w-3" />
+                  ) : (
+                    <Ship className="h-3 w-3" />
+                  )}
                 </span>
                 <span className="font-mono text-xs font-semibold">{b.batch_no}</span>
                 <span className="ml-auto font-display text-base font-bold text-foreground">
@@ -365,7 +496,10 @@ function OverviewTab({
               {tr("发起新集运", "New forwarding request")}
             </div>
             <p className="mt-1 text-xs text-ink-soft">
-              {tr("提交国内快递单号，到仓后短信通知", "Submit domestic tracking numbers, get SMS updates")}
+              {tr(
+                "提交国内快递单号，到仓后短信通知",
+                "Submit domestic tracking numbers, get SMS updates",
+              )}
             </p>
           </div>
           <ArrowRight className="h-4 w-4 text-ink-soft transition group-hover:translate-x-1 group-hover:text-brand" />
@@ -394,7 +528,9 @@ function OverviewTab({
               <ShoppingBag className="h-4 w-4 text-brand" />
               {tr("继续购物", "Continue shopping")}
             </div>
-            <p className="mt-1 text-xs text-ink-soft">{tr("浏览自营商城精选商品", "Browse curated products")}</p>
+            <p className="mt-1 text-xs text-ink-soft">
+              {tr("浏览自营商城精选商品", "Browse curated products")}
+            </p>
           </div>
           <ArrowRight className="h-4 w-4 text-ink-soft transition group-hover:translate-x-1 group-hover:text-brand" />
         </Link>
@@ -459,7 +595,9 @@ function ProfileTab() {
 
     setBusy(true);
     if (username.toLowerCase() !== (initialUsername.current ?? "").toLowerCase()) {
-      const { data: available, error: checkErr } = await sb.rpc("check_username_available", { p_username: username });
+      const { data: available, error: checkErr } = await sb.rpc("check_username_available", {
+        p_username: username,
+      });
       if (checkErr) {
         toast.error(checkErr.message);
         setBusy(false);
@@ -485,6 +623,10 @@ function ProfileTab() {
         reg_address: p.reg_address ?? null,
         reg_postal_code: p.reg_postal_code ?? null,
         reg_phone: p.reg_phone ?? null,
+        invoice_title: p.invoice_title ?? null,
+        invoice_phone: p.invoice_phone ?? null,
+        invoice_email: p.invoice_email ?? null,
+        invoice_address: p.invoice_address ?? null,
       })
       .eq("id", profile.id);
     setBusy(false);
@@ -509,7 +651,9 @@ function ProfileTab() {
           <Field label={tr("登录名", "Login name")}>
             <input
               value={profile.username ?? ""}
-              onChange={(e) => setProfile({ ...profile, username: e.target.value.replace(/\s+/g, "") })}
+              onChange={(e) =>
+                setProfile({ ...profile, username: e.target.value.replace(/\s+/g, "") })
+              }
               className={inputCls}
             />
           </Field>
@@ -540,8 +684,12 @@ function ProfileTab() {
         </div>
       </div>
 
+      <AccountSecurityCard profile={profile} setProfile={setProfile} />
+
       <div className="rounded-2xl border border-border bg-surface p-6">
-        <h2 className="mb-1 font-display text-xl font-bold">{tr("注册地址", "Registered address")}</h2>
+        <h2 className="mb-1 font-display text-xl font-bold">
+          {tr("注册地址", "Registered address")}
+        </h2>
         <p className="mb-4 text-xs text-ink-soft">
           {tr(
             "用于集运单详情展示，可与收件地址不同。",
@@ -594,6 +742,47 @@ function ProfileTab() {
         </div>
       </div>
 
+      <div className="rounded-2xl border border-border bg-surface p-6">
+        <h2 className="mb-1 font-display text-xl font-bold">{tr("发票信息", "Invoice info")}</h2>
+        <p className="mb-4 text-xs text-ink-soft">
+          {tr(
+            "填写后会显示在账单「付款方」区块——留空则账单沿用姓名/电话/邮箱。",
+            "Shown in the invoice's bill-to block once filled in — leave blank to keep using your name/phone/email.",
+          )}
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={tr("发票抬头", "Invoice title")} full>
+            <input
+              value={p.invoice_title ?? ""}
+              onChange={(e) => setProfile({ ...profile, invoice_title: e.target.value } as any)}
+              placeholder={tr("公司名称 / 个人姓名", "Company or personal name")}
+              className={inputCls}
+            />
+          </Field>
+          <Field label={tr("发票电话", "Invoice phone")}>
+            <input
+              value={p.invoice_phone ?? ""}
+              onChange={(e) => setProfile({ ...profile, invoice_phone: e.target.value } as any)}
+              className={inputCls}
+            />
+          </Field>
+          <Field label={tr("发票邮箱", "Invoice email")}>
+            <input
+              value={p.invoice_email ?? ""}
+              onChange={(e) => setProfile({ ...profile, invoice_email: e.target.value } as any)}
+              className={inputCls}
+            />
+          </Field>
+          <Field label={tr("发票地址", "Invoice address")} full>
+            <input
+              value={p.invoice_address ?? ""}
+              onChange={(e) => setProfile({ ...profile, invoice_address: e.target.value } as any)}
+              className={inputCls}
+            />
+          </Field>
+        </div>
+      </div>
+
       <button
         onClick={save}
         disabled={busy}
@@ -602,6 +791,189 @@ function ProfileTab() {
         {busy && <Loader2 className="h-4 w-4 animate-spin" />}
         {tr("保存修改", "Save changes")}
       </button>
+    </div>
+  );
+}
+
+// ===================== Account security (password / email / WeChat) =====================
+function AccountSecurityCard({
+  profile,
+  setProfile,
+}: {
+  profile: Profile;
+  setProfile: (p: Profile) => void;
+}) {
+  const { lang } = useApp();
+  const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
+  const p: any = profile;
+
+  const [newEmail, setNewEmail] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+  const changeEmail = async () => {
+    const email = newEmail.trim();
+    if (!email) return;
+    setEmailBusy(true);
+    const { error } = await supabase.auth.updateUser({ email });
+    setEmailBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success(
+      tr(
+        "验证邮件已发送到新邮箱，请查收并点击确认链接完成更换",
+        "A confirmation link was sent to the new address — click it to finish the change",
+      ),
+    );
+    setNewEmail("");
+  };
+
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  const changePassword = async () => {
+    if (pw1.length < 6)
+      return toast.error(tr("密码至少需要6位", "Password must be at least 6 characters"));
+    if (pw1 !== pw2) return toast.error(tr("两次输入的密码不一致", "Passwords do not match"));
+    setPwBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: pw1 });
+    setPwBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success(tr("密码已更新", "Password updated"));
+    setPw1("");
+    setPw2("");
+  };
+
+  const startBind = useServerFn(startWechatBind);
+  const doUnbind = useServerFn(unbindWechat);
+  const [wechatBusy, setWechatBusy] = useState(false);
+  const bindWechat = async () => {
+    setWechatBusy(true);
+    const r: any = await startBind({ data: { origin: window.location.origin } }).catch(() => null);
+    setWechatBusy(false);
+    if (!r?.configured) {
+      toast.info(
+        tr(
+          "微信绑定即将开放：管理员需在微信开放平台申请网页应用并填入 AppID/AppSecret",
+          "WeChat binding coming soon — admin must register a WeChat Open Platform web app and add AppID/AppSecret",
+        ),
+      );
+      return;
+    }
+    window.location.href = r.url;
+  };
+  const unbindWx = async () => {
+    if (!confirm(tr("确定要解绑微信吗？", "Unbind your WeChat account?"))) return;
+    setWechatBusy(true);
+    try {
+      await doUnbind();
+      setProfile({ ...profile, wechat_openid: null, wechat_nickname: null });
+      toast.success(tr("已解绑微信", "WeChat unbound"));
+    } catch (e: any) {
+      toast.error(e.message ?? tr("解绑失败", "Failed to unbind"));
+    } finally {
+      setWechatBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-border bg-surface p-6">
+      <h2 className="mb-4 font-display text-xl font-bold">{tr("账号安全", "Account security")}</h2>
+      <div className="space-y-6">
+        <div>
+          <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold">
+            <Mail className="h-4 w-4 text-ink-soft" />
+            {tr("登录邮箱", "Login email")}
+          </div>
+          <p className="mb-2 text-xs text-ink-soft">
+            {tr("当前", "Current")}: {p.email ?? "—"}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="email"
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value.trim())}
+              placeholder={tr("新邮箱地址", "New email address")}
+              className={inputCls + " max-w-xs"}
+            />
+            <button
+              onClick={changeEmail}
+              disabled={emailBusy || !newEmail}
+              className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-xs font-semibold hover:border-brand hover:text-brand disabled:opacity-50"
+            >
+              {emailBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {tr("更换邮箱", "Update email")}
+            </button>
+          </div>
+        </div>
+
+        <div className="border-t border-border pt-6">
+          <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold">
+            <KeyRound className="h-4 w-4 text-ink-soft" />
+            {tr("设置密码", "Set password")}
+          </div>
+          <div className="grid max-w-md gap-2 sm:grid-cols-2">
+            <input
+              type="password"
+              value={pw1}
+              onChange={(e) => setPw1(e.target.value)}
+              placeholder={tr("新密码（至少6位）", "New password (min 6)")}
+              className={inputCls}
+            />
+            <input
+              type="password"
+              value={pw2}
+              onChange={(e) => setPw2(e.target.value)}
+              placeholder={tr("确认新密码", "Confirm new password")}
+              className={inputCls}
+            />
+          </div>
+          <button
+            onClick={changePassword}
+            disabled={pwBusy || !pw1 || !pw2}
+            className="mt-2 inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-xs font-semibold hover:border-brand hover:text-brand disabled:opacity-50"
+          >
+            {pwBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {tr("更新密码", "Update password")}
+          </button>
+        </div>
+
+        <div className="border-t border-border pt-6">
+          <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold">
+            <MessageCircle className="h-4 w-4 text-ink-soft" />
+            {tr("绑定微信", "Bind WeChat")}
+          </div>
+          {p.wechat_openid ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1.5 text-xs font-semibold text-success">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {tr(
+                  `已绑定：${p.wechat_nickname ?? "微信用户"}`,
+                  `Linked: ${p.wechat_nickname ?? "WeChat user"}`,
+                )}
+              </span>
+              <button
+                onClick={unbindWx}
+                disabled={wechatBusy}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-ink-soft hover:border-destructive hover:text-destructive disabled:opacity-50"
+              >
+                {wechatBusy ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Link2Off className="h-3.5 w-3.5" />
+                )}
+                {tr("解绑", "Unbind")}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={bindWechat}
+              disabled={wechatBusy}
+              className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-xs font-semibold hover:border-brand hover:text-brand disabled:opacity-50"
+            >
+              {wechatBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {tr("绑定微信", "Bind WeChat")}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -636,7 +1008,8 @@ function AddressTab() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
-    if (editing.is_default) await sb.from("addresses").update({ is_default: false }).eq("user_id", user.id);
+    if (editing.is_default)
+      await sb.from("addresses").update({ is_default: false }).eq("user_id", user.id);
     const payload = { ...editing, user_id: user.id };
     const { error } = editing.id
       ? await sb.from("addresses").update(payload).eq("id", editing.id)
@@ -726,7 +1099,9 @@ function AddressTab() {
               <select
                 className={inputCls}
                 value={editing.destination_code ?? ""}
-                onChange={(e) => setEditing({ ...editing, destination_code: e.target.value || null })}
+                onChange={(e) =>
+                  setEditing({ ...editing, destination_code: e.target.value || null })
+                }
               >
                 <option value="">{tr("— 选择目的地 —", "— Select destination —")}</option>
                 {destinations.map((d) => (
@@ -754,7 +1129,10 @@ function AddressTab() {
             >
               {tr("保存", "Save")}
             </button>
-            <button onClick={() => setEditing(null)} className="rounded-full border border-border px-5 py-2 text-sm">
+            <button
+              onClick={() => setEditing(null)}
+              className="rounded-full border border-border px-5 py-2 text-sm"
+            >
               {tr("取消", "Cancel")}
             </button>
           </div>
@@ -793,7 +1171,9 @@ function AddressTab() {
                     <p className="mt-2 text-sm">
                       <span className="text-ink-soft">{tr("目的地", "Destination")}: </span>
                       <span className="font-bold">
-                        {d ? `${lang === "zh" ? d.name_zh : (d.name_en ?? d.name_zh)} (${d.code})` : a.destination_code}
+                        {d
+                          ? `${lang === "zh" ? d.name_zh : (d.name_en ?? d.name_zh)} (${d.code})`
+                          : a.destination_code}
                       </span>
                     </p>
                   );
@@ -879,7 +1259,10 @@ function BatchesTab({ onJump }: { onJump: (t: Tab) => void }) {
     )
       return;
     setPaying(batchId);
-    const data: any = await doPay({ data: { batchId } }).catch((e: any) => ({ ok: false, reason: e.message }));
+    const data: any = await doPay({ data: { batchId } }).catch((e: any) => ({
+      ok: false,
+      reason: e.message,
+    }));
     setPaying(null);
     if (!data?.ok) {
       if (data?.reason === "insufficient") {
@@ -900,13 +1283,20 @@ function BatchesTab({ onJump }: { onJump: (t: Tab) => void }) {
       return toast.error(tr("付款失败", "Payment failed"));
     }
     const pointsMsg =
-      data.points_earned > 0 ? tr(`，获得 ${data.points_earned} 积分`, `, earned ${data.points_earned} points`) : "";
+      data.points_earned > 0
+        ? tr(`，获得 ${data.points_earned} 积分`, `, earned ${data.points_earned} points`)
+        : "";
     toast.success(
       tr(
         `付款成功 CA$${data.paid_cad}，账单 ${data.invoice_no}${pointsMsg}`,
         `Paid CA$${data.paid_cad} — invoice ${data.invoice_no}${pointsMsg}`,
       ),
-      { action: { label: tr("查看账单", "View invoice"), onClick: () => navigate({ to: "/invoices" }) } },
+      {
+        action: {
+          label: tr("查看账单", "View invoice"),
+          onClick: () => navigate({ to: "/invoices" }),
+        },
+      },
     );
     load();
   };
@@ -918,7 +1308,10 @@ function BatchesTab({ onJump }: { onJump: (t: Tab) => void }) {
     return (
       <Empty
         icon={<Layers />}
-        text={tr("还没有可显示的批次（批次发出后会出现在这里）", "No batches yet — they appear here once shipped")}
+        text={tr(
+          "还没有可显示的批次（批次发出后会出现在这里）",
+          "No batches yet — they appear here once shipped",
+        )}
       />
     );
 
@@ -938,7 +1331,11 @@ function BatchesTab({ onJump }: { onJump: (t: Tab) => void }) {
           </p>
         </div>
         <label className="inline-flex shrink-0 items-center gap-2 text-xs text-ink-soft">
-          <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={showHistory}
+            onChange={(e) => setShowHistory(e.target.checked)}
+          />
           {tr(`显示已关闭批次 (${historyCount})`, `Show closed (${historyCount})`)}
         </label>
       </div>
@@ -977,7 +1374,9 @@ function BatchCard({
     setTrackOpen(next);
     if (next && events === null) {
       if (b.intl_tracking_nos.length === 0) return setEvents("err");
-      const results = await Promise.all(b.intl_tracking_nos.map((t) => sb.rpc("lookup_shipment", { _tracking_no: t })));
+      const results = await Promise.all(
+        b.intl_tracking_nos.map((t) => sb.rpc("lookup_shipment", { _tracking_no: t })),
+      );
       const all: any[] = [];
       results.forEach((r: any, i: number) => {
         const evs = r?.data?.events ?? [];
@@ -1003,7 +1402,11 @@ function BatchCard({
             <span className="font-display text-sm font-bold">{b.batch_no}</span>
             {(() => {
               const [zh, en, cls] = BATCH_STATUS_LABELS[b.status];
-              return <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>{tr(zh, en)}</span>;
+              return (
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
+                  {tr(zh, en)}
+                </span>
+              );
             })()}
             {b.is_paid ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success">
@@ -1021,7 +1424,8 @@ function BatchCard({
             {b.eta && (
               <span className="inline-flex items-center gap-1">
                 <Calendar className="h-3 w-3" />
-                {tr("预计到达", "ETA")} {new Date(b.eta).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-CA")}
+                {tr("预计到达", "ETA")}{" "}
+                {new Date(b.eta).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-CA")}
               </span>
             )}
             <span>
@@ -1033,7 +1437,9 @@ function BatchCard({
           <div className="text-[10px] uppercase tracking-wider text-ink-soft">
             {b.is_paid ? tr("批次合计", "Batch total") : tr("批次待付", "Batch unpaid")}
           </div>
-          <div className="font-display text-lg font-bold text-brand-gradient">CA${b.subtotal_cad.toFixed(2)}</div>
+          <div className="font-display text-lg font-bold text-brand-gradient">
+            CA${b.subtotal_cad.toFixed(2)}
+          </div>
         </div>
       </header>
 
@@ -1095,7 +1501,9 @@ function BatchCard({
         >
           <MapPin className="h-3 w-3" />
           {tr("批次物流轨迹", "Batch tracking")}
-          {b.intl_tracking_nos.length > 0 && <span className="text-ink-soft">({b.intl_tracking_nos.length})</span>}
+          {b.intl_tracking_nos.length > 0 && (
+            <span className="text-ink-soft">({b.intl_tracking_nos.length})</span>
+          )}
           <span className="text-ink-soft">{trackOpen ? "▲" : "▼"}</span>
         </button>
         {trackOpen && (
@@ -1106,7 +1514,9 @@ function BatchCard({
               </div>
             )}
             {events === "err" && (
-              <div className="py-4 text-center text-xs text-ink-soft">{tr("暂无轨迹数据", "No tracking data yet")}</div>
+              <div className="py-4 text-center text-xs text-ink-soft">
+                {tr("暂无轨迹数据", "No tracking data yet")}
+              </div>
             )}
             {Array.isArray(events) && <TrackingTimeline events={events as any} lang={lang} />}
           </div>
@@ -1117,7 +1527,9 @@ function BatchCard({
         <div className="flex flex-wrap items-center gap-3 border-t border-border bg-background px-5 py-3">
           <div className="text-xs text-ink-soft">
             {tr("待付", "Unpaid")}:{" "}
-            <span className="font-display text-base font-bold text-foreground">CA${b.subtotal_cad.toFixed(2)}</span>
+            <span className="font-display text-base font-bold text-foreground">
+              CA${b.subtotal_cad.toFixed(2)}
+            </span>
           </div>
           <button
             disabled={paying === b.batch_id}
@@ -1158,7 +1570,8 @@ interface InventoryGroup {
 }
 
 const DAY_MS = 86_400_000;
-const storageDays = (isoDate: string) => Math.max(0, Math.floor((Date.now() - new Date(isoDate).getTime()) / DAY_MS));
+const storageDays = (isoDate: string) =>
+  Math.max(0, Math.floor((Date.now() - new Date(isoDate).getTime()) / DAY_MS));
 
 // Shared with src/routes/_authenticated/forwarding.index.tsx — key for handing off
 // locked item drafts (and the warehouse they must ship from) when shipping straight from My Inventory.
@@ -1205,8 +1618,12 @@ const DEMO_GROUPS_TEMPLATE: Array<Omit<InventoryGroup, "warehouse"> & { warehous
 ];
 
 function buildDemoGroups(realWarehouses: InventoryWarehouse[]): InventoryGroup[] {
-  const pick = (slot: 0 | 1): InventoryWarehouse | null => realWarehouses[slot] ?? realWarehouses[0] ?? null;
-  return DEMO_GROUPS_TEMPLATE.map(({ warehouseSlot, ...g }) => ({ ...g, warehouse: pick(warehouseSlot) }));
+  const pick = (slot: 0 | 1): InventoryWarehouse | null =>
+    realWarehouses[slot] ?? realWarehouses[0] ?? null;
+  return DEMO_GROUPS_TEMPLATE.map(({ warehouseSlot, ...g }) => ({
+    ...g,
+    warehouse: pick(warehouseSlot),
+  }));
 }
 
 function buildInventoryGroups(rows: any[]): InventoryGroup[] {
@@ -1238,7 +1655,17 @@ function InventoryTab() {
   const [payingStorage, setPayingStorage] = useState(false);
 
   const loadStorageFee = async () => {
-    const { data } = await sb.rpc("preview_storage_fees");
+    const { data, error } = await sb.rpc("preview_storage_fees");
+    if (error) {
+      // Surface it instead of silently showing "$0 due" — that looked
+      // identical to "nothing owed" and hid real failures (e.g. the RPC
+      // missing because its migration hasn't been applied yet).
+      toast.error(
+        tr(`仓储费查询失败：${error.message}`, `Failed to load storage fee: ${error.message}`),
+      );
+      setStorageFee({ total_cad: 0 });
+      return;
+    }
     setStorageFee(data ?? { total_cad: 0 });
   };
 
@@ -1276,13 +1703,20 @@ function InventoryTab() {
       return toast.error(tr("付款失败", "Payment failed"));
     }
     const pointsMsg =
-      data.points_earned > 0 ? tr(`，获得 ${data.points_earned} 积分`, `, earned ${data.points_earned} points`) : "";
+      data.points_earned > 0
+        ? tr(`，获得 ${data.points_earned} 积分`, `, earned ${data.points_earned} points`)
+        : "";
     toast.success(
       tr(
         `仓储费付款成功 CA$${data.paid_cad}，账单 ${data.invoice_no}${pointsMsg}`,
         `Storage fee paid CA$${data.paid_cad} — invoice ${data.invoice_no}${pointsMsg}`,
       ),
-      { action: { label: tr("查看账单", "View invoice"), onClick: () => navigate({ to: "/invoices" }) } },
+      {
+        action: {
+          label: tr("查看账单", "View invoice"),
+          onClick: () => navigate({ to: "/invoices" }),
+        },
+      },
     );
     loadStorageFee();
   };
@@ -1298,7 +1732,9 @@ function InventoryTab() {
           .order("updated_at", { ascending: false }),
         sb.from("warehouses").select("id,code,name_zh,name_en").eq("is_active", true),
       ]);
-      const fwdIds = Array.from(new Set((wbRows ?? []).map((w: any) => w.forwarding_id).filter(Boolean)));
+      const fwdIds = Array.from(
+        new Set((wbRows ?? []).map((w: any) => w.forwarding_id).filter(Boolean)),
+      );
       const { data: fwdRows } = fwdIds.length
         ? await sb.from("forwarding_orders").select("id,warehouse").in("id", fwdIds)
         : { data: [] as any[] };
@@ -1308,7 +1744,9 @@ function InventoryTab() {
         name: lang === "zh" ? w.name_zh : (w.name_en ?? w.name_zh),
       }));
       const whByCode = new Map(realWarehouses.map((w) => [w.code, w]));
-      const warehouseByFwdId = new Map((fwdRows ?? []).map((f: any) => [f.id, whByCode.get(f.warehouse) ?? null]));
+      const warehouseByFwdId = new Map(
+        (fwdRows ?? []).map((f: any) => [f.id, whByCode.get(f.warehouse) ?? null]),
+      );
       const withWarehouse = (wbRows ?? []).map((w: any) => ({
         ...w,
         warehouse: warehouseByFwdId.get(w.forwarding_id) ?? null,
@@ -1340,7 +1778,9 @@ function InventoryTab() {
   const shipSelected = () => {
     if (toShip.length === 0) return;
     if (shipWarehouseIds.size > 1 || shipWarehouseIds.has("unknown")) {
-      toast.error(tr("请选择同一仓库的货物一起发货", "Please ship items from a single warehouse at a time"));
+      toast.error(
+        tr("请选择同一仓库的货物一起发货", "Please ship items from a single warehouse at a time"),
+      );
       return;
     }
     const items = toShip.map((g) => {
@@ -1354,7 +1794,10 @@ function InventoryTab() {
         locked: true,
       };
     });
-    sessionStorage.setItem(FORWARDING_PREFILL_KEY, JSON.stringify({ warehouseId: toShip[0].warehouse!.id, items }));
+    sessionStorage.setItem(
+      FORWARDING_PREFILL_KEY,
+      JSON.stringify({ warehouseId: toShip[0].warehouse!.id, items }),
+    );
     navigate({ to: "/forwarding" });
   };
 
@@ -1387,7 +1830,10 @@ function InventoryTab() {
         <StatCard
           label={tr("待付仓储费", "Storage fee due")}
           value={`CA$${(storageFee?.total_cad ?? 0).toFixed(2)}`}
-          sub={tr("按仓库体积与天数计算，付款后重新计时", "By volume × days — payment resets the billing clock")}
+          sub={tr(
+            "按仓库体积与天数计算，付款后重新计时",
+            "By volume × days — payment resets the billing clock",
+          )}
           icon={<Wallet className="h-5 w-5" />}
           tone={storageFee && storageFee.total_cad > 0 ? "brand" : undefined}
           action={
@@ -1409,7 +1855,10 @@ function InventoryTab() {
       </div>
 
       {groups.length === 0 ? (
-        <Empty icon={<Warehouse />} text={tr("目前没有仓储中的运单", "No waybills in storage right now")} />
+        <Empty
+          icon={<Warehouse />}
+          text={tr("目前没有仓储中的运单", "No waybills in storage right now")}
+        />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-surface">
           <ul className="divide-y divide-border">
@@ -1436,11 +1885,17 @@ function InventoryTab() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-display text-lg font-bold text-foreground">{g.boxes.length}</div>
-                    <div className="text-[10px] uppercase tracking-wider text-ink-soft">{tr("箱", "box(es)")}</div>
+                    <div className="font-display text-lg font-bold text-foreground">
+                      {g.boxes.length}
+                    </div>
+                    <div className="text-[10px] uppercase tracking-wider text-ink-soft">
+                      {tr("箱", "box(es)")}
+                    </div>
                   </div>
                   <div className="ml-auto flex items-center gap-2">
-                    <label className="text-[11px] text-ink-soft">{tr("发货箱数", "Ship boxes")}</label>
+                    <label className="text-[11px] text-ink-soft">
+                      {tr("发货箱数", "Ship boxes")}
+                    </label>
                     <input
                       type="number"
                       min={0}
@@ -1657,7 +2112,9 @@ function MyItemsTab() {
                 step="0.01"
                 className={inputCls}
                 value={editing.declared_value_cad ?? 0}
-                onChange={(e) => setEditing({ ...editing, declared_value_cad: Number(e.target.value) || 0 })}
+                onChange={(e) =>
+                  setEditing({ ...editing, declared_value_cad: Number(e.target.value) || 0 })
+                }
               />
             </Field>
             <Field label={tr("内件数", "Units/box")}>
@@ -1667,7 +2124,10 @@ function MyItemsTab() {
                 className={inputCls}
                 value={editing.inner_qty ?? ""}
                 onChange={(e) =>
-                  setEditing({ ...editing, inner_qty: e.target.value === "" ? undefined : Number(e.target.value) })
+                  setEditing({
+                    ...editing,
+                    inner_qty: e.target.value === "" ? undefined : Number(e.target.value),
+                  })
                 }
               />
             </Field>
@@ -1717,7 +2177,10 @@ function MyItemsTab() {
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}
               {tr("保存", "Save")}
             </button>
-            <button onClick={() => setEditing(null)} className="rounded-full border border-border px-5 py-2 text-sm">
+            <button
+              onClick={() => setEditing(null)}
+              className="rounded-full border border-border px-5 py-2 text-sm"
+            >
               {tr("取消", "Cancel")}
             </button>
           </div>
@@ -1727,7 +2190,10 @@ function MyItemsTab() {
       {list.length === 0 && !editing ? (
         <Empty
           icon={<Tags />}
-          text={tr("还没有保存物品，点击右上角添加一个", "No saved items yet — add one to get started")}
+          text={tr(
+            "还没有保存物品，点击右上角添加一个",
+            "No saved items yet — add one to get started",
+          )}
         />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-surface">
@@ -1837,7 +2303,9 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
         .order("created_at", { ascending: false }),
       sb
         .from("waybills")
-        .select("order_id,forwarding_id,waybill_no,status,weight_kg,length_cm,width_cm,height_cm,created_at")
+        .select(
+          "order_id,forwarding_id,waybill_no,status,weight_kg,length_cm,width_cm,height_cm,created_at",
+        )
         .order("created_at"),
     ]).then(([o, f, w]: any) => {
       const byOrder = new Map<string, MyWaybill[]>();
@@ -1938,7 +2406,8 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
       }) as Record<string, string>
     )[s] ?? s;
 
-  const statusLabel = (it: MyOrderItem) => (it.kind === "order" ? orderStatus(it.status) : fwdStatus(it.status));
+  const statusLabel = (it: MyOrderItem) =>
+    it.kind === "order" ? orderStatus(it.status) : fwdStatus(it.status);
 
   const byFilter = items.filter((it) => {
     if (filter === "all") return true;
@@ -1947,12 +2416,16 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
     if (filter === "unwarehoused") return it.kind === "forwarding" && it.status === "pending";
     return true;
   });
-  const byHistory = showHistory ? byFilter : byFilter.filter((it) => !HISTORY_STATUSES.has(it.status));
+  const byHistory = showHistory
+    ? byFilter
+    : byFilter.filter((it) => !HISTORY_STATUSES.has(it.status));
   const q = query.trim().toLowerCase();
   const filtered = !q
     ? byHistory
     : byHistory.filter((it) => {
-        const dateStr = new Date(it.created_at).toLocaleString(lang === "zh" ? "zh-CN" : "en-CA").toLowerCase();
+        const dateStr = new Date(it.created_at)
+          .toLocaleString(lang === "zh" ? "zh-CN" : "en-CA")
+          .toLowerCase();
         return (
           it.no.toLowerCase().includes(q) ||
           (it.tracking_no ?? "").toLowerCase().includes(q) ||
@@ -1984,7 +2457,9 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-xl font-bold">{tr("我的订单/运单", "My orders / waybills")}</h2>
+          <h2 className="font-display text-xl font-bold">
+            {tr("我的订单/运单", "My orders / waybills")}
+          </h2>
         </div>
         <Empty
           icon={<Package />}
@@ -2006,7 +2481,9 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="font-display text-xl font-bold">{tr("我的订单/运单", "My orders / waybills")}</h2>
+        <h2 className="font-display text-xl font-bold">
+          {tr("我的订单/运单", "My orders / waybills")}
+        </h2>
         <Link
           to="/forwarding"
           className="inline-flex items-center gap-1 self-start rounded-full bg-cta-gradient px-4 py-2 text-xs font-semibold text-cta-foreground shadow-elevated"
@@ -2032,7 +2509,11 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
           className={inputCls + " sm:max-w-md"}
         />
         <label className="inline-flex shrink-0 items-center gap-2 px-1 text-xs text-ink-soft">
-          <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={showHistory}
+            onChange={(e) => setShowHistory(e.target.checked)}
+          />
           {tr(`显示历史订单 (${historyCount})`, `Show history (${historyCount})`)}
         </label>
       </div>
@@ -2044,7 +2525,10 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
           </div>
         )}
         {filtered.map((o) => (
-          <div key={`${o.kind}-${o.id}`} className="rounded-2xl border border-border bg-surface p-5">
+          <div
+            key={`${o.kind}-${o.id}`}
+            className="rounded-2xl border border-border bg-surface p-5"
+          >
             <div className="flex flex-wrap items-center gap-3">
               <span
                 className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${o.kind === "order" ? "bg-brand/10 text-brand" : "bg-cta/10 text-cta"}`}
@@ -2083,16 +2567,24 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
               </span>
               {(() => {
                 const amountCad =
-                  o.kind === "forwarding" && (o.total_cad ?? 0) > 0 ? Number(o.total_cad) : cnyToCad(o.fee_cny);
+                  o.kind === "forwarding" && (o.total_cad ?? 0) > 0
+                    ? Number(o.total_cad)
+                    : cnyToCad(o.fee_cny);
                 return amountCad > 0 ? (
                   <div className="ml-auto text-right">
                     <div className="font-display text-base font-bold text-brand-gradient">
                       CA${amountCad.toFixed(2)}
                     </div>
                     <div className="text-[11px] text-ink-soft">
-                      {(o.total_weight_kg ?? 0) > 0 && <span>{(o.total_weight_kg ?? 0).toFixed(2)} kg</span>}
-                      {(o.total_weight_kg ?? 0) > 0 && (o.total_volume_m3 ?? 0) > 0 && <span> · </span>}
-                      {(o.total_volume_m3 ?? 0) > 0 && <span>{(o.total_volume_m3 ?? 0).toFixed(3)} m³</span>}
+                      {(o.total_weight_kg ?? 0) > 0 && (
+                        <span>{(o.total_weight_kg ?? 0).toFixed(2)} kg</span>
+                      )}
+                      {(o.total_weight_kg ?? 0) > 0 && (o.total_volume_m3 ?? 0) > 0 && (
+                        <span> · </span>
+                      )}
+                      {(o.total_volume_m3 ?? 0) > 0 && (
+                        <span>{(o.total_volume_m3 ?? 0).toFixed(3)} m³</span>
+                      )}
                     </div>
                   </div>
                 ) : null;
@@ -2101,7 +2593,8 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
 
             {o.domestic_tracking_no && (
               <div className="mt-2 text-xs text-ink-soft">
-                {tr("国内单号", "Domestic")}: <span className="font-mono">{o.domestic_tracking_no}</span>
+                {tr("国内单号", "Domestic")}:{" "}
+                <span className="font-mono">{o.domestic_tracking_no}</span>
               </div>
             )}
             {o.kind === "forwarding" && o.note && (
@@ -2110,17 +2603,27 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
               </div>
             )}
 
-            {(o.waybills?.length ?? 0) > 0 && <WaybillsDropdown waybills={o.waybills!} lang={lang} />}
+            {(o.waybills?.length ?? 0) > 0 && (
+              <WaybillsDropdown waybills={o.waybills!} lang={lang} />
+            )}
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
               {o.tracking_no && (o.waybills?.length ?? 0) === 0 && (
                 <button
-                  onClick={() => setOpenId(openId === `${o.kind}-${o.id}` ? null : `${o.kind}-${o.id}`)}
+                  onClick={() =>
+                    setOpenId(openId === `${o.kind}-${o.id}` ? null : `${o.kind}-${o.id}`)
+                  }
                   className="inline-flex items-center gap-2 text-xs text-brand hover:underline"
                 >
-                  {o.kind === "order" ? <Package className="h-3 w-3" /> : <Truck className="h-3 w-3" />}
+                  {o.kind === "order" ? (
+                    <Package className="h-3 w-3" />
+                  ) : (
+                    <Truck className="h-3 w-3" />
+                  )}
                   {tr("追踪", "Track")}: {o.tracking_no}
-                  <span className="text-ink-soft">{openId === `${o.kind}-${o.id}` ? "▲" : "▼"}</span>
+                  <span className="text-ink-soft">
+                    {openId === `${o.kind}-${o.id}` ? "▲" : "▼"}
+                  </span>
                 </button>
               )}
               {o.kind === "order" ? (
@@ -2141,7 +2644,9 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
                 </Link>
               )}
             </div>
-            {openId === `${o.kind}-${o.id}` && o.tracking_no && <InlineTrack trackingNo={o.tracking_no} />}
+            {openId === `${o.kind}-${o.id}` && o.tracking_no && (
+              <InlineTrack trackingNo={o.tracking_no} />
+            )}
           </div>
         ))}
       </div>
@@ -2169,7 +2674,8 @@ function WaybillsDropdown({ waybills, lang }: { waybills: MyWaybill[]; lang: "zh
         className="inline-flex items-center gap-2 rounded-full border border-border bg-background/40 px-3 py-1.5 text-xs font-medium hover:border-brand hover:text-brand"
       >
         <Package className="h-3 w-3" />
-        {tr("运单", "Waybills")} ({waybills.length})<span className="text-ink-soft">{open ? "▲" : "▼"}</span>
+        {tr("运单", "Waybills")} ({waybills.length})
+        <span className="text-ink-soft">{open ? "▲" : "▼"}</span>
       </button>
       {open && (
         <ul className="mt-2 space-y-1.5 rounded-xl border border-border bg-background/40 p-3">
@@ -2204,7 +2710,11 @@ function WalletTab() {
   const load = async () => {
     const [{ data: w }, { data: t }] = await Promise.all([
       sb.from("wallets").select("*").maybeSingle(),
-      sb.from("wallet_transactions").select("*").order("created_at", { ascending: false }).limit(50),
+      sb
+        .from("wallet_transactions")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50),
     ]);
     setWallet(w ?? { balance_cad: 0, user_id: "" });
     setTxs(t ?? []);
@@ -2239,7 +2749,8 @@ function WalletTab() {
   const typeLabel = (t: WalletTx) => {
     if (t.type === "spend" && t.channel === "shop") return tr("电商扣款", "Shop deduction");
     if (t.type === "spend" && t.channel === "batch") return tr("集运扣款", "Forwarding deduction");
-    if (t.type === "spend" && t.channel === "storage") return tr("仓库扣费", "Storage fee deduction");
+    if (t.type === "spend" && t.channel === "storage")
+      return tr("仓库扣费", "Storage fee deduction");
     return (
       (
         {
@@ -2283,13 +2794,17 @@ function WalletTab() {
   return (
     <div className="space-y-6">
       <div className="rounded-3xl border border-brand/30 bg-brand-gradient p-6 text-white shadow-elevated">
-        <div className="text-xs uppercase tracking-wide opacity-80">{tr("当前余额", "Current balance")}</div>
+        <div className="text-xs uppercase tracking-wide opacity-80">
+          {tr("当前余额", "Current balance")}
+        </div>
         <div className="mt-2 font-display text-4xl font-bold">CA${balanceCad.toFixed(2)}</div>
       </div>
 
       <div className="rounded-2xl border border-border bg-surface p-6">
         <div className="mb-4">
-          <h3 className="font-display text-lg font-bold">{tr("充值 (加币结算)", "Top up (CAD settlement)")}</h3>
+          <h3 className="font-display text-lg font-bold">
+            {tr("充值 (加币结算)", "Top up (CAD settlement)")}
+          </h3>
         </div>
         <div className="mb-3 flex flex-wrap gap-2">
           {presets.map((v) => (
@@ -2312,9 +2827,13 @@ function WalletTab() {
             className={inputCls}
           />
         </Field>
-        <p className="mt-2 text-xs text-ink-soft">{tr("账户以加币记账", "Account is kept in CAD")}</p>
+        <p className="mt-2 text-xs text-ink-soft">
+          {tr("账户以加币记账", "Account is kept in CAD")}
+        </p>
         <div className="mt-4">
-          <div className="mb-2 text-xs font-medium text-ink-soft">{tr("支付方式", "Payment method")}</div>
+          <div className="mb-2 text-xs font-medium text-ink-soft">
+            {tr("支付方式", "Payment method")}
+          </div>
           <div className="grid grid-cols-4 gap-2 rounded-full bg-accent p-1">
             {(["card", "wechat", "alipay", "paypal"] as const).map((c) => (
               <button
@@ -2352,7 +2871,9 @@ function WalletTab() {
       <div className="rounded-2xl border border-border bg-surface p-6">
         <h3 className="mb-4 font-display text-lg font-bold">{tr("账单流水", "Transactions")}</h3>
         {txs.length === 0 ? (
-          <p className="py-8 text-center text-sm text-ink-soft">{tr("暂无流水", "No transactions yet")}</p>
+          <p className="py-8 text-center text-sm text-ink-soft">
+            {tr("暂无流水", "No transactions yet")}
+          </p>
         ) : (
           <ul className="divide-y divide-border">
             {txs.map((t) => {
@@ -2364,7 +2885,11 @@ function WalletTab() {
                   <span
                     className={`grid h-9 w-9 place-items-center rounded-full ${positive ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}
                   >
-                    {positive ? <ArrowDownCircle className="h-4 w-4" /> : <ArrowUpCircle className="h-4 w-4" />}
+                    {positive ? (
+                      <ArrowDownCircle className="h-4 w-4" />
+                    ) : (
+                      <ArrowUpCircle className="h-4 w-4" />
+                    )}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -2380,7 +2905,10 @@ function WalletTab() {
                       {isOfflineChannel(t.channel) && (
                         <span
                           className="rounded-full bg-cta/10 px-2 py-0.5 text-[10px] font-medium text-cta"
-                          title={tr("线下收款，不影响钱包余额", "Offline payment — doesn't affect wallet balance")}
+                          title={tr(
+                            "线下收款，不影响钱包余额",
+                            "Offline payment — doesn't affect wallet balance",
+                          )}
                         >
                           {tr("线下 · 不影响余额", "Offline · balance unaffected")}
                         </span>
@@ -2389,7 +2917,9 @@ function WalletTab() {
                     <div className="text-[11px] text-ink-soft">
                       {new Date(t.created_at).toLocaleString(lang === "zh" ? "zh-CN" : "en-CA")}
                     </div>
-                    {t.note && <div className="mt-0.5 truncate text-[11px] text-ink-soft">{t.note}</div>}
+                    {t.note && (
+                      <div className="mt-0.5 truncate text-[11px] text-ink-soft">{t.note}</div>
+                    )}
                   </div>
                   <div
                     className={`text-right font-display text-sm font-bold ${positive ? "text-success" : "text-foreground"}`}
@@ -2426,7 +2956,11 @@ function InlineTrack({ trackingNo }: { trackingNo: string }) {
       </div>
     );
   if (data === "err")
-    return <div className="mt-3 text-xs text-ink-soft">{lang === "zh" ? "暂无轨迹数据" : "No tracking data yet"}</div>;
+    return (
+      <div className="mt-3 text-xs text-ink-soft">
+        {lang === "zh" ? "暂无轨迹数据" : "No tracking data yet"}
+      </div>
+    );
   return (
     <div className="mt-4 overflow-hidden rounded-xl border border-border bg-background">
       <TrackingTimeline events={(data as any).events ?? []} lang={lang} />
@@ -2436,7 +2970,15 @@ function InlineTrack({ trackingNo }: { trackingNo: string }) {
 
 const inputCls =
   "h-11 w-full rounded-xl border border-border bg-background px-4 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/30";
-function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+function Field({
+  label,
+  children,
+  full,
+}: {
+  label: string;
+  children: React.ReactNode;
+  full?: boolean;
+}) {
   return (
     <label className={`flex flex-col gap-1.5 ${full ? "sm:col-span-2" : ""}`}>
       <span className="text-xs font-medium text-ink-soft">{label}</span>
@@ -2451,10 +2993,20 @@ function Spinner() {
     </div>
   );
 }
-function Empty({ icon, text, cta }: { icon: React.ReactNode; text: string; cta?: React.ReactNode }) {
+function Empty({
+  icon,
+  text,
+  cta,
+}: {
+  icon: React.ReactNode;
+  text: string;
+  cta?: React.ReactNode;
+}) {
   return (
     <div className="rounded-2xl border border-dashed border-border bg-surface py-16 text-center">
-      <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-accent text-ink-soft">{icon}</div>
+      <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-accent text-ink-soft">
+        {icon}
+      </div>
       <p className="mt-3 text-ink-soft">{text}</p>
       {cta}
     </div>

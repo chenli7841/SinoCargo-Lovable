@@ -17,12 +17,13 @@ function UsersPage() {
   const [searchInput, setSearchInput] = useState("");
   const [role, setRole] = useState<AppRole | "all">("all");
   const [vipLevel, setVipLevel] = useState<VipLevel | "all">("all");
+  const [unpaidOnly, setUnpaidOnly] = useState(false);
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
   const q = useQuery({
-    queryKey: ["admin-users", { search, role, vipLevel, page }],
-    queryFn: () => fetchUsers({ data: { search, role, vipLevel, page, pageSize } }),
+    queryKey: ["admin-users", { search, role, vipLevel, unpaidOnly, page }],
+    queryFn: () => fetchUsers({ data: { search, role, vipLevel, unpaidOnly, page, pageSize } }),
   });
 
   const totalPages = q.data ? Math.max(1, Math.ceil(q.data.total / pageSize)) : 1;
@@ -93,6 +94,17 @@ function UsersPage() {
               </option>
             ))}
           </select>
+          <label className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-sm text-slate-100">
+            <input
+              type="checkbox"
+              checked={unpaidOnly}
+              onChange={(e) => {
+                setUnpaidOnly(e.target.checked);
+                setPage(1);
+              }}
+            />
+            只看有未付款
+          </label>
 
           <button className="rounded-md bg-brand px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand/90">
             搜索

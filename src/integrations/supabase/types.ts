@@ -104,6 +104,42 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_nav_items: {
+        Row: {
+          group_sort_order: number
+          group_title: string
+          icon: string
+          id: string
+          item_sort_order: number
+          label: string
+          path: string
+          roles: string[]
+          updated_at: string
+        }
+        Insert: {
+          group_sort_order?: number
+          group_title?: string
+          icon: string
+          id?: string
+          item_sort_order?: number
+          label: string
+          path: string
+          roles?: string[]
+          updated_at?: string
+        }
+        Update: {
+          group_sort_order?: number
+          group_title?: string
+          icon?: string
+          id?: string
+          item_sort_order?: number
+          label?: string
+          path?: string
+          roles?: string[]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           key: string
@@ -2196,6 +2232,10 @@ export type Database = {
           fee_scheme_preference: Database["public"]["Enums"]["fee_scheme_preference"]
           full_name: string | null
           id: string
+          invoice_address: string | null
+          invoice_email: string | null
+          invoice_phone: string | null
+          invoice_title: string | null
           is_blacklisted: boolean
           phone: string | null
           points: number
@@ -2210,6 +2250,8 @@ export type Database = {
           updated_at: string
           username: string | null
           vip_level: Database["public"]["Enums"]["vip_level"]
+          wechat_nickname: string | null
+          wechat_openid: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -2220,6 +2262,10 @@ export type Database = {
           fee_scheme_preference?: Database["public"]["Enums"]["fee_scheme_preference"]
           full_name?: string | null
           id: string
+          invoice_address?: string | null
+          invoice_email?: string | null
+          invoice_phone?: string | null
+          invoice_title?: string | null
           is_blacklisted?: boolean
           phone?: string | null
           points?: number
@@ -2234,6 +2280,8 @@ export type Database = {
           updated_at?: string
           username?: string | null
           vip_level?: Database["public"]["Enums"]["vip_level"]
+          wechat_nickname?: string | null
+          wechat_openid?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -2244,6 +2292,10 @@ export type Database = {
           fee_scheme_preference?: Database["public"]["Enums"]["fee_scheme_preference"]
           full_name?: string | null
           id?: string
+          invoice_address?: string | null
+          invoice_email?: string | null
+          invoice_phone?: string | null
+          invoice_title?: string | null
           is_blacklisted?: boolean
           phone?: string | null
           points?: number
@@ -2258,6 +2310,8 @@ export type Database = {
           updated_at?: string
           username?: string | null
           vip_level?: Database["public"]["Enums"]["vip_level"]
+          wechat_nickname?: string | null
+          wechat_openid?: string | null
         }
         Relationships: []
       }
@@ -3101,6 +3155,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      wechat_bind_states: {
+        Row: {
+          created_at: string
+          state: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          state: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          state?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {

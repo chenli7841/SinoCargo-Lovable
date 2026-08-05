@@ -3,8 +3,9 @@ import { createFileRoute } from "@tanstack/react-router";
 /**
  * WeChat OAuth callback (网页授权).
  *
- * Flow (to enable once AppID/AppSecret are provided):
- *  1. Frontend redirects user to:
+ * Flow:
+ *  1. Frontend (Profile tab → "绑定微信") calls startWechatBind, which stores
+ *     a random `state` -> user_id row and redirects to:
  *       https://open.weixin.qq.com/connect/qrconnect
  *         ?appid=WECHAT_APPID
  *         &redirect_uri={origin}/api/public/wechat/callback
@@ -12,10 +13,12 @@ import { createFileRoute } from "@tanstack/react-router";
  *  2. WeChat redirects back here with ?code=...&state=...
  *  3. We exchange code -> access_token + openid via:
  *       https://api.weixin.qq.com/sns/oauth2/access_token
- *  4. Fetch userinfo, then upsert into profiles + create/sign-in the user
- *     via supabaseAdmin (auth.admin.createUser + a one-time magic link).
+ *  4. Fetch nickname via /sns/userinfo, look up `state` to find which
+ *     account requested the binding, and upsert profiles.wechat_openid.
  *
- * STATUS: scaffold only — secrets not configured yet.
+ * STATUS: bind flow implemented; sign-in-with-WeChat (no prior session) is
+ * still a scaffold — an admin must set WECHAT_APPID and WECHAT_APPSECRET
+ * for any of this to activate.
  */
 export const Route = createFileRoute("/api/public/wechat/callback")({
   server: {
@@ -23,8 +26,11 @@ export const Route = createFileRoute("/api/public/wechat/callback")({
       GET: async ({ request }) => {
         const url = new URL(request.url);
         const code = url.searchParams.get("code");
+        const state = url.searchParams.get("state");
         const appid = process.env.WECHAT_APPID;
         const secret = process.env.WECHAT_APPSECRET;
+        const accountUrl = (params: string) =>
+          new URL(`/account?tab=profile&${params}`, url.origin).toString();
 
         if (!appid || !secret) {
           return new Response(
@@ -32,15 +38,64 @@ export const Route = createFileRoute("/api/public/wechat/callback")({
             { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } },
           );
         }
-        if (!code) {
-          return new Response("Missing ?code", { status: 400 });
+        if (!code || !state) {
+          return new Response("Missing ?code or ?state", { status: 400 });
         }
 
-        // TODO: exchange code -> openid, upsert user, redirect to /account
-        return new Response("WeChat callback received. Implementation pending.", {
-          status: 200,
-          headers: { "Content-Type": "text/plain; charset=utf-8" },
-        });
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+        try {
+          const tokenRes = await fetch(
+            `https://api.weixin.qq.com/sns/oauth2/access_token?appid=${encodeURIComponent(appid)}` +
+              `&secret=${encodeURIComponent(secret)}&code=${encodeURIComponent(code)}&grant_type=authorization_code`,
+          );
+          const token = await tokenRes.json();
+          if (token.errcode) return Response.redirect(accountUrl(`wechat=failed`), 302);
+
+          const { access_token, openid } = token;
+          const userRes = await fetch(
+            `https://api.weixin.qq.com/sns/userinfo?access_token=${encodeURIComponent(access_token)}` +
+              `&openid=${encodeURIComponent(openid)}&lang=zh_CN`,
+          );
+          const wechatUser = await userRes.json();
+          const nickname: string | null = wechatUser?.nickname ?? null;
+
+          // Bind mode: this `state` was minted by startWechatBind for a logged-in user.
+          const { data: pending } = await supabaseAdmin
+            .from("wechat_bind_states")
+            .select("user_id")
+            .eq("state", state)
+            .maybeSingle();
+
+          if (!pending) {
+            // No matching state — sign-in-with-WeChat (no existing session) isn't wired up yet.
+            return new Response(
+              "WeChat callback received, but this link has expired. Please try binding again.",
+              {
+                status: 400,
+                headers: { "Content-Type": "text/plain; charset=utf-8" },
+              },
+            );
+          }
+
+          await supabaseAdmin.from("wechat_bind_states").delete().eq("state", state);
+
+          const { error } = await supabaseAdmin
+            .from("profiles")
+            .update({ wechat_openid: openid, wechat_nickname: nickname })
+            .eq("id", pending.user_id);
+
+          if (error) {
+            // Most likely the unique index on wechat_openid — this WeChat account is
+            // already linked to a different SinoCargo account.
+            const reason = error.code === "23505" ? "taken" : "failed";
+            return Response.redirect(accountUrl(`wechat=${reason}`), 302);
+          }
+
+          return Response.redirect(accountUrl("wechat=bound"), 302);
+        } catch {
+          return Response.redirect(accountUrl("wechat=failed"), 302);
+        }
       },
     },
   },

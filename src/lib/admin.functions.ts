@@ -13,6 +13,25 @@ export type AppRole =
   | "support"
   | "customer";
 
+// Sort priority for the user list: staff roles first (owner highest), plain
+// customers last. A user's rank is the best (lowest-index) role they hold;
+// no roles at all sorts alongside "customer".
+const ROLE_SORT_ORDER: AppRole[] = [
+  "owner",
+  "manager",
+  "warehouse_cn",
+  "warehouse_ca",
+  "driver",
+  "pickup_point",
+  "sales",
+  "support",
+  "customer",
+];
+function roleRank(roles: AppRole[]): number {
+  if (roles.length === 0) return ROLE_SORT_ORDER.length - 1; // no role => treat like a customer
+  return Math.min(...roles.map((r) => ROLE_SORT_ORDER.indexOf(r)).map((i) => (i < 0 ? ROLE_SORT_ORDER.length : i)));
+}
+
 async function assertStaff(supabase: any, userId: string) {
   const { data, error } = await supabase.rpc("is_staff", { _user_id: userId });
   if (error) throw new Error(error.message);
@@ -44,8 +63,14 @@ export const getMyRoles = createServerFn({ method: "GET" })
 export const listUsers = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (d: { search?: string; role?: AppRole | "all"; vipLevel?: VipLevel | "all"; page?: number; pageSize?: number }) =>
-      d,
+    (d: {
+      search?: string;
+      role?: AppRole | "all";
+      vipLevel?: VipLevel | "all";
+      unpaidOnly?: boolean;
+      page?: number;
+      pageSize?: number;
+    }) => d,
   )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
@@ -54,14 +79,16 @@ export const listUsers = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // fetch profiles via admin (covers everyone)
+    // Sorting is by role rank (staff first, customers last) then customer_code,
+    // which lives in a separate user_roles join table — PostgREST can't order
+    // by that in one query, so fetch every matching profile unpaginated, sort
+    // in JS, then slice the page before fetching the heavier per-row data
+    // (wallet balance, unpaid invoices) for just that page.
     let q = supabaseAdmin
       .from("profiles")
       .select(
         "id, email, full_name, phone, customer_code, created_at, vip_level, points, is_blacklisted, blacklist_reason",
-        { count: "exact" },
-      )
-      .order("created_at", { ascending: false });
+      );
 
     if (data.search && data.search.trim()) {
       const s = data.search.trim();
@@ -80,18 +107,51 @@ export const listUsers = createServerFn({ method: "POST" })
       q = q.eq("vip_level", data.vipLevel);
     }
 
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    const { data: profiles, error, count } = await q.range(from, to);
+    if (data.unpaidOnly) {
+      const { data: invRows, error: invErr } = await supabaseAdmin
+        .from("invoices")
+        .select("user_id")
+        .in("status", ["unpaid", "overdue"]);
+      if (invErr) throw new Error(invErr.message);
+      const unpaidIds = Array.from(new Set((invRows ?? []).map((r: any) => r.user_id)));
+      if (unpaidIds.length === 0) return { users: [], total: 0, page, pageSize };
+      q = q.in("id", unpaidIds);
+    }
+
+    const { data: allProfiles, error } = await q;
     if (error) throw new Error(error.message);
 
-    const ids = (profiles ?? []).map((p: any) => p.id);
-    let rolesByUser: Record<string, AppRole[]> = {};
-    let walletByUser: Record<string, { balance_cad: number }> = {};
-    let unpaidByUser: Record<string, { count: number; amount_cny: number }> = {};
+    const allIds = (allProfiles ?? []).map((p: any) => p.id);
+    const rolesByUser: Record<string, AppRole[]> = {};
+    if (allIds.length) {
+      const { data: rolesR, error: rolesErr } = await supabaseAdmin
+        .from("user_roles")
+        .select("user_id, role")
+        .in("user_id", allIds);
+      if (rolesErr) throw new Error(rolesErr.message);
+      for (const r of rolesR ?? []) (rolesByUser[r.user_id] ??= []).push(r.role as AppRole);
+    }
+
+    const sorted = (allProfiles ?? []).slice().sort((a: any, b: any) => {
+      const rankDiff = roleRank(rolesByUser[a.id] ?? []) - roleRank(rolesByUser[b.id] ?? []);
+      if (rankDiff !== 0) return rankDiff;
+      const ca = a.customer_code ?? "";
+      const cb = b.customer_code ?? "";
+      if (ca && cb) return ca.localeCompare(cb);
+      if (ca) return -1; // profiles without a customer_code sort last
+      if (cb) return 1;
+      return 0;
+    });
+
+    const total = sorted.length;
+    const from = (page - 1) * pageSize;
+    const profiles = sorted.slice(from, from + pageSize);
+
+    const ids = profiles.map((p: any) => p.id);
+    const walletByUser: Record<string, { balance_cad: number }> = {};
+    const unpaidByUser: Record<string, { count: number; amount_cny: number }> = {};
     if (ids.length) {
-      const [rolesR, walletsR, invR] = await Promise.all([
-        supabaseAdmin.from("user_roles").select("user_id, role").in("user_id", ids),
+      const [walletsR, invR] = await Promise.all([
         supabaseAdmin.from("wallets").select("user_id, balance_cad").in("user_id", ids),
         supabaseAdmin
           .from("invoices")
@@ -99,7 +159,6 @@ export const listUsers = createServerFn({ method: "POST" })
           .in("user_id", ids)
           .in("status", ["unpaid", "overdue"]),
       ]);
-      for (const r of rolesR.data ?? []) (rolesByUser[r.user_id] ??= []).push(r.role as AppRole);
       for (const w of walletsR.data ?? [])
         walletByUser[w.user_id] = {
           balance_cad: Number(w.balance_cad ?? 0),
@@ -113,7 +172,7 @@ export const listUsers = createServerFn({ method: "POST" })
     }
 
     return {
-      users: (profiles ?? []).map((p: any) => ({
+      users: profiles.map((p: any) => ({
         id: p.id,
         email: p.email,
         full_name: p.full_name,
@@ -128,7 +187,7 @@ export const listUsers = createServerFn({ method: "POST" })
         wallet: walletByUser[p.id] ?? { balance_cad: 0 },
         unpaid: unpaidByUser[p.id] ?? { count: 0, amount_cny: 0 },
       })),
-      total: count ?? 0,
+      total,
       page,
       pageSize,
     };

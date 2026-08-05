@@ -31,6 +31,7 @@ import { Route as AdminTrackingPresetsRouteImport } from './routes/admin/trackin
 import { Route as AdminSystemRouteImport } from './routes/admin/system'
 import { Route as AdminRoutesRouteImport } from './routes/admin/routes'
 import { Route as AdminOversizeRulesRouteImport } from './routes/admin/oversize-rules'
+import { Route as AdminNavSettingsRouteImport } from './routes/admin/nav-settings'
 import { Route as AdminMessagesRouteImport } from './routes/admin/messages'
 import { Route as AdminMeasureRouteImport } from './routes/admin/measure'
 import { Route as AdminLogsRouteImport } from './routes/admin/logs'
@@ -40,6 +41,7 @@ import { Route as AdminHistoryRouteImport } from './routes/admin/history'
 import { Route as AdminForbiddenRouteImport } from './routes/admin/forbidden'
 import { Route as AdminDetainedRouteImport } from './routes/admin/detained'
 import { Route as AdminDestinationsRouteImport } from './routes/admin/destinations'
+import { Route as AdminCustomerViewRouteImport } from './routes/admin/customer-view'
 import { Route as AdminCargoTypesRouteImport } from './routes/admin/cargo-types'
 import { Route as AuthenticatedInvoicesRouteImport } from './routes/_authenticated/invoices'
 import { Route as AuthenticatedCheckoutRouteImport } from './routes/_authenticated/checkout'
@@ -196,6 +198,11 @@ const AdminOversizeRulesRoute = AdminOversizeRulesRouteImport.update({
   path: '/oversize-rules',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminNavSettingsRoute = AdminNavSettingsRouteImport.update({
+  id: '/nav-settings',
+  path: '/nav-settings',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminMessagesRoute = AdminMessagesRouteImport.update({
   id: '/messages',
   path: '/messages',
@@ -239,6 +246,11 @@ const AdminDetainedRoute = AdminDetainedRouteImport.update({
 const AdminDestinationsRoute = AdminDestinationsRouteImport.update({
   id: '/destinations',
   path: '/destinations',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminCustomerViewRoute = AdminCustomerViewRouteImport.update({
+  id: '/customer-view',
+  path: '/customer-view',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminCargoTypesRoute = AdminCargoTypesRouteImport.update({
@@ -504,6 +516,7 @@ export interface FileRoutesByFullPath {
   '/checkout': typeof AuthenticatedCheckoutRoute
   '/invoices': typeof AuthenticatedInvoicesRoute
   '/admin/cargo-types': typeof AdminCargoTypesRoute
+  '/admin/customer-view': typeof AdminCustomerViewRoute
   '/admin/destinations': typeof AdminDestinationsRoute
   '/admin/detained': typeof AdminDetainedRoute
   '/admin/forbidden': typeof AdminForbiddenRoute
@@ -513,6 +526,7 @@ export interface FileRoutesByFullPath {
   '/admin/logs': typeof AdminLogsRoute
   '/admin/measure': typeof AdminMeasureRoute
   '/admin/messages': typeof AdminMessagesRoute
+  '/admin/nav-settings': typeof AdminNavSettingsRoute
   '/admin/oversize-rules': typeof AdminOversizeRulesRoute
   '/admin/routes': typeof AdminRoutesRoute
   '/admin/system': typeof AdminSystemRoute
@@ -580,6 +594,7 @@ export interface FileRoutesByTo {
   '/checkout': typeof AuthenticatedCheckoutRoute
   '/invoices': typeof AuthenticatedInvoicesRoute
   '/admin/cargo-types': typeof AdminCargoTypesRoute
+  '/admin/customer-view': typeof AdminCustomerViewRoute
   '/admin/destinations': typeof AdminDestinationsRoute
   '/admin/detained': typeof AdminDetainedRoute
   '/admin/forbidden': typeof AdminForbiddenRoute
@@ -589,6 +604,7 @@ export interface FileRoutesByTo {
   '/admin/logs': typeof AdminLogsRoute
   '/admin/measure': typeof AdminMeasureRoute
   '/admin/messages': typeof AdminMessagesRoute
+  '/admin/nav-settings': typeof AdminNavSettingsRoute
   '/admin/oversize-rules': typeof AdminOversizeRulesRoute
   '/admin/routes': typeof AdminRoutesRoute
   '/admin/system': typeof AdminSystemRoute
@@ -660,6 +676,7 @@ export interface FileRoutesById {
   '/_authenticated/checkout': typeof AuthenticatedCheckoutRoute
   '/_authenticated/invoices': typeof AuthenticatedInvoicesRoute
   '/admin/cargo-types': typeof AdminCargoTypesRoute
+  '/admin/customer-view': typeof AdminCustomerViewRoute
   '/admin/destinations': typeof AdminDestinationsRoute
   '/admin/detained': typeof AdminDetainedRoute
   '/admin/forbidden': typeof AdminForbiddenRoute
@@ -669,6 +686,7 @@ export interface FileRoutesById {
   '/admin/logs': typeof AdminLogsRoute
   '/admin/measure': typeof AdminMeasureRoute
   '/admin/messages': typeof AdminMessagesRoute
+  '/admin/nav-settings': typeof AdminNavSettingsRoute
   '/admin/oversize-rules': typeof AdminOversizeRulesRoute
   '/admin/routes': typeof AdminRoutesRoute
   '/admin/system': typeof AdminSystemRoute
@@ -740,6 +758,7 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/invoices'
     | '/admin/cargo-types'
+    | '/admin/customer-view'
     | '/admin/destinations'
     | '/admin/detained'
     | '/admin/forbidden'
@@ -749,6 +768,7 @@ export interface FileRouteTypes {
     | '/admin/logs'
     | '/admin/measure'
     | '/admin/messages'
+    | '/admin/nav-settings'
     | '/admin/oversize-rules'
     | '/admin/routes'
     | '/admin/system'
@@ -816,6 +836,7 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/invoices'
     | '/admin/cargo-types'
+    | '/admin/customer-view'
     | '/admin/destinations'
     | '/admin/detained'
     | '/admin/forbidden'
@@ -825,6 +846,7 @@ export interface FileRouteTypes {
     | '/admin/logs'
     | '/admin/measure'
     | '/admin/messages'
+    | '/admin/nav-settings'
     | '/admin/oversize-rules'
     | '/admin/routes'
     | '/admin/system'
@@ -895,6 +917,7 @@ export interface FileRouteTypes {
     | '/_authenticated/checkout'
     | '/_authenticated/invoices'
     | '/admin/cargo-types'
+    | '/admin/customer-view'
     | '/admin/destinations'
     | '/admin/detained'
     | '/admin/forbidden'
@@ -904,6 +927,7 @@ export interface FileRouteTypes {
     | '/admin/logs'
     | '/admin/measure'
     | '/admin/messages'
+    | '/admin/nav-settings'
     | '/admin/oversize-rules'
     | '/admin/routes'
     | '/admin/system'
@@ -1133,6 +1157,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminOversizeRulesRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/nav-settings': {
+      id: '/admin/nav-settings'
+      path: '/nav-settings'
+      fullPath: '/admin/nav-settings'
+      preLoaderRoute: typeof AdminNavSettingsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/messages': {
       id: '/admin/messages'
       path: '/messages'
@@ -1194,6 +1225,13 @@ declare module '@tanstack/react-router' {
       path: '/destinations'
       fullPath: '/admin/destinations'
       preLoaderRoute: typeof AdminDestinationsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/customer-view': {
+      id: '/admin/customer-view'
+      path: '/customer-view'
+      fullPath: '/admin/customer-view'
+      preLoaderRoute: typeof AdminCustomerViewRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/cargo-types': {
@@ -1547,6 +1585,7 @@ const AuthenticatedRouteRouteWithChildren =
 
 interface AdminRouteRouteChildren {
   AdminCargoTypesRoute: typeof AdminCargoTypesRoute
+  AdminCustomerViewRoute: typeof AdminCustomerViewRoute
   AdminDestinationsRoute: typeof AdminDestinationsRoute
   AdminDetainedRoute: typeof AdminDetainedRoute
   AdminForbiddenRoute: typeof AdminForbiddenRoute
@@ -1556,6 +1595,7 @@ interface AdminRouteRouteChildren {
   AdminLogsRoute: typeof AdminLogsRoute
   AdminMeasureRoute: typeof AdminMeasureRoute
   AdminMessagesRoute: typeof AdminMessagesRoute
+  AdminNavSettingsRoute: typeof AdminNavSettingsRoute
   AdminOversizeRulesRoute: typeof AdminOversizeRulesRoute
   AdminRoutesRoute: typeof AdminRoutesRoute
   AdminSystemRoute: typeof AdminSystemRoute
@@ -1598,6 +1638,7 @@ interface AdminRouteRouteChildren {
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminCargoTypesRoute: AdminCargoTypesRoute,
+  AdminCustomerViewRoute: AdminCustomerViewRoute,
   AdminDestinationsRoute: AdminDestinationsRoute,
   AdminDetainedRoute: AdminDetainedRoute,
   AdminForbiddenRoute: AdminForbiddenRoute,
@@ -1607,6 +1648,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminLogsRoute: AdminLogsRoute,
   AdminMeasureRoute: AdminMeasureRoute,
   AdminMessagesRoute: AdminMessagesRoute,
+  AdminNavSettingsRoute: AdminNavSettingsRoute,
   AdminOversizeRulesRoute: AdminOversizeRulesRoute,
   AdminRoutesRoute: AdminRoutesRoute,
   AdminSystemRoute: AdminSystemRoute,

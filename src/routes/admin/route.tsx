@@ -1,9 +1,17 @@
-import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  redirect,
+  useNavigate,
+  useRouterState,
+} from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getMyRoles, type AppRole } from "@/lib/admin.functions";
+import { listNavItems } from "@/lib/admin-nav.functions";
 import { ROLE_LABEL, ROLE_COLOR, ADMIN_CONSOLE_ROLES } from "@/lib/admin-roles";
 import { useAuth } from "@/lib/auth";
 import {
@@ -17,6 +25,7 @@ import {
   LogOut,
   ExternalLink,
   ShieldAlert,
+  ShieldCheck,
   Loader2,
   Package,
   Layers,
@@ -32,11 +41,17 @@ import {
   BookText,
   PackageCheck,
   Mail,
+  UserSearch,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
   ssr: false,
-  head: () => ({ meta: [{ title: "管理后台 / Admin — SinoCargo" }, { name: "robots", content: "noindex,nofollow" }] }),
+  head: () => ({
+    meta: [
+      { title: "管理后台 / Admin — SinoCargo" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
   beforeLoad: async ({ location }) => {
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) {
@@ -46,13 +61,53 @@ export const Route = createFileRoute("/admin")({
   component: AdminLayout,
 });
 
-type NavItem = { to: string; label: string; icon: any; soon?: boolean };
+// `roles` on an item overrides its group's roles for that one link — used
+// to lock down a single sensitive item (e.g. 客户视图: owner-only) inside an
+// otherwise owner+manager group without splitting it into its own group.
+type NavItem = { to: string; label: string; icon: any; soon?: boolean; roles?: AppRole[] };
 type NavGroup = { title: string; items: NavItem[]; roles: AppRole[] };
 
 const OWNER_MANAGER: AppRole[] = ["owner", "manager"];
 
-const NAV_GROUPS: NavGroup[] = [
-  { title: "", roles: ADMIN_CONSOLE_ROLES, items: [{ to: "/admin", label: "运营概览", icon: LayoutDashboard }] },
+// Icon lookup for admin_nav_items.icon (a plain string in the DB) — must
+// cover every icon name used by DEFAULT_NAV_GROUPS below and by anything an
+// owner picks in the nav settings page.
+const NAV_ICONS: Record<string, any> = {
+  LayoutDashboard,
+  Users,
+  Boxes,
+  Truck,
+  Route: RouteIcon,
+  Warehouse,
+  Settings: SettingsIcon,
+  Package,
+  Layers,
+  Tag,
+  MapPin,
+  ScanLine,
+  AlertTriangle,
+  FileText,
+  History,
+  Ruler,
+  ShoppingBag,
+  Image: ImageIcon,
+  BookText,
+  PackageCheck,
+  Mail,
+  UserSearch,
+  ShieldCheck,
+};
+
+// Fallback only — used before admin_nav_items has loaded (or if it's ever
+// empty, e.g. a fresh environment where the seed migration hasn't run).
+// The real, owner-editable source of truth is the admin_nav_items table;
+// see src/routes/admin/nav-settings.tsx.
+const DEFAULT_NAV_GROUPS: NavGroup[] = [
+  {
+    title: "",
+    roles: ADMIN_CONSOLE_ROLES,
+    items: [{ to: "/admin", label: "运营概览", icon: LayoutDashboard }],
+  },
   {
     title: "发货仓库操作",
     roles: [...OWNER_MANAGER, "warehouse_cn", "support"],
@@ -104,6 +159,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: "系统管理",
     roles: OWNER_MANAGER,
     items: [
+      { to: "/admin/customer-view", label: "客户视图", icon: UserSearch, roles: ["owner"] },
       { to: "/admin/users", label: "用户管理", icon: Users },
       { to: "/admin/messages", label: "留言信息", icon: Mail },
       { to: "/admin/logs", label: "操作日志", icon: History },
@@ -115,6 +171,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/admin/tracking-presets", label: "轨迹预设", icon: SettingsIcon },
       { to: "/admin/oversize-rules", label: "超大件规则", icon: Ruler },
       { to: "/admin/hs-codes", label: "HS 编码库", icon: BookText },
+      { to: "/admin/nav-settings", label: "菜单权限设置", icon: ShieldCheck, roles: ["owner"] },
     ],
   },
 ];
@@ -123,6 +180,7 @@ function AdminLayout() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const fetchRoles = useServerFn(getMyRoles);
+  const fetchNavItems = useServerFn(listNavItems);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   const rolesQ = useQuery({
@@ -131,18 +189,59 @@ function AdminLayout() {
     enabled: !!user,
     staleTime: 60_000,
   });
+  const navQ = useQuery({
+    queryKey: ["admin-nav-items"],
+    queryFn: () => fetchNavItems(),
+    enabled: !!user,
+    staleTime: 60_000,
+  });
 
   const roles = rolesQ.data?.roles ?? [];
   const hasConsoleAccess = roles.some((r) => ADMIN_CONSOLE_ROLES.includes(r));
   const isForbidden = !rolesQ.isLoading && rolesQ.isSuccess && !hasConsoleAccess;
 
-  const visibleGroups = NAV_GROUPS.filter((g) => g.roles.some((r) => roles.includes(r)));
+  // admin_nav_items is the real source of truth (owner-editable via
+  // /admin/nav-settings); DEFAULT_NAV_GROUPS only covers the gap before it's
+  // loaded, or a fresh environment where the seed migration hasn't run yet.
+  const navGroups: NavGroup[] = useMemo(() => {
+    const rows = navQ.data?.items ?? [];
+    if (rows.length === 0) return DEFAULT_NAV_GROUPS;
+    const byTitle = new Map<string, typeof rows>();
+    for (const r of rows) {
+      const arr = byTitle.get(r.group_title) ?? [];
+      arr.push(r);
+      byTitle.set(r.group_title, arr);
+    }
+    return Array.from(byTitle.entries())
+      .map(([title, rowsInGroup]) => ({
+        title,
+        sort: rowsInGroup[0]?.group_sort_order ?? 0,
+        roles: [] as AppRole[], // vestigial: every item below carries its own roles
+        items: rowsInGroup
+          .slice()
+          .sort((a, b) => a.item_sort_order - b.item_sort_order)
+          .map((r) => ({
+            to: r.path,
+            label: r.label,
+            icon: NAV_ICONS[r.icon] ?? Package,
+            roles: r.roles as AppRole[],
+          })),
+      }))
+      .sort((a, b) => a.sort - b.sort);
+  }, [navQ.data]);
+
+  const isItemAllowed = (group: NavGroup, item: NavItem) =>
+    (item.roles ?? group.roles).some((r) => roles.includes(r));
+  const visibleGroups = navGroups
+    .map((g) => ({ ...g, items: g.items.filter((it) => isItemAllowed(g, it)) }))
+    .filter((g) => g.items.length > 0);
   const allowedPaths = visibleGroups.flatMap((g) => g.items.map((i) => i.to));
   // "/admin" (dashboard) is a leaf, not a prefix — every other admin route also
   // starts with "/admin/", so it must only ever match exactly.
   const pathAllowed = (p: string) =>
     p === "/admin" ? pathname === "/admin" : pathname === p || pathname.startsWith(p + "/");
-  const isPageRestricted = hasConsoleAccess && pathname !== "/admin/forbidden" && !allowedPaths.some(pathAllowed);
+  const isPageRestricted =
+    hasConsoleAccess && pathname !== "/admin/forbidden" && !allowedPaths.some(pathAllowed);
 
   useEffect(() => {
     if (isForbidden && pathname !== "/admin/forbidden") {
@@ -203,14 +302,22 @@ function AdminLayout() {
                       : pathname === item.to || pathname.startsWith(item.to + "/");
                   const cls = [
                     "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition",
-                    active ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/5 hover:text-white",
-                    item.soon ? "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-slate-300" : "",
+                    active
+                      ? "bg-white/10 text-white"
+                      : "text-slate-300 hover:bg-white/5 hover:text-white",
+                    item.soon
+                      ? "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-slate-300"
+                      : "",
                   ].join(" ");
                   const inner = (
                     <>
                       <item.icon className="h-4 w-4" />
                       <span className="flex-1">{item.label}</span>
-                      {item.soon && <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] uppercase">Soon</span>}
+                      {item.soon && (
+                        <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] uppercase">
+                          Soon
+                        </span>
+                      )}
                     </>
                   );
                   if (item.soon)
@@ -220,7 +327,11 @@ function AdminLayout() {
                       </div>
                     );
                   return (
-                    <Link key={`${gi}-${item.to}-${item.label}`} to={item.to as any} className={cls}>
+                    <Link
+                      key={`${gi}-${item.to}-${item.label}`}
+                      to={item.to as any}
+                      className={cls}
+                    >
                       {inner}
                     </Link>
                   );

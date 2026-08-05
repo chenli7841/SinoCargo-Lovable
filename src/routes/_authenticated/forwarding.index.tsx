@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useApp } from "@/lib/i18n";
@@ -91,6 +91,14 @@ interface DestinationRow {
   name_en: string | null;
   country: string;
 }
+interface MyItemRow {
+  id: string;
+  sku: string | null;
+  name: string;
+  hs_code: string | null;
+  declared_value_cad: number | null;
+  inner_qty: number | null;
+}
 
 type ItemFieldKey =
   | "name"
@@ -108,8 +116,9 @@ type ItemFieldKey =
   | "weight_kg";
 interface ItemDraft {
   name: string;
-  quantity: number;
-  unit_price_cad: number;
+  sku?: string;
+  quantity?: number;
+  unit_price_cad?: number;
   hscode?: string;
   box_count?: number;
   inner_qty?: number;
@@ -148,85 +157,43 @@ function readAndClearPrefill(): ForwardingPrefill | null {
   }
 }
 
-const FIELD_META: Record<ItemFieldKey, { zh: string; en: string; type: "text" | "number"; w: string }> = {
-  name: { zh: "品名", en: "Item name", type: "text", w: "min-w-[140px] flex-1" },
-  hscode: { zh: "HSCODE", en: "HS code", type: "text", w: "w-28" },
-  box_count: { zh: "箱数/板数", en: "Boxes/Pal.", type: "number", w: "w-20" },
-  inner_qty: { zh: "内件数/箱·板", en: "Pcs/box", type: "number", w: "w-20" },
-  material: { zh: "材质", en: "Material", type: "text", w: "w-24" },
-  origin: { zh: "产地", en: "Origin", type: "text", w: "w-20" },
-  unit_price: { zh: "单价 CA$", en: "Unit CA$", type: "number", w: "w-24" },
-  quantity: { zh: "数量", en: "Qty", type: "number", w: "w-20" },
-  brand: { zh: "品牌", en: "Brand", type: "text", w: "w-24" },
-  length_cm: { zh: "长 cm", en: "L cm", type: "number", w: "w-20" },
-  width_cm: { zh: "宽 cm", en: "W cm", type: "number", w: "w-20" },
-  height_cm: { zh: "高 cm", en: "H cm", type: "number", w: "w-20" },
-  weight_kg: { zh: "重 kg", en: "kg", type: "number", w: "w-20" },
+const FIELD_META: Record<
+  ItemFieldKey,
+  { zh: string; en: string; type: "text" | "number"; w: string }
+> = {
+  // `w`: full width on mobile so each field sits on its own row; the fixed
+  // sizes only kick in at `sm:` where the row goes back to wrapping inline.
+  name: {
+    zh: "品名",
+    en: "Item name",
+    type: "text",
+    w: "w-full sm:min-w-[140px] sm:w-auto sm:flex-1",
+  },
+  hscode: { zh: "HSCODE", en: "HS code", type: "text", w: "w-full sm:w-32" },
+  box_count: { zh: "箱数/板数", en: "Boxes/Pal.", type: "number", w: "w-full sm:w-28" },
+  inner_qty: { zh: "内件数/箱·板", en: "Pcs/box", type: "number", w: "w-full sm:w-36" },
+  material: { zh: "材质", en: "Material", type: "text", w: "w-full sm:w-28" },
+  origin: { zh: "产地", en: "Origin", type: "text", w: "w-full sm:w-24" },
+  unit_price: { zh: "单价 CA$", en: "Unit CA$", type: "number", w: "w-full sm:w-28" },
+  quantity: { zh: "数量", en: "Qty", type: "number", w: "w-full sm:w-24" },
+  brand: { zh: "品牌", en: "Brand", type: "text", w: "w-full sm:w-28" },
+  length_cm: { zh: "长 cm", en: "L cm", type: "number", w: "w-full sm:w-24" },
+  width_cm: { zh: "宽 cm", en: "W cm", type: "number", w: "w-full sm:w-24" },
+  height_cm: { zh: "高 cm", en: "H cm", type: "number", w: "w-full sm:w-24" },
+  weight_kg: { zh: "重 kg", en: "kg", type: "number", w: "w-full sm:w-24" },
 };
 
 function newItem(): ItemDraft {
-  return { name: "", quantity: 1, unit_price_cad: 0 };
+  return { name: "" };
 }
-function fieldHintZh(f: ItemFieldKey): string {
-  switch (f) {
-    case "name":
-      return "物品中文/英文名称，便于清关申报";
-    case "hscode":
-      return "海关编码（HS code），如不确定可咨询客服";
-    case "box_count":
-      return "整体箱数或板数（数字）";
-    case "inner_qty":
-      return "每箱/每板的内件数量";
-    case "material":
-      return "主要材质，例如棉、塑料、金属";
-    case "origin":
-      return "产地国家或地区，例如 CN";
-    case "unit_price":
-      return "每件的人民币申报价值，用于保险与清关估值";
-    case "quantity":
-      return "包裹内该物品的件数（整数）";
-    case "brand":
-      return "品牌名称（用于清关申报）";
-    case "length_cm":
-      return "每箱/板的长，单位 cm";
-    case "width_cm":
-      return "每箱/板的宽，单位 cm";
-    case "height_cm":
-      return "每箱/板的高，单位 cm";
-    case "weight_kg":
-      return "每箱/板的重量，单位 kg";
-  }
-}
-function fieldHintEn(f: ItemFieldKey): string {
-  switch (f) {
-    case "name":
-      return "item name in Chinese/English for customs declaration";
-    case "hscode":
-      return "HS code; ask support if unsure";
-    case "box_count":
-      return "total number of boxes or pallets";
-    case "inner_qty":
-      return "pieces per box / pallet";
-    case "material":
-      return "primary material, e.g. cotton, plastic, metal";
-    case "origin":
-      return "country of origin, e.g. CN";
-    case "unit_price":
-      return "declared value per piece in CNY (insurance & customs)";
-    case "quantity":
-      return "pieces of this item in the parcel (integer)";
-    case "brand":
-      return "brand name for customs declaration";
-    case "length_cm":
-      return "length per box/pallet (cm)";
-    case "width_cm":
-      return "width per box/pallet (cm)";
-    case "height_cm":
-      return "height per box/pallet (cm)";
-    case "weight_kg":
-      return "weight per box/pallet (kg)";
-  }
-}
+
+// Desktop item-field layout: two fixed rows (name/hscode/brand/material/unit
+// price, then box/inner qty/quantity), rendered as separate flex rows so the
+// grouping holds regardless of container width — plain flex-wrap would just
+// pack fields by available space, not by this intended grouping. Any other
+// enabled fields (origin, dimensions, weight) fall into a trailing row.
+const ROW1_FIELDS: ItemFieldKey[] = ["name", "hscode", "brand", "material", "unit_price"];
+const ROW2_FIELDS: ItemFieldKey[] = ["box_count", "inner_qty", "quantity"];
 
 function ForwardingPage() {
   const { user } = useAuth();
@@ -260,10 +227,15 @@ function ForwardingPage() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ count: number; waybills: number } | null>(null);
 
+  // Whether the customer has any rows at all in their own "My Items" library —
+  // used to tell "nothing matches this search" apart from "you haven't set up
+  // any items yet" when the SKU search comes up empty.
+  const [hasMyItems, setHasMyItems] = useState<boolean | null>(null);
+
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const [p, w, r, fr, a, d] = await Promise.all([
+      const [p, w, r, fr, a, d, mi] = await Promise.all([
         sb.from("profiles").select("phone").eq("id", user.id).maybeSingle(),
         sb
           .from("warehouses")
@@ -285,20 +257,31 @@ function ForwardingPage() {
           )
           .eq("is_active", true),
         sb.from("addresses").select("*").order("is_default", { ascending: false }),
-        sb.from("destinations").select("code,name_zh,name_en,country").eq("active", true).order("sort_order"),
+        sb
+          .from("destinations")
+          .select("code,name_zh,name_en,country")
+          .eq("active", true)
+          .order("sort_order"),
+        sb.from("my_items").select("id", { count: "exact", head: true }),
       ]);
       setPhoneRow(p.data?.phone ?? null);
+      setHasMyItems((mi.count ?? 0) > 0);
       // Show all warehouses that any active route can ship FROM:
       // forward (origin_warehouse_id) and, for bidirectional routes, also the destination warehouse.
       const allRoutes = (r.data ?? []) as RouteRow[];
       const usableWhIds = new Set<string>();
       for (const rt of allRoutes) {
         if (rt.origin_warehouse_id) usableWhIds.add(rt.origin_warehouse_id);
-        if (rt.is_bidirectional && rt.destination_warehouse_id) usableWhIds.add(rt.destination_warehouse_id);
+        if (rt.is_bidirectional && rt.destination_warehouse_id)
+          usableWhIds.add(rt.destination_warehouse_id);
       }
       const wAll = (w.data ?? []) as WarehouseRow[];
       const wlist = wAll.filter((x) => usableWhIds.has(x.id));
-      setWarehouses(wlist.length > 0 ? wlist : wAll.filter((x: any) => x.type === "origin" || x.country === "CN"));
+      setWarehouses(
+        wlist.length > 0
+          ? wlist
+          : wAll.filter((x: any) => x.type === "origin" || x.country === "CN"),
+      );
       setRoutes(allRoutes);
       const ruleMap: Record<string, FreightRule> = {};
       ((fr.data ?? []) as FreightRule[]).forEach((x) => {
@@ -317,7 +300,8 @@ function ForwardingPage() {
     if (!warehouseId) return [];
     return routes.filter(
       (r) =>
-        r.origin_warehouse_id === warehouseId || (r.is_bidirectional && r.destination_warehouse_id === warehouseId),
+        r.origin_warehouse_id === warehouseId ||
+        (r.is_bidirectional && r.destination_warehouse_id === warehouseId),
     );
   }, [routes, warehouseId]);
 
@@ -337,12 +321,80 @@ function ForwardingPage() {
   const updateItem = (pi: number, ii: number, patch: Partial<ItemDraft>) =>
     setParcels((ps) =>
       ps.map((p, idx) =>
-        idx === pi ? { ...p, items: p.items.map((it, j) => (j === ii ? { ...it, ...patch } : it)) } : p,
+        idx === pi
+          ? { ...p, items: p.items.map((it, j) => (j === ii ? { ...it, ...patch } : it)) }
+          : p,
       ),
     );
   const addItem = (pi: number) => updateParcel(pi, { items: [...parcels[pi].items, newItem()] });
   const removeItem = (pi: number, ii: number) =>
     updateParcel(pi, { items: parcels[pi].items.filter((_, j) => j !== ii) });
+
+  // Fuzzy search against the customer's own item library (My Items), matched
+  // on SKU, name, or HS code — as they type, show a dropdown of rows whose
+  // sku/name/hs_code contain the typed text; picking one auto-fills
+  // name/HS code/unit price/inner qty. If the search comes up empty, tell
+  // them apart: "nothing matches" vs. "you haven't added any items yet"
+  // (in which case they need to go set that up first).
+  const [skuActiveKey, setSkuActiveKey] = useState<string | null>(null);
+  const [skuLoading, setSkuLoading] = useState(false);
+  const [skuResults, setSkuResults] = useState<MyItemRow[]>([]);
+  const skuDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const searchSku = (pi: number, ii: number, term: string) => {
+    updateItem(pi, ii, { sku: term });
+    const key = `${pi}-${ii}`;
+    setSkuActiveKey(key);
+    if (skuDebounce.current) clearTimeout(skuDebounce.current);
+    const q = term.trim();
+    if (!q) {
+      setSkuResults([]);
+      return;
+    }
+    skuDebounce.current = setTimeout(async () => {
+      setSkuLoading(true);
+      const { data, error } = await sb
+        .from("my_items")
+        .select("id,sku,name,hs_code,declared_value_cad,inner_qty")
+        .or(`sku.ilike.%${q}%,name.ilike.%${q}%,hs_code.ilike.%${q}%`)
+        .order("updated_at", { ascending: false })
+        .limit(8);
+      setSkuLoading(false);
+      if (error) return;
+      const rows = (data ?? []) as MyItemRow[];
+      setSkuResults(rows);
+      if (rows.length === 0) {
+        if (hasMyItems === false) {
+          toast.info(
+            tr(
+              "您还没有添加个人常用运输物品，请登录后在「我的物品」内添加",
+              "You haven't added any frequently-used items yet — please add some under My Items.",
+            ),
+          );
+        } else {
+          toast.info(
+            tr(
+              `未找到匹配「${q}」的物品资料，请手动填写`,
+              `No saved item matches "${q}" — please fill in manually`,
+            ),
+          );
+        }
+      }
+    }, 350);
+  };
+
+  const pickSkuResult = (pi: number, ii: number, row: MyItemRow) => {
+    updateItem(pi, ii, {
+      sku: row.sku ?? "",
+      name: row.name ?? "",
+      hscode: row.hs_code ?? undefined,
+      unit_price_cad: row.declared_value_cad ?? undefined,
+      inner_qty: row.inner_qty ?? undefined,
+    });
+    setSkuActiveKey(null);
+    setSkuResults([]);
+    toast.success(tr(`已自动带入「${row.name}」的资料`, `Auto-filled details for "${row.name}"`));
+  };
 
   const submit = async () => {
     if (!user) return;
@@ -352,8 +404,10 @@ function ForwardingPage() {
     const trackedParcels = parcels.filter((p) => !p.items.some((it) => it.locked));
     const nos = trackedParcels.map((p) => p.tracking_no.trim().replace(/\s+/g, "")).filter(Boolean);
     if (trackedParcels.length > 0) {
-      if (nos.length === 0) return toast.error(tr("请至少填写一个国内单号", "Enter at least one tracking number"));
-      if (new Set(nos).size !== nos.length) return toast.error(tr("国内单号有重复", "Duplicate tracking numbers"));
+      if (nos.length === 0)
+        return toast.error(tr("请至少填写一个国内单号", "Enter at least one tracking number"));
+      if (new Set(nos).size !== nos.length)
+        return toast.error(tr("国内单号有重复", "Duplicate tracking numbers"));
     }
 
     // required-field validation per route
@@ -365,9 +419,19 @@ function ForwardingPage() {
         for (const k of reqKeys) {
           const valKey = k === "unit_price" ? "unit_price_cad" : k;
           const v = (it as any)[valKey];
-          if (v === undefined || v === null || v === "" || (typeof v === "number" && Number.isNaN(v))) {
+          if (
+            v === undefined ||
+            v === null ||
+            v === "" ||
+            (typeof v === "number" && Number.isNaN(v))
+          ) {
+            const meta = FIELD_META[k as ItemFieldKey];
+            const fieldLabel = meta ? tr(meta.zh, meta.en) : k;
             return toast.error(
-              tr(`物品「${it.name}」缺少必填项：${k}`, `Item "${it.name}" missing required field: ${k}`),
+              tr(
+                `物品「${it.name}」缺少必填项：${fieldLabel}`,
+                `Item "${it.name}" is missing required field: ${fieldLabel}`,
+              ),
             );
           }
         }
@@ -386,7 +450,10 @@ function ForwardingPage() {
         route_code: selectedRoute.code,
         address_id: addressId,
         domestic_tracking_no: t || null,
-        note: [insured ? (lang === "zh" ? "[已购买保险]" : "[Insured]") : null, note].filter(Boolean).join(" ") || null,
+        note:
+          [insured ? (lang === "zh" ? "[已购买保险]" : "[Insured]") : null, note]
+            .filter(Boolean)
+            .join(" ") || null,
         insured,
         items: parcel.items
           .filter((i) => i.name.trim())
@@ -395,6 +462,7 @@ function ForwardingPage() {
             quantity: i.quantity ?? 1,
             unit_price_cad: i.unit_price_cad ?? 0,
             extras: {
+              sku: i.sku?.trim() || null,
               hscode: i.hscode ?? null,
               // place_forwarding() auto-creates one waybill per box when extras.box_count > 0.
               // Items shipped from My Inventory already have real waybills in storage, so we
@@ -447,7 +515,9 @@ function ForwardingPage() {
         <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-success/10 text-success">
           <CheckCircle2 className="h-8 w-8" />
         </div>
-        <h1 className="mt-6 font-display text-3xl font-bold">{tr("提交成功", "Request submitted")}</h1>
+        <h1 className="mt-6 font-display text-3xl font-bold">
+          {tr("提交成功", "Request submitted")}
+        </h1>
         <p className="mt-2 text-ink-soft">
           {tr(
             `已创建 ${done.count} 个集运订单，到仓后将通知您`,
@@ -510,7 +580,9 @@ function ForwardingPage() {
           <Package className="h-3.5 w-3.5" />
           {tr("集运服务", "Consolidation")}
         </div>
-        <h1 className="mt-3 font-display text-3xl font-bold sm:text-4xl">{tr("申请集运单", "Request a Shipment")}</h1>
+        <h1 className="mt-3 font-display text-3xl font-bold sm:text-4xl">
+          {tr("申请集运单", "Request a Shipment")}
+        </h1>
         <p className="mt-2 text-sm text-ink-soft">
           {tr(
             "依次选择仓库 → 线路 → 收件地址，再填写国内单号与内件。",
@@ -521,15 +593,24 @@ function ForwardingPage() {
 
       <div className="space-y-6">
         {/* 1. Warehouse */}
-        <Step n={1} icon={<Warehouse className="h-4 w-4" />} title={tr("选择入库仓库", "Choose warehouse")}>
+        <Step
+          n={1}
+          icon={<Warehouse className="h-4 w-4" />}
+          title={tr("选择入库仓库", "Choose warehouse")}
+        >
           {lockedWarehouseId && (
             <div className="mb-3 flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/5 p-3 text-xs text-brand">
               <ShieldCheck className="h-3.5 w-3.5" />
-              {tr("已根据库存货物所在仓库锁定，无法更改", "Locked to the warehouse your inventory items are stored in")}
+              {tr(
+                "已根据库存货物所在仓库锁定，无法更改",
+                "Locked to the warehouse your inventory items are stored in",
+              )}
             </div>
           )}
           {warehouses.length === 0 ? (
-            <div className="text-xs text-ink-soft">{tr("后台暂未配置仓库", "No warehouses configured")}</div>
+            <div className="text-xs text-ink-soft">
+              {tr("后台暂未配置仓库", "No warehouses configured")}
+            </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {warehouses.map((w) => (
@@ -540,7 +621,9 @@ function ForwardingPage() {
                   onClick={() => setWarehouseId(w.id)}
                   className={`rounded-xl border p-4 text-left transition ${warehouseId === w.id ? "border-brand bg-brand/5" : "border-border bg-surface hover:border-brand/40"} ${lockedWarehouseId ? "cursor-not-allowed opacity-60" : ""}`}
                 >
-                  <div className="font-semibold">{lang === "zh" ? w.name_zh : (w.name_en ?? w.name_zh)}</div>
+                  <div className="font-semibold">
+                    {lang === "zh" ? w.name_zh : (w.name_en ?? w.name_zh)}
+                  </div>
                   <div className="mt-0.5 text-[10px] font-mono text-ink-soft">{w.code}</div>
                 </button>
               ))}
@@ -587,13 +670,22 @@ function ForwardingPage() {
           disabled={!warehouseId}
         >
           {!warehouseId ? (
-            <div className="text-xs text-ink-soft">{tr("请先选择仓库", "Pick a warehouse first")}</div>
+            <div className="text-xs text-ink-soft">
+              {tr("请先选择仓库", "Pick a warehouse first")}
+            </div>
           ) : availableRoutes.length === 0 ? (
-            <div className="text-xs text-ink-soft">{tr("该仓库暂无可用线路", "No routes available")}</div>
+            <div className="text-xs text-ink-soft">
+              {tr("该仓库暂无可用线路", "No routes available")}
+            </div>
           ) : (
             <div className="grid gap-2">
               {availableRoutes.map((r) => {
-                const Icon = r.shipping_method === "sea" ? Ship : r.shipping_method === "express" ? Truck : Plane;
+                const Icon =
+                  r.shipping_method === "sea"
+                    ? Ship
+                    : r.shipping_method === "express"
+                      ? Truck
+                      : Plane;
                 const eta = [r.transit_days_min, r.transit_days_max].filter(Boolean).join("-");
                 const rule = rules[r.id];
                 const isSel = routeCode === r.code;
@@ -609,7 +701,9 @@ function ForwardingPage() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold">{lang === "zh" ? r.name_zh : (r.name_en ?? r.name_zh)}</span>
+                          <span className="font-semibold">
+                            {lang === "zh" ? r.name_zh : (r.name_en ?? r.name_zh)}
+                          </span>
                           {eta && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] text-ink-soft">
                               <Clock className="h-3 w-3" />
@@ -618,7 +712,9 @@ function ForwardingPage() {
                           )}
                           {rule && (
                             <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand">
-                              CA${Number(rule.unit_price_cad || rule.unit_price_cny * 0.19).toFixed(2)}/kg
+                              CA$
+                              {Number(rule.unit_price_cad || rule.unit_price_cny * 0.19).toFixed(2)}
+                              /kg
                             </span>
                           )}
                         </div>
@@ -637,7 +733,9 @@ function ForwardingPage() {
                           <li>
                             {tr("单价", "Unit price")}:{" "}
                             <b className="text-foreground">
-                              CA${Number(rule.unit_price_cad || rule.unit_price_cny * 0.19).toFixed(2)}/kg
+                              CA$
+                              {Number(rule.unit_price_cad || rule.unit_price_cny * 0.19).toFixed(2)}
+                              /kg
                             </b>
                           </li>
                           <li>
@@ -658,18 +756,22 @@ function ForwardingPage() {
                           {Number(rule.clearance_fee_cad || rule.extra_fee_cny * 0.19) > 0 && (
                             <li>
                               {tr("清关费", "Clearance fee")}: CA$
-                              {Number(rule.clearance_fee_cad || rule.extra_fee_cny * 0.19).toFixed(2)}
+                              {Number(rule.clearance_fee_cad || rule.extra_fee_cny * 0.19).toFixed(
+                                2,
+                              )}
                             </li>
                           )}
                           {Number(rule.insurance_rate_pct) > 0 && (
                             <li>
-                              {tr("保险费率", "Insurance rate")}: {Number(rule.insurance_rate_pct).toFixed(2)}%
+                              {tr("保险费率", "Insurance rate")}:{" "}
+                              {Number(rule.insurance_rate_pct).toFixed(2)}%
                             </li>
                           )}
                           {(r.transit_days_min || r.transit_days_max) && (
                             <li>
                               {tr("预计到货时间", "Estimated transit")}:{" "}
-                              {[r.transit_days_min, r.transit_days_max].filter(Boolean).join("-")} {tr("天", "days")}
+                              {[r.transit_days_min, r.transit_days_max].filter(Boolean).join("-")}{" "}
+                              {tr("天", "days")}
                             </li>
                           )}
                         </ul>
@@ -683,7 +785,11 @@ function ForwardingPage() {
         </Step>
 
         {/* 3. Address */}
-        <Step n={3} icon={<MapPin className="h-4 w-4" />} title={tr("收件地址", "Shipping address")}>
+        <Step
+          n={3}
+          icon={<MapPin className="h-4 w-4" />}
+          title={tr("收件地址", "Shipping address")}
+        >
           {addresses.length === 0 ? (
             <Link
               to="/account"
@@ -730,8 +836,9 @@ function ForwardingPage() {
                   </div>
                   <div className="mt-1">
                     {selectedAddress.line1}
-                    {selectedAddress.line2 ? `, ${selectedAddress.line2}` : ""}, {selectedAddress.city},{" "}
-                    {selectedAddress.province} {selectedAddress.postal_code} · {selectedAddress.country}
+                    {selectedAddress.line2 ? `, ${selectedAddress.line2}` : ""},{" "}
+                    {selectedAddress.city}, {selectedAddress.province} {selectedAddress.postal_code}{" "}
+                    · {selectedAddress.country}
                   </div>
                 </div>
               )}
@@ -781,6 +888,11 @@ function ForwardingPage() {
               "height_cm",
               "weight_kg",
             ].filter((f) => fieldSet.has(f as ItemFieldKey)) as ItemFieldKey[];
+            const fieldRows: ItemFieldKey[][] = [
+              ROW1_FIELDS.filter((f) => fieldSet.has(f)),
+              ROW2_FIELDS.filter((f) => fieldSet.has(f)),
+              orderedFields.filter((f) => !ROW1_FIELDS.includes(f) && !ROW2_FIELDS.includes(f)),
+            ].filter((row) => row.length > 0);
             const reqMap = (selectedRoute?.item_field_required ?? {}) as Record<string, boolean>;
             const isReq = (f: ItemFieldKey) => f === "name" || !!reqMap[f];
             return (
@@ -804,8 +916,8 @@ function ForwardingPage() {
                       {tr("填写说明", "How to fill")}
                     </div>
                     {tr(
-                      "提示：选择线路后，每个空格上方会显示该项目的填写说明。",
-                      "Tip: pick a route to reveal per-field guidance directly above each input.",
+                      "提示：选择线路后，每个空格内会显示该项目的填写说明（占位文字）。",
+                      "Tip: pick a route to reveal per-field guidance as placeholder text inside each input.",
                     )}
                   </div>
                 )}
@@ -833,66 +945,132 @@ function ForwardingPage() {
                             />
                           )}
                           {parcels.length > 1 && !parcelLocked && (
-                            <button onClick={() => removeParcel(pi)} className="text-rose-400 hover:text-rose-300">
+                            <button
+                              onClick={() => removeParcel(pi)}
+                              className="text-rose-400 hover:text-rose-300"
+                            >
                               <Trash2 className="h-4 w-4" />
                             </button>
                           )}
                         </div>
-                        {/* Column headers: label + centered description directly above each input */}
-                        <div className="mb-1.5 flex flex-wrap items-end gap-2 px-1">
-                          {orderedFields.map((f) => (
-                            <div key={f} className={`${FIELD_META[f].w} flex flex-col items-center text-center`}>
-                              <div className="text-[9px] leading-tight text-ink-soft whitespace-normal">
-                                {tr(fieldHintZh(f), fieldHintEn(f))}
-                              </div>
-                              <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-foreground">
-                                {tr(FIELD_META[f].zh, FIELD_META[f].en)}
-                                {isReq(f) && <span className="text-rose-500">*</span>}
-                              </div>
-                            </div>
-                          ))}
-                          <div className="w-5" />
-                        </div>
                         <div className="space-y-2">
                           {p.items.map((it, ii) => (
-                            <div key={ii} className="flex flex-wrap items-center gap-2">
-                              {it.locked && (
-                                <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[9px] font-semibold text-brand">
-                                  {tr("已锁定", "Locked")}
-                                </span>
+                            <div
+                              key={ii}
+                              className="space-y-2 rounded-lg border border-border/60 p-2 sm:border-0 sm:p-0"
+                            >
+                              {(it.locked || (p.items.length > 1 && !it.locked)) && (
+                                <div className="flex items-center justify-between gap-2">
+                                  {it.locked ? (
+                                    <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[9px] font-semibold text-brand">
+                                      {tr("已锁定", "Locked")}
+                                    </span>
+                                  ) : (
+                                    <span />
+                                  )}
+                                  {p.items.length > 1 && !it.locked && (
+                                    <button
+                                      onClick={() => removeItem(pi, ii)}
+                                      className="text-rose-400 hover:text-rose-300"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
                               )}
-                              {orderedFields.map((f) => {
-                                const meta = FIELD_META[f];
-                                const valKey = f === "unit_price" ? "unit_price_cad" : f;
-                                const v = (it as any)[valKey];
-                                const isLocked = !!it.locked && LOCKED_FIELDS.has(f);
-                                const onChange = (raw: string) => {
-                                  let val: any = raw;
-                                  if (meta.type === "number") val = raw === "" ? undefined : Number(raw) || 0;
-                                  updateItem(pi, ii, { [valKey]: val } as any);
-                                };
-                                return (
+                              {!it.locked && (
+                                <div className="relative flex items-center gap-2">
                                   <input
-                                    key={f}
-                                    type={meta.type}
-                                    min={meta.type === "number" ? 0 : undefined}
-                                    step={f === "unit_price" ? "0.01" : undefined}
-                                    value={v ?? (meta.type === "number" ? "" : "")}
-                                    placeholder={tr(meta.zh, meta.en)}
-                                    onChange={(e) => onChange(e.target.value)}
-                                    disabled={isLocked}
-                                    className={`${meta.w} h-8 rounded-md border border-border px-2 text-xs outline-none focus:border-brand ${isLocked ? "cursor-not-allowed bg-accent/60 text-ink-soft" : "bg-background"}`}
+                                    value={it.sku ?? ""}
+                                    onChange={(e) => searchSku(pi, ii, e.target.value)}
+                                    onFocus={() => {
+                                      if ((it.sku ?? "").trim()) searchSku(pi, ii, it.sku ?? "");
+                                    }}
+                                    onBlur={() =>
+                                      setTimeout(
+                                        () =>
+                                          setSkuActiveKey((k) => (k === `${pi}-${ii}` ? null : k)),
+                                        150,
+                                      )
+                                    }
+                                    placeholder={tr(
+                                      "SKU / 品名 / HSCODE（选填，模糊搜索自动带出资料）",
+                                      "SKU / name / HS code (optional — fuzzy search auto-fills details)",
+                                    )}
+                                    className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-brand sm:w-56"
                                   />
-                                );
-                              })}
-                              {p.items.length > 1 && !it.locked && (
-                                <button
-                                  onClick={() => removeItem(pi, ii)}
-                                  className="text-rose-400 hover:text-rose-300"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
+                                  {skuActiveKey === `${pi}-${ii}` && skuLoading && (
+                                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-ink-soft" />
+                                  )}
+                                  {skuActiveKey === `${pi}-${ii}` &&
+                                    !skuLoading &&
+                                    skuResults.length > 0 && (
+                                      <div className="absolute left-0 top-full z-20 mt-1 max-h-48 w-full min-w-[220px] overflow-auto rounded-md border border-border bg-surface shadow-elevated sm:w-56">
+                                        {skuResults.map((row) => (
+                                          <button
+                                            key={row.id}
+                                            type="button"
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={() => pickSkuResult(pi, ii, row)}
+                                            className="block w-full truncate px-2 py-1.5 text-left text-xs hover:bg-accent"
+                                          >
+                                            {row.sku && (
+                                              <span className="font-mono font-semibold text-brand">
+                                                {row.sku}
+                                              </span>
+                                            )}{" "}
+                                            <span className="text-ink-soft">
+                                              {row.sku ? "· " : ""}
+                                              {row.name}
+                                              {row.hs_code ? ` · ${row.hs_code}` : ""}
+                                            </span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                </div>
                               )}
+                              {fieldRows.map((rowFields, ri) => (
+                                <div
+                                  key={ri}
+                                  className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
+                                >
+                                  {rowFields.map((f) => {
+                                    const meta = FIELD_META[f];
+                                    const valKey = f === "unit_price" ? "unit_price_cad" : f;
+                                    const v = (it as any)[valKey];
+                                    const isLocked = !!it.locked && LOCKED_FIELDS.has(f);
+                                    const onChange = (raw: string) => {
+                                      let val: any = raw;
+                                      if (meta.type === "number")
+                                        val = raw === "" ? undefined : Number(raw) || 0;
+                                      updateItem(pi, ii, { [valKey]: val } as any);
+                                    };
+                                    return (
+                                      // A native placeholder disappears the moment the field has a
+                                      // value (typed, or pre-filled/locked from inventory) — which is
+                                      // exactly when a bare number like "3" or "60" most needs its
+                                      // label. So the field name lives as a small fixed tag pinned
+                                      // inside the box instead, which stays visible either way.
+                                      <div key={f} className={`relative ${meta.w}`}>
+                                        <span className="pointer-events-none absolute left-2 top-1 text-[8px] font-semibold uppercase tracking-wide text-ink-soft/80">
+                                          {tr(meta.zh, meta.en)}
+                                          {isReq(f) && <span className="text-rose-500"> *</span>}
+                                        </span>
+                                        <input
+                                          type={meta.type}
+                                          min={meta.type === "number" ? 0 : undefined}
+                                          step={f === "unit_price" ? "0.01" : undefined}
+                                          value={v ?? (meta.type === "number" ? "" : "")}
+                                          onChange={(e) => onChange(e.target.value)}
+                                          disabled={isLocked}
+                                          className={`h-11 w-full rounded-md border border-border px-2 pb-1 pt-4 text-xs outline-none focus:border-brand ${isLocked ? "cursor-not-allowed bg-accent/60 text-ink-soft" : "bg-background"}`}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ))}
                             </div>
                           ))}
                           {!parcelLocked && (
@@ -918,7 +1096,11 @@ function ForwardingPage() {
         <Step n={5} icon={<ShieldCheck className="h-4 w-4" />} title={tr("其他", "Other")}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <label className="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={insured} onChange={(e) => setInsured(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={insured}
+                onChange={(e) => setInsured(e.target.checked)}
+              />
               {tr("购买运输保险", "Add insurance")}
             </label>
             <button
@@ -927,7 +1109,9 @@ function ForwardingPage() {
               className="inline-flex items-center gap-1 text-xs text-brand hover:underline"
             >
               {tr("查看运输理赔协议", "View claims agreement")}
-              <ChevronDown className={`h-3 w-3 transition-transform ${showAgreement ? "rotate-180" : ""}`} />
+              <ChevronDown
+                className={`h-3 w-3 transition-transform ${showAgreement ? "rotate-180" : ""}`}
+              />
             </button>
           </div>
           {showAgreement && (
@@ -940,37 +1124,50 @@ function ForwardingPage() {
                   <li>承保范围：包裹在承运人保管期间因运输事故造成的灭失或损坏。</li>
                   <li>保险费率：按申报价值的指定百分比收取，已在线路收费规则中列示。</li>
                   <li>
-                    最高赔付：未购买保险包裹按运费 3 倍赔付且不超过 100 CAD；购买保险后按申报价值赔付，单件最高 5,000
-                    CNY。
+                    最高赔付：未购买保险包裹按运费 3 倍赔付且不超过 100
+                    CAD；购买保险后按申报价值赔付，单件最高 5,000 CNY。
                   </li>
-                  <li>除外责任：违禁品、易碎品未特别声明、内件与申报不符、自然损耗、延误所致间接损失不在赔付范围。</li>
-                  <li>理赔时效：收件之日起 7 天内须以书面方式提出，并提供照片、外包装与购买凭证。</li>
+                  <li>
+                    除外责任：违禁品、易碎品未特别声明、内件与申报不符、自然损耗、延误所致间接损失不在赔付范围。
+                  </li>
+                  <li>
+                    理赔时效：收件之日起 7 天内须以书面方式提出，并提供照片、外包装与购买凭证。
+                  </li>
                   <li>申报真实：发件人对申报品名、数量、价值的真实性负责，虚报将导致拒赔。</li>
-                  <li>争议解决：本协议适用承运人所在地法律，协商不成可提交所在地有管辖权的法院。</li>
+                  <li>
+                    争议解决：本协议适用承运人所在地法律，协商不成可提交所在地有管辖权的法院。
+                  </li>
                 </ol>
               ) : (
                 <ol className="ml-4 list-decimal space-y-1.5">
-                  <li>Coverage: loss or damage to the parcel during transit while in the carrier's custody.</li>
-                  <li>Premium: a percentage of declared value as listed under the selected route's pricing rules.</li>
                   <li>
-                    Maximum payout: uninsured parcels are capped at 3× freight or CAD 100, whichever is lower. Insured
-                    parcels are paid up to declared value, max CNY 5,000 per piece.
+                    Coverage: loss or damage to the parcel during transit while in the carrier's
+                    custody.
                   </li>
                   <li>
-                    Exclusions: prohibited items, fragile items not declared, contents differing from declaration,
-                    natural wear, and indirect losses from delays.
+                    Premium: a percentage of declared value as listed under the selected route's
+                    pricing rules.
                   </li>
                   <li>
-                    Claims window: written claims must be filed within 7 days of delivery, with photos, original
-                    packaging and purchase proof.
+                    Maximum payout: uninsured parcels are capped at 3× freight or CAD 100, whichever
+                    is lower. Insured parcels are paid up to declared value, max CNY 5,000 per
+                    piece.
                   </li>
                   <li>
-                    Truthful declaration: the sender is responsible for the accuracy of item name, quantity and value.
-                    False declarations void coverage.
+                    Exclusions: prohibited items, fragile items not declared, contents differing
+                    from declaration, natural wear, and indirect losses from delays.
                   </li>
                   <li>
-                    Disputes: governed by the carrier's local law; unresolved disputes may be submitted to a competent
-                    local court.
+                    Claims window: written claims must be filed within 7 days of delivery, with
+                    photos, original packaging and purchase proof.
+                  </li>
+                  <li>
+                    Truthful declaration: the sender is responsible for the accuracy of item name,
+                    quantity and value. False declarations void coverage.
+                  </li>
+                  <li>
+                    Disputes: governed by the carrier's local law; unresolved disputes may be
+                    submitted to a competent local court.
                   </li>
                 </ol>
               )}
@@ -1012,9 +1209,13 @@ function Step({
   children: React.ReactNode;
 }) {
   return (
-    <section className={`rounded-3xl border border-border bg-surface/40 p-5 sm:p-6 ${disabled ? "opacity-50" : ""}`}>
+    <section
+      className={`rounded-3xl border border-border bg-surface/40 p-5 sm:p-6 ${disabled ? "opacity-50" : ""}`}
+    >
       <header className="mb-4 flex items-center gap-2 text-sm font-bold">
-        <span className="grid h-7 w-7 place-items-center rounded-full bg-brand text-white">{n}</span>
+        <span className="grid h-7 w-7 place-items-center rounded-full bg-brand text-white">
+          {n}
+        </span>
         <span className="inline-flex items-center gap-1.5">
           {icon}
           {title}
