@@ -5,10 +5,7 @@
 // the canvas into one A4-page-height chunk per PDF page when content runs
 // past a single page — good enough for invoice-length documents.
 export async function downloadElementAsPdf(el: HTMLElement, filename: string) {
-  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-    import("html2canvas"),
-    import("jspdf"),
-  ]);
+  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
   const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
 
   const pdf = new jsPDF({ unit: "mm", format: "a4" });
@@ -33,17 +30,7 @@ export async function downloadElementAsPdf(el: HTMLElement, filename: string) {
       slice.height = sliceHeightPx;
       const ctx = slice.getContext("2d");
       if (!ctx) break;
-      ctx.drawImage(
-        canvas,
-        0,
-        renderedPx,
-        canvas.width,
-        sliceHeightPx,
-        0,
-        0,
-        canvas.width,
-        sliceHeightPx,
-      );
+      ctx.drawImage(canvas, 0, renderedPx, canvas.width, sliceHeightPx, 0, 0, canvas.width, sliceHeightPx);
       const sliceHeightMm = (sliceHeightPx * imgWidthMm) / canvas.width;
       if (!first) pdf.addPage();
       pdf.addImage(slice.toDataURL("image/png"), "PNG", 0, 0, imgWidthMm, sliceHeightMm);

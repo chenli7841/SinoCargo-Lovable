@@ -9,7 +9,10 @@ import { useCompanyInfo } from "@/lib/company";
 import { Loader2, User, Mail, Lock, Phone, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
-const searchSchema = z.object({ redirect: z.string().optional() });
+const searchSchema = z.object({
+  redirect: z.string().optional(),
+  wechat: z.enum(["notbound", "failed"]).optional(),
+});
 
 export const Route = createFileRoute("/auth")({
   validateSearch: searchSchema,
@@ -45,6 +48,18 @@ function AuthPage() {
   useEffect(() => {
     if (user) navigate({ to: search.redirect || "/account" });
   }, [user, navigate, search.redirect]);
+
+  useEffect(() => {
+    if (search.wechat === "notbound")
+      toast.error(
+        lang === "zh"
+          ? "该微信尚未绑定账号，请先用邮箱登录后在「账号安全」绑定微信"
+          : "This WeChat account isn't linked yet — sign in and link it under Account Security.",
+      );
+    else if (search.wechat === "failed")
+      toast.error(lang === "zh" ? "微信登录失败，请重试" : "WeChat sign-in failed, please try again");
+  }, [search.wechat, lang]);
+
 
   const isZh = lang === "zh";
   const tr = (zh: string, en: string) => (isZh ? zh : en);
@@ -107,9 +122,11 @@ function AuthPage() {
     setBusy(true);
     try {
       const returnTo =
-        search.redirect && search.redirect.startsWith("/") ? search.redirect : "/";
+        search.redirect && search.redirect.startsWith("/") ? search.redirect : "/account";
+      // Must be a PUBLIC same-origin URL: /account & friends are behind the auth
+      // gate, and the gate can run before the OAuth session is hydrated.
       const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin + returnTo,
+        redirect_uri: `${window.location.origin}/auth?redirect=${encodeURIComponent(returnTo)}`,
       });
       if (result.error) throw new Error(result.error.message || "Google sign-in failed");
       if (result.redirected) return;
@@ -178,14 +195,9 @@ function AuthPage() {
           </button>
 
           <button
-            onClick={() =>
-              toast.info(
-                tr(
-                  "微信登录即将开放：管理员需在微信开放平台申请网页应用并填入 AppID/AppSecret",
-                  "WeChat sign-in coming soon — admin must register a WeChat Open Platform web app and add AppID/AppSecret",
-                ),
-              )
-            }
+            onClick={() => {
+              window.location.href = "/api/public/wechat/login";
+            }}
             disabled={busy}
             className="mb-3 flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium transition hover:bg-accent disabled:opacity-50"
           >

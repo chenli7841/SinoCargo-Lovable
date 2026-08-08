@@ -1,23 +1,24 @@
-import { createFileRoute, useNavigate, useSearch, Link } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
-import { getMyRoles } from "@/lib/admin.functions";
 import { ROLE_LABEL, ADMIN_CONSOLE_ROLES } from "@/lib/admin-roles";
 import { Loader2, Mail, Lock, ArrowRight, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 const searchSchema = z.object({ redirect: z.string().optional() });
 
+async function getStaffRoles(userId: string) {
+  const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+  if (error) throw error;
+  return (data ?? []).map((row) => row.role).filter((role) => ADMIN_CONSOLE_ROLES.includes(role));
+}
+
 export const Route = createFileRoute("/admin-login")({
   validateSearch: searchSchema,
   head: () => ({
-    meta: [
-      { title: "后台登录 — SinoCargo Admin" },
-      { name: "robots", content: "noindex,nofollow" },
-    ],
+    meta: [{ title: "后台登录 — SinoCargo Admin" }, { name: "robots", content: "noindex,nofollow" }],
   }),
   component: AdminLoginPage,
 });
@@ -29,43 +30,74 @@ export const Route = createFileRoute("/admin-login")({
 // nav sections/content a role sees is decided inside /admin after login.
 function AdminLoginPage() {
   const navigate = useNavigate();
-  const search = Route.useSearch();
-  const fetchRoles = useServerFn(getMyRoles);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [denied, setDenied] = useState<string | null>(null);
+
+
+
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getUser().then(async ({ data, error }) => {
+      if (!active || error || !data.user) return;
+      try {
+        const staffRoles = await getStaffRoles(data.user.id);
+        if (!active) return;
+        if (staffRoles.length > 0) {
+          await navigate({ to: "/admin", replace: true });
+          return;
+        }
+        await supabase.auth.signOut();
+        if (active) setDenied("该账号没有管理后台权限，无法登录。如需访问请联系总负责人分配角色。");
+      } catch (error) {
+        if (active) setDenied(error instanceof Error ? error.message : "权限校验失败");
+      } finally {
+        if (active) setBusy(false);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
+    setDenied(null);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
-      const { roles } = await fetchRoles();
-      const staffRoles = roles.filter((r) => ADMIN_CONSOLE_ROLES.includes(r));
+      const staffRoles = await getStaffRoles(data.user.id);
       if (staffRoles.length === 0) {
         await supabase.auth.signOut();
-        throw new Error("该账号没有管理后台权限，无法登录");
+        setDenied("该账号没有管理后台权限，无法登录。如需访问请联系总负责人分配角色。");
+        toast.error("该账号没有管理后台权限");
+        return;
       }
 
       const levelLabel = staffRoles.map((r) => ROLE_LABEL[r]?.zh ?? r).join(" · ");
       toast.success(`登录成功（${levelLabel}）`);
-      navigate({ to: search.redirect || "/admin" });
+      // 登录后直接进入运营概览，具体可见内容由 /admin 布局按角色过滤
+      await navigate({ to: "/admin", replace: true });
+
     } catch (err: any) {
+      setDenied(err.message ?? "登录失败");
       toast.error(err.message ?? "登录失败");
     } finally {
       setBusy(false);
     }
   };
 
+
   const handleGoogle = async () => {
     setBusy(true);
     try {
-      const returnTo =
-        search.redirect && search.redirect.startsWith("/") ? search.redirect : "/admin";
+      const returnTo = "/admin";
+      // /auth 是公开路由，OAuth 回跳后由它在 session 就绪时再跳转到后台。
       const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin + returnTo,
+        redirect_uri: `${window.location.origin}/auth?redirect=${encodeURIComponent(returnTo)}`,
       });
       if (result.error) throw new Error(result.error.message || "Google 登录失败");
       if (result.redirected) return;
@@ -86,7 +118,14 @@ function AdminLoginPage() {
           <div className="text-xs uppercase tracking-wider text-slate-500">管理后台登录</div>
         </div>
 
+        {denied && (
+          <div className="mb-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-xs leading-relaxed text-rose-200">
+            {denied}
+          </div>
+        )}
+
         <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+
           <button
             type="button"
             onClick={handleGoogle}
@@ -116,11 +155,7 @@ function AdminLoginPage() {
 
           <button
             type="button"
-            onClick={() =>
-              toast.info(
-                "微信登录即将开放：管理员需在微信开放平台申请网页应用并填入 AppID/AppSecret",
-              )
-            }
+            onClick={() => toast.info("微信登录即将开放：管理员需在微信开放平台申请网页应用并填入 AppID/AppSecret")}
             disabled={busy}
             className="flex h-11 w-full items-center justify-center gap-3 rounded-lg border border-white/10 bg-white/5 text-sm font-medium text-slate-100 transition hover:bg-white/10 disabled:opacity-50"
           >
@@ -166,11 +201,7 @@ function AdminLoginPage() {
               disabled={busy}
               className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-brand to-cta text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50"
             >
-              {busy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ShieldCheck className="h-4 w-4" />
-              )}
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
               登录
             </button>
           </form>

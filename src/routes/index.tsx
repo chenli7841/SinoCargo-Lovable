@@ -18,13 +18,20 @@ const homeCatsQO = queryOptions({
 
 export const Route = createFileRoute("/")({
   head: () => {
-    const img = "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ececec33-843a-4443-a70f-61d8d276a071/id-preview-09d32aaf--d5d0f95a-a75a-4a1e-b677-98fa89e2c8c6.lovable.app-1784083834318.png";
+    const img =
+      "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ececec33-843a-4443-a70f-61d8d276a071/id-preview-09d32aaf--d5d0f95a-a75a-4a1e-b677-98fa89e2c8c6.lovable.app-1784083834318.png";
     return {
       meta: [
         { title: "SinoCargo — 中国到加拿大跨境采购 + 集运" },
-        { name: "description", content: "自营商城 + 国际集运一站搞定。源头好物、双币结算、全程可追踪，平均 7–12 天送达加拿大。" },
+        {
+          name: "description",
+          content: "自营商城 + 国际集运一站搞定。源头好物、双币结算、全程可追踪，平均 7–12 天送达加拿大。",
+        },
         { property: "og:title", content: "SinoCargo — 中国到加拿大跨境采购 + 集运" },
-        { property: "og:description", content: "自营商城 + 国际集运一站搞定。源头好物、双币结算、全程可追踪，平均 7–12 天送达加拿大。" },
+        {
+          property: "og:description",
+          content: "自营商城 + 国际集运一站搞定。源头好物、双币结算、全程可追踪，平均 7–12 天送达加拿大。",
+        },
         { property: "og:image", content: img },
         { name: "twitter:image", content: img },
       ],
@@ -45,7 +52,6 @@ function Home() {
   const { data: catData } = useSuspenseQuery(homeCatsQO);
   const featured = prodData.items.slice(0, 12).map(adaptProduct);
   const categories = adaptCategories(catData.items);
-
 
   return (
     <>
@@ -154,7 +160,9 @@ function Home() {
           </Link>
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {featured.map((p) => <ProductCard key={p.slug} p={p} />)}
+          {featured.map((p) => (
+            <ProductCard key={p.slug} p={p} />
+          ))}
         </div>
       </section>
 
@@ -166,7 +174,10 @@ function Home() {
             <p className="mt-3 text-ink-soft">{t("section.flow_sub")}</p>
           </div>
           <div className="relative mt-14 grid gap-6 md:grid-cols-5">
-            <div className="absolute left-[10%] right-[10%] top-7 hidden h-px bg-gradient-to-r from-transparent via-brand/40 to-transparent md:block" aria-hidden />
+            <div
+              className="absolute left-[10%] right-[10%] top-7 hidden h-px bg-gradient-to-r from-transparent via-brand/40 to-transparent md:block"
+              aria-hidden
+            />
             {[
               { icon: Package, k: 1 as const },
               { icon: Warehouse, k: 2 as const },
@@ -177,7 +188,9 @@ function Home() {
               <div key={k} className="relative flex flex-col items-center text-center">
                 <div className="relative grid h-14 w-14 place-items-center rounded-2xl border border-border bg-background shadow-card">
                   <Icon className="h-6 w-6 text-brand" />
-                  <span className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-cta text-[10px] font-bold text-cta-foreground">{i + 1}</span>
+                  <span className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-cta text-[10px] font-bold text-cta-foreground">
+                    {i + 1}
+                  </span>
                 </div>
                 <h3 className="mt-4 text-sm font-semibold">{t(`flow.${k}_t` as const)}</h3>
                 <p className="mt-1 text-xs leading-relaxed text-ink-soft">{t(`flow.${k}_d` as const)}</p>
@@ -197,7 +210,10 @@ function Home() {
             { icon: Ship, k: 3 as const },
             { icon: Truck, k: 4 as const },
           ].map(({ icon: Icon, k }) => (
-            <div key={k} className="rounded-2xl border border-border bg-surface p-6 transition hover:border-brand/40 hover:shadow-card">
+            <div
+              key={k}
+              className="rounded-2xl border border-border bg-surface p-6 transition hover:border-brand/40 hover:shadow-card"
+            >
               <div className="grid h-10 w-10 place-items-center rounded-xl bg-brand-gradient text-brand-foreground">
                 <Icon className="h-5 w-5" />
               </div>

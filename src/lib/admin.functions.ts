@@ -123,14 +123,19 @@ export const listUsers = createServerFn({ method: "POST" })
 
     const allIds = (allProfiles ?? []).map((p: any) => p.id);
     const rolesByUser: Record<string, AppRole[]> = {};
-    if (allIds.length) {
+    // PostgREST puts `in` filters in the query string; with thousands of ids the
+    // URL exceeds the server limit and the request fails with 400 Bad Request.
+    // Fetch roles in chunks instead.
+    for (let i = 0; i < allIds.length; i += 300) {
+      const chunk = allIds.slice(i, i + 300);
       const { data: rolesR, error: rolesErr } = await supabaseAdmin
         .from("user_roles")
         .select("user_id, role")
-        .in("user_id", allIds);
+        .in("user_id", chunk);
       if (rolesErr) throw new Error(rolesErr.message);
       for (const r of rolesR ?? []) (rolesByUser[r.user_id] ??= []).push(r.role as AppRole);
     }
+
 
     const sorted = (allProfiles ?? []).slice().sort((a: any, b: any) => {
       const rankDiff = roleRank(rolesByUser[a.id] ?? []) - roleRank(rolesByUser[b.id] ?? []);

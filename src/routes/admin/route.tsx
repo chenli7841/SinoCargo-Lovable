@@ -1,11 +1,4 @@
-import {
-  createFileRoute,
-  Link,
-  Outlet,
-  redirect,
-  useNavigate,
-  useRouterState,
-} from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
@@ -47,10 +40,7 @@ import {
 export const Route = createFileRoute("/admin")({
   ssr: false,
   head: () => ({
-    meta: [
-      { title: "管理后台 / Admin — SinoCargo" },
-      { name: "robots", content: "noindex,nofollow" },
-    ],
+    meta: [{ title: "管理后台 / Admin — SinoCargo" }, { name: "robots", content: "noindex,nofollow" }],
   }),
   beforeLoad: async ({ location }) => {
     const { data, error } = await supabase.auth.getUser();
@@ -230,8 +220,7 @@ function AdminLayout() {
       .sort((a, b) => a.sort - b.sort);
   }, [navQ.data]);
 
-  const isItemAllowed = (group: NavGroup, item: NavItem) =>
-    (item.roles ?? group.roles).some((r) => roles.includes(r));
+  const isItemAllowed = (group: NavGroup, item: NavItem) => (item.roles ?? group.roles).some((r) => roles.includes(r));
   const visibleGroups = navGroups
     .map((g) => ({ ...g, items: g.items.filter((it) => isItemAllowed(g, it)) }))
     .filter((g) => g.items.length > 0);
@@ -240,8 +229,7 @@ function AdminLayout() {
   // starts with "/admin/", so it must only ever match exactly.
   const pathAllowed = (p: string) =>
     p === "/admin" ? pathname === "/admin" : pathname === p || pathname.startsWith(p + "/");
-  const isPageRestricted =
-    hasConsoleAccess && pathname !== "/admin/forbidden" && !allowedPaths.some(pathAllowed);
+  const isPageRestricted = hasConsoleAccess && pathname !== "/admin/forbidden" && !allowedPaths.some(pathAllowed);
 
   useEffect(() => {
     if (isForbidden && pathname !== "/admin/forbidden") {
@@ -302,22 +290,14 @@ function AdminLayout() {
                       : pathname === item.to || pathname.startsWith(item.to + "/");
                   const cls = [
                     "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition",
-                    active
-                      ? "bg-white/10 text-white"
-                      : "text-slate-300 hover:bg-white/5 hover:text-white",
-                    item.soon
-                      ? "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-slate-300"
-                      : "",
+                    active ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/5 hover:text-white",
+                    item.soon ? "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-slate-300" : "",
                   ].join(" ");
                   const inner = (
                     <>
                       <item.icon className="h-4 w-4" />
                       <span className="flex-1">{item.label}</span>
-                      {item.soon && (
-                        <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] uppercase">
-                          Soon
-                        </span>
-                      )}
+                      {item.soon && <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] uppercase">Soon</span>}
                     </>
                   );
                   if (item.soon)
@@ -327,11 +307,7 @@ function AdminLayout() {
                       </div>
                     );
                   return (
-                    <Link
-                      key={`${gi}-${item.to}-${item.label}`}
-                      to={item.to as any}
-                      className={cls}
-                    >
+                    <Link key={`${gi}-${item.to}-${item.label}`} to={item.to as any} className={cls}>
                       {inner}
                     </Link>
                   );
@@ -372,8 +348,7 @@ function AdminLayout() {
             </Link>
             <button
               onClick={async () => {
-                await signOut();
-                navigate({ to: "/admin-login" });
+                await signOut("/admin-login");
               }}
               className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2.5 py-1.5 text-xs text-slate-200 hover:bg-white/5"
             >

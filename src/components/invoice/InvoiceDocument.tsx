@@ -52,25 +52,16 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
   // inv.customs_cny is duty_cad's full mfn+GST+anti-dumping total anyway
   // (关税 and GST were never separate ledger columns to begin with).
   const hasMeta = items.some((it: any) => it.meta);
-  const freightFromMeta = items.reduce(
-    (s: number, it: any) => s + Number(it.meta?.freight?.amount_cad ?? 0),
-    0,
-  );
+  const freightFromMeta = items.reduce((s: number, it: any) => s + Number(it.meta?.freight?.amount_cad ?? 0), 0);
   const dutyFromMeta = items.reduce(
     (s: number, it: any) =>
       s +
-      (it.meta?.duty_items ?? []).reduce(
-        (s2: number, di: any) => s2 + Number(di.customs_cad) + Number(di.gst_cad),
-        0,
-      ),
+      (it.meta?.duty_items ?? []).reduce((s2: number, di: any) => s2 + Number(di.customs_cad) + Number(di.gst_cad), 0),
     0,
   );
   const otherFromMeta = items
     .filter((it: any) => !it.meta?.freight)
-    .reduce(
-      (s: number, it: any) => s + Number(it.meta?.amount_cad ?? toCad(Number(it.amount_cny ?? 0))),
-      0,
-    );
+    .reduce((s: number, it: any) => s + Number(it.meta?.amount_cad ?? toCad(Number(it.amount_cny ?? 0))), 0);
 
   const freightTotal = hasMeta ? freightFromMeta : toCad(Number(inv.freight_cny));
   const dutyTotal = hasMeta ? dutyFromMeta : toCad(Number(inv.customs_cny));
@@ -92,25 +83,15 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
       >
         <div className="mb-6 flex items-start justify-between">
           <div className="flex items-center gap-3">
-            {logo && (
-              <img
-                src={logo}
-                alt={company.name}
-                className="h-12 w-12 shrink-0 rounded object-contain"
-              />
-            )}
+            {logo && <img src={logo} alt={company.name} className="h-12 w-12 shrink-0 rounded object-contain" />}
             <div>
-              <div className="font-display text-2xl font-bold">
-                {template.header || `${company.name} · 账单`}
-              </div>
+              <div className="font-display text-2xl font-bold">{template.header || `${company.name} · 账单`}</div>
               <div className="mt-1 text-sm text-slate-500">INVOICE</div>
             </div>
           </div>
           <div className="text-right">
             <div className="font-mono text-lg font-bold">{inv.invoice_no}</div>
-            <div className="mt-1 text-xs text-slate-500">
-              开具: {new Date(inv.created_at).toLocaleDateString()}
-            </div>
+            <div className="mt-1 text-xs text-slate-500">开具: {new Date(inv.created_at).toLocaleDateString()}</div>
             {inv.due_date && <div className="text-xs text-slate-500">到期: {inv.due_date}</div>}
             <div
               className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLOR[inv.status] ?? ""}`}
@@ -137,18 +118,12 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
             </div>
             <div className="font-mono text-xs text-slate-500">客户号 {customer?.customer_code}</div>
             {(customer?.invoice_phone ?? customer?.phone) && (
-              <div className="text-xs text-slate-500">
-                {customer.invoice_phone ?? customer.phone}
-              </div>
+              <div className="text-xs text-slate-500">{customer.invoice_phone ?? customer.phone}</div>
             )}
             {(customer?.invoice_email ?? customer?.email) && (
-              <div className="text-xs text-slate-500">
-                {customer.invoice_email ?? customer.email}
-              </div>
+              <div className="text-xs text-slate-500">{customer.invoice_email ?? customer.email}</div>
             )}
-            {customer?.invoice_address && (
-              <div className="text-xs text-slate-500">{customer.invoice_address}</div>
-            )}
+            {customer?.invoice_address && <div className="text-xs text-slate-500">{customer.invoice_address}</div>}
           </div>
         </div>
 
@@ -167,11 +142,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
           )}
         </div>
 
-        {inv.note && (
-          <div className="mt-6 border-t border-slate-200 pt-4 text-xs text-slate-500">
-            备注: {inv.note}
-          </div>
-        )}
+        {inv.note && <div className="mt-6 border-t border-slate-200 pt-4 text-xs text-slate-500">备注: {inv.note}</div>}
         {template.footer && (
           <div className="mt-6 border-t border-slate-200 pt-4 text-center text-[11px] text-slate-400">
             {template.footer}
@@ -191,20 +162,10 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, Props>(function Invoic
 // surcharge fees, storage-fee invoices, discounts, manual rows).
 // Everything's CAD; older invoices generated before `meta` existed fall
 // back to converting their *_cny columns through `fx` so they still render.
-function InvoiceLineTables({
-  items,
-  fx,
-  batchNo,
-}: {
-  items: any[];
-  fx: number;
-  batchNo?: string | null;
-}) {
+function InvoiceLineTables({ items, fx, batchNo }: { items: any[]; fx: number; batchNo?: string | null }) {
   const toCad = (cny: number) => +(cny * fx).toFixed(2);
   const freightRows = items.filter((it) => it.meta?.freight);
-  const freightWaybillNos = freightRows
-    .map((it: any) => it.meta.waybill_no ?? it.description)
-    .join("、");
+  const freightWaybillNos = freightRows.map((it: any) => it.meta.waybill_no ?? it.description).join("、");
   const freightWeightTotal = freightRows.reduce(
     (s: number, it: any) => s + Number(it.meta.freight.chargeable_weight_kg ?? 0),
     0,
@@ -233,12 +194,10 @@ function InvoiceLineTables({
       const from = fmtDate(m.period_from);
       const to = fmtDate(m.period_to);
       const period = from && to ? `${from} ~ ${to}` : from || to || null;
-      if (period)
-        parts.push(m.billable_days != null ? `${period}（${m.billable_days} 天）` : period);
+      if (period) parts.push(m.billable_days != null ? `${period}（${m.billable_days} 天）` : period);
     }
     if (m.cbm_charged != null) parts.push(`${Number(m.cbm_charged).toFixed(2)} cbm`);
-    if (m.rate_cad_per_cbm_day != null)
-      parts.push(`CA$${Number(m.rate_cad_per_cbm_day).toFixed(2)}/cbm/天`);
+    if (m.rate_cad_per_cbm_day != null) parts.push(`CA$${Number(m.rate_cad_per_cbm_day).toFixed(2)}/cbm/天`);
     if (m.waybill_no && !m.batch_no) parts.push(`运单 ${m.waybill_no}`);
     return parts.length ? parts.join(" · ") : it.description;
   };
@@ -263,9 +222,7 @@ function InvoiceLineTables({
                 <td className="py-2 text-slate-500">{freightWaybillNos}</td>
                 <td className="py-2 text-right">{freightWeightTotal.toFixed(2)} kg</td>
                 <td className="py-2 text-right">CA${freightRate.toFixed(2)}/kg</td>
-                <td className="py-2 text-right font-semibold">
-                  CA${freightAmountTotal.toFixed(2)}
-                </td>
+                <td className="py-2 text-right font-semibold">CA${freightAmountTotal.toFixed(2)}</td>
               </tr>
             </tbody>
           </table>
@@ -336,9 +293,7 @@ function InvoiceLineTables({
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div>
-      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-        {title}
-      </div>
+      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{title}</div>
       {children}
     </div>
   );

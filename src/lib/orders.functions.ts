@@ -73,11 +73,7 @@ async function recordLog(
 }
 
 async function getOperatorName(admin: any, userId: string): Promise<string> {
-  const { data } = await admin
-    .from("profiles")
-    .select("full_name, email")
-    .eq("id", userId)
-    .maybeSingle();
+  const { data } = await admin.from("profiles").select("full_name, email").eq("id", userId).maybeSingle();
   return data?.full_name || data?.email || userId;
 }
 
@@ -93,11 +89,7 @@ async function getOperatorName(admin: any, userId: string): Promise<string> {
 // Returns CAD per CNY (i.e. 1/cny_per_cad). Fallback 0.19 (~5.26 cny/cad) when unset.
 export async function getFxCadPerCny(admin: any): Promise<number> {
   try {
-    const { data } = await admin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "fx_rate")
-      .maybeSingle();
+    const { data } = await admin.from("app_settings").select("value").eq("key", "fx_rate").maybeSingle();
     const cnyPerCad = Number((data?.value as any)?.cny_per_cad ?? 0);
     if (cnyPerCad > 0) return +(1 / cnyPerCad).toFixed(6);
   } catch {}
@@ -127,12 +119,7 @@ export async function computeFreight(
   const v = Math.max(0, volume_cm3 || 0);
   const divisor = Number(rule.volumetric_divisor) || 6000;
   const volW = v / divisor;
-  const chargeable =
-    rule.weight_mode === "actual"
-      ? w
-      : rule.weight_mode === "volumetric"
-        ? volW
-        : Math.max(w, volW);
+  const chargeable = rule.weight_mode === "actual" ? w : rule.weight_mode === "volumetric" ? volW : Math.max(w, volW);
   const fx = await getFxCadPerCny(admin);
   const unit_cad = Number(rule.unit_price_cad ?? 0);
   const min_cad = Number(rule.min_charge_cad ?? 0);
@@ -164,9 +151,7 @@ export async function computeFreight(
   }
   const insurance_rate_pct = Number(rule.insurance_rate_pct ?? 0);
   const insurance_cad =
-    declared_cad && insurance_rate_pct > 0
-      ? +(declared_cad * (insurance_rate_pct / 100)).toFixed(2)
-      : 0;
+    declared_cad && insurance_rate_pct > 0 ? +(declared_cad * (insurance_rate_pct / 100)).toFixed(2) : 0;
   return {
     chargeable_weight: +chargeable.toFixed(3),
     actual_weight: +w.toFixed(3),
@@ -217,11 +202,7 @@ export function computeWaybillDeclaredCad(
 }
 
 // Deprecated CNY-first helper retained for callers; converts via fx.
-export function computeWaybillDeclaredCny(
-  items_summary: any,
-  priceMap?: Map<string, number>,
-  fx = 0.19,
-): number {
+export function computeWaybillDeclaredCny(items_summary: any, priceMap?: Map<string, number>, fx = 0.19): number {
   const pm = new Map<string, { cad: number; cny: number }>();
   if (priceMap) for (const [k, v] of priceMap) pm.set(k, { cad: 0, cny: Number(v ?? 0) });
   const cad = computeWaybillDeclaredCad(items_summary, pm, fx);
@@ -244,9 +225,7 @@ export async function computeAndPersistWaybillFees(admin: any, waybillId: string
 
   const wt = Number(wb.weight_kg ?? 0);
   const vol =
-    wb.length_cm && wb.width_cm && wb.height_cm
-      ? Number(wb.length_cm) * Number(wb.width_cm) * Number(wb.height_cm)
-      : 0;
+    wb.length_cm && wb.width_cm && wb.height_cm ? Number(wb.length_cm) * Number(wb.width_cm) * Number(wb.height_cm) : 0;
 
   const fx = await getFxCadPerCny(admin);
   // Price fallback by item name from forwarding_items (both CAD and CNY, CAD is authoritative).
@@ -279,12 +258,7 @@ export async function computeAndPersistWaybillFees(admin: any, waybillId: string
 
   const divisor = Number(rule.volumetric_divisor) || 6000;
   const volW = vol / divisor;
-  const chargeable =
-    rule.weight_mode === "actual"
-      ? wt
-      : rule.weight_mode === "volumetric"
-        ? volW
-        : Math.max(wt, volW);
+  const chargeable = rule.weight_mode === "actual" ? wt : rule.weight_mode === "volumetric" ? volW : Math.max(wt, volW);
   const unit_cad = Number(rule.unit_price_cad ?? 0);
   const unit_cny = Number(rule.unit_price_cny ?? 0);
   let freight_cad = 0;
@@ -305,8 +279,7 @@ export async function computeAndPersistWaybillFees(admin: any, waybillId: string
     duty_cad = br.duty_cad;
   }
   const ins_rate = Number(rule.insurance_rate_pct ?? 0);
-  const insurance_cad =
-    fo.insured && ins_rate > 0 ? +((declared_cad * ins_rate) / 100).toFixed(2) : 0;
+  const insurance_cad = fo.insured && ins_rate > 0 ? +((declared_cad * ins_rate) / 100).toFixed(2) : 0;
 
   const snapshot = {
     actual_weight: +wt.toFixed(3),
@@ -403,24 +376,14 @@ export async function recomputeForwardingTotal(admin: any, forwardingId: string)
   }
 
   const wbIds = (wbs ?? []).map((w: any) => w.id);
-  const palletIds = Array.from(
-    new Set((wbs ?? []).map((w: any) => w.pallet_id).filter(Boolean)),
-  ) as string[];
+  const palletIds = Array.from(new Set((wbs ?? []).map((w: any) => w.pallet_id).filter(Boolean))) as string[];
   const [foScR, wbScR, plScR] = await Promise.all([
-    admin
-      .from("surcharges")
-      .select("amount_cny")
-      .eq("scope", "forwarding")
-      .eq("forwarding_id", forwardingId),
+    admin.from("surcharges").select("amount_cny").eq("scope", "forwarding").eq("forwarding_id", forwardingId),
     wbIds.length
       ? admin.from("surcharges").select("amount_cny").eq("scope", "waybill").in("waybill_id", wbIds)
       : Promise.resolve({ data: [] as any[] }),
     palletIds.length
-      ? admin
-          .from("surcharges")
-          .select("amount_cny")
-          .eq("scope", "pallet")
-          .in("pallet_id", palletIds)
+      ? admin.from("surcharges").select("amount_cny").eq("scope", "pallet").in("pallet_id", palletIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
   const sumCny = [
@@ -479,8 +442,7 @@ export async function computePalletSelfFreight(admin: any, palletId: string) {
   const wt = Number(p.self_weight_kg ?? p.weight_kg ?? 0);
   let volM3 = Number(p.self_volume_m3 ?? 0);
   if (!volM3 && p.self_length_cm && p.self_width_cm && p.self_height_cm) {
-    volM3 =
-      (Number(p.self_length_cm) * Number(p.self_width_cm) * Number(p.self_height_cm)) / 1_000_000;
+    volM3 = (Number(p.self_length_cm) * Number(p.self_width_cm) * Number(p.self_height_cm)) / 1_000_000;
   }
   if (!volM3 && p.length_cm && p.width_cm && p.height_cm) {
     volM3 = (Number(p.length_cm) * Number(p.width_cm) * Number(p.height_cm)) / 1_000_000;
@@ -532,8 +494,7 @@ export const listOrders = createServerFn({ method: "POST" })
       .eq("source", "shop")
       .order("created_at", { ascending: false });
     if (data.status && data.status !== "all") q = q.eq("status", data.status);
-    if (data.payment_status && data.payment_status !== "all")
-      q = q.eq("payment_status", data.payment_status);
+    if (data.payment_status && data.payment_status !== "all") q = q.eq("payment_status", data.payment_status);
     if (data.search?.trim()) {
       const s = data.search.trim();
       q = q.or(
@@ -556,11 +517,7 @@ export const getOrderDetail = createServerFn({ method: "POST" })
     const [orderR, itemsR, waybillsR, logsR] = await Promise.all([
       supabaseAdmin.from("orders").select("*").eq("id", data.orderId).maybeSingle(),
       supabaseAdmin.from("order_items").select("*").eq("order_id", data.orderId),
-      supabaseAdmin
-        .from("waybills")
-        .select("*")
-        .eq("order_id", data.orderId)
-        .order("created_at", { ascending: false }),
+      supabaseAdmin.from("waybills").select("*").eq("order_id", data.orderId).order("created_at", { ascending: false }),
       supabaseAdmin
         .from("admin_action_logs")
         .select("*")
@@ -603,11 +560,7 @@ export const recalcOrderFreight = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertManager(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: order } = await supabaseAdmin
-      .from("orders")
-      .select("*")
-      .eq("id", data.orderId)
-      .maybeSingle();
+    const { data: order } = await supabaseAdmin.from("orders").select("*").eq("id", data.orderId).maybeSingle();
     if (!order) throw new Error("Order not found");
     const route_id = data.route_id ?? order.route_id;
     if (!route_id) throw new Error("No route assigned");
@@ -654,15 +607,8 @@ export const cancelOrder = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertManager(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("orders")
-      .select("status")
-      .eq("id", data.orderId)
-      .maybeSingle();
-    const { error } = await supabaseAdmin
-      .from("orders")
-      .update({ status: "cancelled" })
-      .eq("id", data.orderId);
+    const { data: before } = await supabaseAdmin.from("orders").select("status").eq("id", data.orderId).maybeSingle();
+    const { error } = await supabaseAdmin.from("orders").update({ status: "cancelled" }).eq("id", data.orderId);
     if (error) throw new Error(error.message);
     await recordLog(supabaseAdmin, {
       entity_type: "order",
@@ -683,13 +629,7 @@ export const cancelOrder = createServerFn({ method: "POST" })
 export const listForwardings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (d: {
-      status?: string;
-      payment_status?: string;
-      search?: string;
-      page?: number;
-      pageSize?: number;
-    }) => d,
+    (d: { status?: string; payment_status?: string; search?: string; page?: number; pageSize?: number }) => d,
   )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
@@ -704,8 +644,7 @@ export const listForwardings = createServerFn({ method: "POST" })
       )
       .order("created_at", { ascending: false });
     if (data.status && data.status !== "all") q = q.eq("status", data.status);
-    if (data.payment_status && data.payment_status !== "all")
-      q = q.eq("payment_status", data.payment_status);
+    if (data.payment_status && data.payment_status !== "all") q = q.eq("payment_status", data.payment_status);
     if (data.search?.trim()) {
       const s = data.search.trim();
       q = q.or(
@@ -718,13 +657,9 @@ export const listForwardings = createServerFn({ method: "POST" })
     const ids = (rows ?? []).map((r) => r.id);
     const waybillCounts: Record<string, number> = {};
     if (ids.length) {
-      const { data: wbs } = await supabaseAdmin
-        .from("waybills")
-        .select("forwarding_id")
-        .in("forwarding_id", ids);
+      const { data: wbs } = await supabaseAdmin.from("waybills").select("forwarding_id").in("forwarding_id", ids);
       for (const w of wbs ?? []) {
-        if (w.forwarding_id)
-          waybillCounts[w.forwarding_id] = (waybillCounts[w.forwarding_id] ?? 0) + 1;
+        if (w.forwarding_id) waybillCounts[w.forwarding_id] = (waybillCounts[w.forwarding_id] ?? 0) + 1;
       }
     }
     const items = (rows ?? []).map((r: any) => ({
@@ -844,23 +779,13 @@ export const getForwardingDetail = createServerFn({ method: "POST" })
 export const intakeForwarding = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (d: {
-      id: string;
-      route_id: string;
-      declared_value_cad?: number;
-      note?: string;
-      apply_fee?: boolean;
-    }) => d,
+    (d: { id: string; route_id: string; declared_value_cad?: number; note?: string; apply_fee?: boolean }) => d,
   )
   .handler(async ({ data, context }) => {
     const { isStaff } = await getLevel(context.supabase, context.userId);
     if (!isStaff) throw new Error("Forbidden");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("forwarding_orders")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("forwarding_orders").select("*").eq("id", data.id).maybeSingle();
     if (!before) throw new Error("Not found");
     // Aggregate weight/volume from child waybills
     const { data: wbs } = await supabaseAdmin
@@ -875,8 +800,7 @@ export const intakeForwarding = createServerFn({ method: "POST" })
         total_vol += Number(w.length_cm) * Number(w.width_cm) * Number(w.height_cm);
       }
     }
-    if (total_weight <= 0 || total_vol <= 0)
-      throw new Error("请先在集运单下添加运单并录入重量/尺寸");
+    if (total_weight <= 0 || total_vol <= 0) throw new Error("请先在集运单下添加运单并录入重量/尺寸");
     const snapshot = await computeFreight(
       supabaseAdmin,
       data.route_id,
@@ -898,10 +822,7 @@ export const intakeForwarding = createServerFn({ method: "POST" })
       status: before.status === "pending" || before.status === "draft" ? "received" : before.status,
     };
     if (data.apply_fee !== false) update.fee_cny = snapshot.freight_cny;
-    const { error } = await supabaseAdmin
-      .from("forwarding_orders")
-      .update(update)
-      .eq("id", data.id);
+    const { error } = await supabaseAdmin.from("forwarding_orders").update(update).eq("id", data.id);
     if (error) throw new Error(error.message);
     await recordLog(supabaseAdmin, {
       entity_type: "forwarding",
@@ -941,13 +862,7 @@ export const previewForwardingFreight = createServerFn({ method: "POST" })
     }
     let snapshot: any =
       total_weight > 0 && total_vol > 0
-        ? await computeFreight(
-            supabaseAdmin,
-            data.route_id,
-            total_weight,
-            total_vol,
-            data.declared_value_cad ?? null,
-          )
+        ? await computeFreight(supabaseAdmin, data.route_id, total_weight, total_vol, data.declared_value_cad ?? null)
         : null;
     // 与 recomputeForwardingTotal 一致：预览运费 = 计费重 * 单价（不加最低收费 / 清关费）
     if (snapshot) {
@@ -976,13 +891,7 @@ export const previewForwardingFreight = createServerFn({ method: "POST" })
 export const listWaybills = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (d: {
-      status?: WaybillStatus | "all";
-      search?: string;
-      batch_id?: string;
-      page?: number;
-      pageSize?: number;
-    }) => d,
+    (d: { status?: WaybillStatus | "all"; search?: string; batch_id?: string; page?: number; pageSize?: number }) => d,
   )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
@@ -1012,9 +921,7 @@ export const listWaybills = createServerFn({ method: "POST" })
     const { data: rows, error, count } = await q.range((page - 1) * pageSize, page * pageSize - 1);
     if (error) throw new Error(error.message);
     // Resolve profiles separately (no FK from waybills.user_id to profiles)
-    const userIds = Array.from(
-      new Set((rows ?? []).map((r: any) => r.user_id).filter(Boolean) as string[]),
-    );
+    const userIds = Array.from(new Set((rows ?? []).map((r: any) => r.user_id).filter(Boolean) as string[]));
     const profMap = new Map<string, any>();
     if (userIds.length) {
       const { data: profs } = await supabaseAdmin
@@ -1025,8 +932,7 @@ export const listWaybills = createServerFn({ method: "POST" })
     }
     let items = (rows ?? []).map((r: any) => {
       const o = r.orders && !(r.orders as any).code ? r.orders : null;
-      const f =
-        r.forwarding_orders && !(r.forwarding_orders as any).code ? r.forwarding_orders : null;
+      const f = r.forwarding_orders && !(r.forwarding_orders as any).code ? r.forwarding_orders : null;
       const prof = profMap.get(r.user_id);
       return {
         ...r,
@@ -1082,8 +988,7 @@ function toFraction(n: number): {
   }
   const whole = Math.floor(h / k);
   const rem = h - whole * k;
-  const display =
-    whole > 0 && rem > 0 ? `${whole} ${rem}/${k}` : whole > 0 ? String(whole) : `${h}/${k}`;
+  const display = whole > 0 && rem > 0 ? `${whole} ${rem}/${k}` : whole > 0 ? String(whole) : `${h}/${k}`;
   return { display, numerator: h, denominator: k, value: h / k };
 }
 
@@ -1093,11 +998,7 @@ export const getWaybillDetail = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: wb } = await supabaseAdmin
-      .from("waybills")
-      .select("*")
-      .eq("id", data.waybillId)
-      .maybeSingle();
+    const { data: wb } = await supabaseAdmin.from("waybills").select("*").eq("id", data.waybillId).maybeSingle();
     if (!wb) throw new Error("Waybill not found");
     const { data: ship } = await supabaseAdmin
       .from("shipments")
@@ -1119,11 +1020,7 @@ export const getWaybillDetail = createServerFn({ method: "POST" })
         .eq("entity_id", data.waybillId)
         .order("created_at", { ascending: false })
         .limit(50),
-      supabaseAdmin
-        .from("surcharges")
-        .select("*")
-        .eq("scope", "waybill")
-        .eq("waybill_id", data.waybillId),
+      supabaseAdmin.from("surcharges").select("*").eq("scope", "waybill").eq("waybill_id", data.waybillId),
     ]);
 
     // === 每条运单的品名 / 数量 / 单价 / 申报价 / HS / 关税 ===
@@ -1186,10 +1083,7 @@ export const setWaybillStatus = createServerFn({ method: "POST" })
       .from("waybills")
       .select("id, waybill_no, status")
       .in("id", data.waybillIds);
-    const { error } = await supabaseAdmin
-      .from("waybills")
-      .update({ status: data.status })
-      .in("id", data.waybillIds);
+    const { error } = await supabaseAdmin.from("waybills").update({ status: data.status }).in("id", data.waybillIds);
     if (error) throw new Error(error.message);
 
     for (const w of before ?? []) {
@@ -1251,10 +1145,7 @@ export const addTrackingEvents = createServerFn({ method: "POST" })
     if (!isStaff) throw new Error("Forbidden");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const operator = await getOperatorName(supabaseAdmin, context.userId);
-    const { data: wbs } = await supabaseAdmin
-      .from("waybills")
-      .select("id, waybill_no")
-      .in("id", data.waybillIds);
+    const { data: wbs } = await supabaseAdmin.from("waybills").select("id, waybill_no").in("id", data.waybillIds);
     let inserted = 0;
     for (const w of wbs ?? []) {
       let { data: ship } = await supabaseAdmin
@@ -1312,10 +1203,7 @@ export const editTrackingEvent = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertManager(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("tracking_events")
-      .update(data.patch)
-      .eq("id", data.eventId);
+    const { error } = await supabaseAdmin.from("tracking_events").update(data.patch).eq("id", data.eventId);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -1350,10 +1238,7 @@ export const upsertTrackingPreset = createServerFn({ method: "POST" })
     await assertManager(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     if (data.id) {
-      const { error } = await supabaseAdmin
-        .from("tracking_event_presets")
-        .update(data.payload)
-        .eq("id", data.id);
+      const { error } = await supabaseAdmin.from("tracking_event_presets").update(data.payload).eq("id", data.id);
       if (error) throw new Error(error.message);
     } else {
       const { error } = await supabaseAdmin.from("tracking_event_presets").insert(data.payload);
@@ -1384,12 +1269,7 @@ async function computeBatchFeeSummary(admin: any, batchId: string) {
   // === 1. Load raw entities under the batch ===
   const [batchR, directWbsR, cartonsR, palletsR] = await Promise.all([
     admin.from("batches").select("id, batch_no").eq("id", batchId).maybeSingle(),
-    admin
-      .from("waybills")
-      .select("*")
-      .eq("assigned_batch_id", batchId)
-      .is("carton_id", null)
-      .is("pallet_id", null),
+    admin.from("waybills").select("*").eq("assigned_batch_id", batchId).is("carton_id", null).is("pallet_id", null),
     admin.from("cartons").select("*").eq("batch_id", batchId),
     admin.from("pallets").select("*").eq("batch_id", batchId),
   ]);
@@ -1458,22 +1338,17 @@ async function computeBatchFeeSummary(admin: any, batchId: string) {
   );
   const userMap = new Map<string, any>();
   if (userIds.length) {
-    const { data: profs } = await admin
-      .from("profiles")
-      .select("id, customer_code, full_name")
-      .in("id", userIds);
+    const { data: profs } = await admin.from("profiles").select("id, customer_code, full_name").in("id", userIds);
     for (const p of (profs ?? []) as any[]) userMap.set(p.id, p);
   }
 
   function wbCustomer(w: any): string | null {
-    const p: any =
-      (w.order_id && oMap.get(w.order_id)) || (w.forwarding_id && fMap.get(w.forwarding_id));
+    const p: any = (w.order_id && oMap.get(w.order_id)) || (w.forwarding_id && fMap.get(w.forwarding_id));
     if (p?.customer_code) return p.customer_code;
     return w.user_id ? (userMap.get(w.user_id)?.customer_code ?? null) : null;
   }
   function wbRoute(w: any): { code: string | null; id: string | null } {
-    const p: any =
-      (w.order_id && oMap.get(w.order_id)) || (w.forwarding_id && fMap.get(w.forwarding_id));
+    const p: any = (w.order_id && oMap.get(w.order_id)) || (w.forwarding_id && fMap.get(w.forwarding_id));
     return { code: p?.route_code ?? null, id: p?.route_id ?? null };
   }
   function wbWV(w: any) {
@@ -1513,70 +1388,34 @@ async function computeBatchFeeSummary(admin: any, batchId: string) {
   };
   const [scWb, scCt, scPl, scBt] = await Promise.all([
     allWbIds.length
-      ? admin
-          .from("surcharges")
-          .select("waybill_id, amount_cny")
-          .eq("scope", "waybill")
-          .in("waybill_id", allWbIds)
+      ? admin.from("surcharges").select("waybill_id, amount_cny").eq("scope", "waybill").in("waybill_id", allWbIds)
       : Promise.resolve({ data: [] as any[] }),
     allCartonIdsAll.length
-      ? admin
-          .from("surcharges")
-          .select("carton_id, amount_cny")
-          .eq("scope", "carton")
-          .in("carton_id", allCartonIdsAll)
+      ? admin.from("surcharges").select("carton_id, amount_cny").eq("scope", "carton").in("carton_id", allCartonIdsAll)
       : Promise.resolve({ data: [] as any[] }),
     palletIds.length
-      ? admin
-          .from("surcharges")
-          .select("pallet_id, amount_cny")
-          .eq("scope", "pallet")
-          .in("pallet_id", palletIds)
+      ? admin.from("surcharges").select("pallet_id, amount_cny").eq("scope", "pallet").in("pallet_id", palletIds)
       : Promise.resolve({ data: [] as any[] }),
-    admin
-      .from("surcharges")
-      .select("customer_code, amount_cny")
-      .eq("scope", "batch")
-      .eq("batch_id", batchId),
+    admin.from("surcharges").select("customer_code, amount_cny").eq("scope", "batch").eq("batch_id", batchId),
   ]);
   for (const s of (scWb as any).data ?? [])
-    surchargeMap.waybill.set(
-      s.waybill_id,
-      (surchargeMap.waybill.get(s.waybill_id) ?? 0) + Number(s.amount_cny ?? 0),
-    );
+    surchargeMap.waybill.set(s.waybill_id, (surchargeMap.waybill.get(s.waybill_id) ?? 0) + Number(s.amount_cny ?? 0));
   for (const s of (scCt as any).data ?? [])
-    surchargeMap.carton.set(
-      s.carton_id,
-      (surchargeMap.carton.get(s.carton_id) ?? 0) + Number(s.amount_cny ?? 0),
-    );
+    surchargeMap.carton.set(s.carton_id, (surchargeMap.carton.get(s.carton_id) ?? 0) + Number(s.amount_cny ?? 0));
   for (const s of (scPl as any).data ?? [])
-    surchargeMap.pallet.set(
-      s.pallet_id,
-      (surchargeMap.pallet.get(s.pallet_id) ?? 0) + Number(s.amount_cny ?? 0),
-    );
+    surchargeMap.pallet.set(s.pallet_id, (surchargeMap.pallet.get(s.pallet_id) ?? 0) + Number(s.amount_cny ?? 0));
   for (const s of (scBt as any).data ?? []) {
     const amt = Number(s.amount_cny ?? 0);
     if (s.customer_code)
-      surchargeMap.batchByCustomer.set(
-        s.customer_code,
-        (surchargeMap.batchByCustomer.get(s.customer_code) ?? 0) + amt,
-      );
+      surchargeMap.batchByCustomer.set(s.customer_code, (surchargeMap.batchByCustomer.get(s.customer_code) ?? 0) + amt);
     else surchargeMap.batchUnassigned += amt;
   }
 
   // === 4. Clearance per route ===
-  const routeCodesInUse = Array.from(
-    new Set(allWbs.map((w) => wbRoute(w).code).filter(Boolean) as string[]),
-  );
-  const clearanceByRoute = new Map<
-    string,
-    { fee: number; level: "waybill" | "batch"; route_id: string }
-  >();
+  const routeCodesInUse = Array.from(new Set(allWbs.map((w) => wbRoute(w).code).filter(Boolean) as string[]));
+  const clearanceByRoute = new Map<string, { fee: number; level: "waybill" | "batch"; route_id: string }>();
   if (routeCodesInUse.length) {
-    const { data: routes } = await admin
-      .from("shipping_routes")
-      .select("id, code")
-      .in("code", routeCodesInUse);
+    const { data: routes } = await admin.from("shipping_routes").select("id, code").in("code", routeCodesInUse);
     const routeIds = (routes ?? []).map((r: any) => r.id);
     const { data: rules } = routeIds.length
       ? await admin
@@ -1613,15 +1452,11 @@ async function computeBatchFeeSummary(admin: any, batchId: string) {
         .select("customer_code, fee_scheme_preference")
         .in("customer_code", codes);
       for (const p of (profs ?? []) as any[]) {
-        schemeByCustomer.set(
-          p.customer_code,
-          ((p as any).fee_scheme_preference ?? "split") as "merged" | "split",
-        );
+        schemeByCustomer.set(p.customer_code, ((p as any).fee_scheme_preference ?? "split") as "merged" | "split");
       }
     }
   }
-  const schemeOf = (code: string | null) =>
-    code ? (schemeByCustomer.get(code) ?? "split") : "split";
+  const schemeOf = (code: string | null) => (code ? (schemeByCustomer.get(code) ?? "split") : "split");
 
   // === 6. Buckets per (customer, route) ===
   type WbDetail = {
@@ -1695,11 +1530,7 @@ async function computeBatchFeeSummary(admin: any, batchId: string) {
   function bKey(code: string | null, routeCode: string | null) {
     return `${code ?? "__unassigned__"}||${routeCode ?? ""}`;
   }
-  function bucket(
-    code: string | null,
-    routeCode: string | null,
-    routeId: string | null = null,
-  ): Bucket {
+  function bucket(code: string | null, routeCode: string | null, routeId: string | null = null): Bucket {
     const k = bKey(code, routeCode);
     let b = buckets.get(k);
     if (!b) {
@@ -1889,8 +1720,7 @@ async function computeBatchFeeSummary(admin: any, batchId: string) {
   }
   function pushCartonDisplay(c: any, contained: any[]) {
     const cc: string | null =
-      c.customer_code ??
-      (c.customer_user_id ? (userMap.get(c.customer_user_id)?.customer_code ?? null) : null);
+      c.customer_code ?? (c.customer_user_id ? (userMap.get(c.customer_user_id)?.customer_code ?? null) : null);
     if (!cc) return;
     const rc: string | null = c.route_code ?? null;
     const rid: string | null = c.route_id ?? null;
@@ -1929,8 +1759,7 @@ async function computeBatchFeeSummary(admin: any, batchId: string) {
   }
   function pushPalletDisplay(p: any, direct: any[], cartonsUnder: { c: any; wbs: any[] }[]) {
     const cc: string | null =
-      p.customer_code ??
-      (p.customer_user_id ? (userMap.get(p.customer_user_id)?.customer_code ?? null) : null);
+      p.customer_code ?? (p.customer_user_id ? (userMap.get(p.customer_user_id)?.customer_code ?? null) : null);
     if (!cc) return;
     const rc: string | null = p.route_code ?? null;
     const rid: string | null = p.route_id ?? null;
@@ -2005,21 +1834,14 @@ async function computeBatchFeeSummary(admin: any, batchId: string) {
     if (!b.customer_code) continue;
     if (schemeOf(b.customer_code) !== "merged") continue;
     if (!b.route_id) continue;
-    const snap = await computeFreight(
-      admin,
-      b.route_id,
-      b.weight_kg,
-      b.volume_m3 * 1_000_000,
-      null,
-    );
+    const snap = await computeFreight(admin, b.route_id, b.weight_kg, b.volume_m3 * 1_000_000, null);
     b.freight = snap ? +Number((snap as any).freight_cad ?? 0).toFixed(2) : 0;
   }
 
   // === 10. Customs items per (customer, route) — HS 明细统一口径 ===
   // 集运运单：computeWaybillDutyBreakdown（与 waybills.duty_cad 落库完全一致）
   // 电商订单：order_items × products.hs_code / hs_codes 名称匹配
-  const { computeWaybillDutyBreakdown, buildHsIndex, matchHsForName } =
-    await import("./duty.server");
+  const { computeWaybillDutyBreakdown, buildHsIndex, matchHsForName } = await import("./duty.server");
   const { data: allHs } = await admin
     .from("hs_codes")
     .select("hs_code, name_zh, name_en, aliases, mfn_rate, gst_rate, anti_dumping_rate");
@@ -2037,9 +1859,7 @@ async function computeBatchFeeSummary(admin: any, batchId: string) {
     const existing = m.get(dedupKey);
     if (existing) {
       existing.quantity += row.quantity;
-      existing.declared_value_cad = +(existing.declared_value_cad + row.declared_value_cad).toFixed(
-        2,
-      );
+      existing.declared_value_cad = +(existing.declared_value_cad + row.declared_value_cad).toFixed(2);
       existing.duty_cad = +(existing.duty_cad + row.duty_cad).toFixed(2);
       existing.cartons_qty += row.cartons_qty;
     } else {
@@ -2089,9 +1909,7 @@ async function computeBatchFeeSummary(admin: any, batchId: string) {
       .from("order_items")
       .select("id, order_id, name_zh, unit_price_cny, quantity, product_id")
       .in("order_id", orderIds);
-    const productIds = Array.from(
-      new Set(((items ?? []) as any[]).map((i) => i.product_id).filter(Boolean)),
-    );
+    const productIds = Array.from(new Set(((items ?? []) as any[]).map((i) => i.product_id).filter(Boolean)));
     const prodMap = new Map<string, any>();
     if (productIds.length) {
       const { data: prods } = await admin
@@ -2184,9 +2002,7 @@ async function computeBatchFeeSummary(admin: any, batchId: string) {
   const per_customer = [...buckets.entries()]
     .filter(([_k, b]) => !!b.customer_code)
     .map(([k, b]) => {
-      const subtotal = +(b.freight + b.customs + b.insurance + b.clearance + b.surcharge).toFixed(
-        2,
-      );
+      const subtotal = +(b.freight + b.customs + b.insurance + b.clearance + b.surcharge).toFixed(2);
       const scheme = schemeOf(b.customer_code);
       const items = itemsMapMerged.get(k) ?? [];
       return {
@@ -2243,14 +2059,10 @@ async function computeBatchFeeSummary(admin: any, batchId: string) {
         fee_customs_cny: +unAgg.reduce((s, b) => s + b.customs, 0).toFixed(2),
         fee_insurance_cny: +unAgg.reduce((s, b) => s + b.insurance, 0).toFixed(2),
         fee_clearance_cny: +unAgg.reduce((s, b) => s + b.clearance, 0).toFixed(2),
-        fee_surcharge_cny: +(
-          unAgg.reduce((s, b) => s + b.surcharge, 0) + surchargeMap.batchUnassigned
-        ).toFixed(2),
+        fee_surcharge_cny: +(unAgg.reduce((s, b) => s + b.surcharge, 0) + surchargeMap.batchUnassigned).toFixed(2),
         subtotal_cny: +(
-          unAgg.reduce(
-            (s, b) => s + b.freight + b.customs + b.insurance + b.clearance + b.surcharge,
-            0,
-          ) + surchargeMap.batchUnassigned
+          unAgg.reduce((s, b) => s + b.freight + b.customs + b.insurance + b.clearance + b.surcharge, 0) +
+          surchargeMap.batchUnassigned
         ).toFixed(2),
       }
     : null;
@@ -2313,11 +2125,7 @@ async function settleBatchForCustomer(
   const discount = Math.max(0, Number(params.discountCad ?? 0));
   const FX = await getFxCadPerCny(admin);
 
-  const { data: batchRow } = await admin
-    .from("batches")
-    .select("batch_no")
-    .eq("id", batchId)
-    .maybeSingle();
+  const { data: batchRow } = await admin.from("batches").select("batch_no").eq("id", batchId).maybeSingle();
   const batchNo = (batchRow as any)?.batch_no ?? batchId;
 
   // 1) Locate this customer's UNPAID waybills in the batch (via their orders/forwarding requests —
@@ -2451,14 +2259,9 @@ async function settleBatchForCustomer(
   if (finalDeduct <= 0) return { ok: false, reason: "nothing_to_pay" };
 
   if (params.enforceBalance) {
-    const { data: w } = await admin
-      .from("wallets")
-      .select("balance_cad")
-      .eq("user_id", customerUserId)
-      .maybeSingle();
+    const { data: w } = await admin.from("wallets").select("balance_cad").eq("user_id", customerUserId).maybeSingle();
     const bal = Number((w as any)?.balance_cad ?? 0);
-    if (bal < finalDeduct)
-      return { ok: false, reason: "insufficient", need_cad: finalDeduct, balance_cad: bal };
+    if (bal < finalDeduct) return { ok: false, reason: "insufficient", need_cad: finalDeduct, balance_cad: bal };
   }
 
   const methodLabel = method === "wallet" ? "钱包扣款" : method === "emt" ? "EMT 收款" : "现金收款";
@@ -2472,9 +2275,7 @@ async function settleBatchForCustomer(
     amount_cny: totalCny,
     channel: method,
     ref_no: params.refNo ?? null,
-    note:
-      params.note ??
-      `批次 ${batchNo} · ${methodLabel}${discount > 0 ? ` (含折扣 CA$${discount.toFixed(2)})` : ""}`,
+    note: params.note ?? `批次 ${batchNo} · ${methodLabel}${discount > 0 ? ` (含折扣 CA$${discount.toFixed(2)})` : ""}`,
   });
   if (txErr) throw new Error(txErr.message);
 
@@ -2518,9 +2319,7 @@ async function settleBatchForCustomer(
   if (invErr) throw new Error(invErr.message);
   const invoiceId: string | null = inv?.id ?? null;
   if (invoiceId) {
-    await admin
-      .from("invoice_items")
-      .insert(lineItems.map((li: any) => ({ ...li, invoice_id: invoiceId })));
+    await admin.from("invoice_items").insert(lineItems.map((li: any) => ({ ...li, invoice_id: invoiceId })));
     if (discountCny > 0) {
       await admin.from("invoice_items").insert({
         invoice_id: invoiceId,
@@ -2553,11 +2352,7 @@ async function settleBatchForCustomer(
       operator_name: params.operatorName,
       note: `批次结算（批次 ${batchNo} · ${methodLabel}）`,
     });
-    let { data: ship } = await admin
-      .from("shipments")
-      .select("id")
-      .eq("tracking_no", w.waybill_no)
-      .maybeSingle();
+    let { data: ship } = await admin.from("shipments").select("id").eq("tracking_no", w.waybill_no).maybeSingle();
     if (!ship) {
       const { data: insShip } = await admin
         .from("shipments")
@@ -2738,9 +2533,7 @@ export const getBatchDetail = createServerFn({ method: "POST" })
         ? supabaseAdmin.from("forwarding_orders").select("id, customer_code").in("id", wbFwdIds)
         : Promise.resolve({ data: [] as any[] }),
     ]);
-    const wbOMap = new Map(
-      ((wbOrdersR as any).data ?? []).map((o: any) => [o.id, o.customer_code]),
-    );
+    const wbOMap = new Map(((wbOrdersR as any).data ?? []).map((o: any) => [o.id, o.customer_code]));
     const wbFMap = new Map(((wbFwdR as any).data ?? []).map((f: any) => [f.id, f.customer_code]));
     const waybills = wbList.map((w: any) => {
       const L = Number(w.length_cm ?? 0),
@@ -2755,9 +2548,7 @@ export const getBatchDetail = createServerFn({ method: "POST" })
         Number(w.clearance_cad ?? 0) +
         Number(w.surcharge_cad ?? 0);
       const customer_code =
-        (w.order_id && wbOMap.get(w.order_id)) ||
-        (w.forwarding_id && wbFMap.get(w.forwarding_id)) ||
-        null;
+        (w.order_id && wbOMap.get(w.order_id)) || (w.forwarding_id && wbFMap.get(w.forwarding_id)) || null;
       return {
         ...w,
         customer_code,
@@ -2778,10 +2569,7 @@ export const getBatchDetail = createServerFn({ method: "POST" })
       const userIds = Array.from(profMap.values()) as string[];
       const walletMap = new Map<string, number>();
       if (userIds.length) {
-        const { data: ws } = await supabaseAdmin
-          .from("wallets")
-          .select("user_id, balance_cad")
-          .in("user_id", userIds);
+        const { data: ws } = await supabaseAdmin.from("wallets").select("user_id, balance_cad").in("user_id", userIds);
         for (const w of (ws ?? []) as any[]) walletMap.set(w.user_id, Number(w.balance_cad ?? 0));
       }
       // Payment status aggregation per customer in this batch
@@ -2808,8 +2596,7 @@ export const getBatchDetail = createServerFn({ method: "POST" })
         const fM = new Map(((fR as any).data ?? []).map((f: any) => [f.id, f.customer_code]));
         const stateMap = new Map<string, { total: number; paid: number }>();
         for (const w of wbs2) {
-          const cc =
-            (w.order_id && oM.get(w.order_id)) || (w.forwarding_id && fM.get(w.forwarding_id));
+          const cc = (w.order_id && oM.get(w.order_id)) || (w.forwarding_id && fM.get(w.forwarding_id));
           if (!cc) continue;
           const s = stateMap.get(cc) ?? { total: 0, paid: 0 };
           s.total++;
@@ -2821,9 +2608,7 @@ export const getBatchDetail = createServerFn({ method: "POST" })
       per_customer = summary.per_customer.map((c: any) => ({
         ...c,
         user_id: profMap.get(c.customer_code) ?? null,
-        balance_cad: profMap.get(c.customer_code)
-          ? (walletMap.get(profMap.get(c.customer_code) as string) ?? 0)
-          : 0,
+        balance_cad: profMap.get(c.customer_code) ? (walletMap.get(profMap.get(c.customer_code) as string) ?? 0) : 0,
         is_paid: paidByCustomer.get(c.customer_code) ?? false,
       }));
     }
@@ -2840,15 +2625,7 @@ export const getBatchDetail = createServerFn({ method: "POST" })
 
 export const deductWalletForBatch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
-    (d: {
-      batchId: string;
-      userId: string;
-      amountCad: number;
-      discountCad?: number;
-      note?: string;
-    }) => d,
-  )
+  .inputValidator((d: { batchId: string; userId: string; amountCad: number; discountCad?: number; note?: string }) => d)
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -2991,9 +2768,7 @@ export const listMyBatches = createServerFn({ method: "GET" })
 
     const { data: myWbs } = await supabaseAdmin
       .from("waybills")
-      .select(
-        "id, assigned_batch_id, order_id, forwarding_id, waybill_no, status, payment_status, intl_tracking_no",
-      )
+      .select("id, assigned_batch_id, order_id, forwarding_id, waybill_no, status, payment_status, intl_tracking_no")
       .eq("user_id", context.userId)
       .not("assigned_batch_id", "is", null);
     const wbRows = (myWbs ?? []) as any[];
@@ -3021,31 +2796,19 @@ export const listMyBatches = createServerFn({ method: "GET" })
     const fwdIds = Array.from(new Set(wbRows.map((w) => w.forwarding_id).filter(Boolean)));
     const [oR, fR] = await Promise.all([
       orderIds.length
-        ? supabaseAdmin
-            .from("orders")
-            .select("id, order_no, status, tracking_no")
-            .in("id", orderIds)
+        ? supabaseAdmin.from("orders").select("id, order_no, status, tracking_no").in("id", orderIds)
         : Promise.resolve({ data: [] as any[] }),
       fwdIds.length
-        ? supabaseAdmin
-            .from("forwarding_orders")
-            .select("id, request_no, status, tracking_no")
-            .in("id", fwdIds)
+        ? supabaseAdmin.from("forwarding_orders").select("id, request_no, status, tracking_no").in("id", fwdIds)
         : Promise.resolve({ data: [] as any[] }),
     ]);
-    const oMap = new Map<string, any>(
-      (((oR as any).data ?? []) as any[]).map((o: any) => [o.id, o]),
-    );
-    const fMap = new Map<string, any>(
-      (((fR as any).data ?? []) as any[]).map((f: any) => [f.id, f]),
-    );
+    const oMap = new Map<string, any>((((oR as any).data ?? []) as any[]).map((o: any) => [o.id, o]));
+    const fMap = new Map<string, any>((((fR as any).data ?? []) as any[]).map((f: any) => [f.id, f]));
 
     const batches = [];
     for (const b of visibleBatches) {
       const summary = await computeBatchFeeSummary(supabaseAdmin, b.id);
-      const mine = customerCode
-        ? summary.per_customer.filter((p: any) => p.customer_code === customerCode)
-        : [];
+      const mine = customerCode ? summary.per_customer.filter((p: any) => p.customer_code === customerCode) : [];
       const subtotalCny = +mine.reduce((s: number, p: any) => s + p.subtotal_cny, 0).toFixed(2);
 
       const wbs = wbByBatch.get(b.id) ?? [];
@@ -3071,9 +2834,7 @@ export const listMyBatches = createServerFn({ method: "GET" })
         subtotal_cad: +(subtotalCny * FX).toFixed(2),
         is_paid: allPaid,
         items,
-        intl_tracking_nos: Array.from(
-          new Set(wbs.map((w: any) => w.intl_tracking_no).filter(Boolean)),
-        ) as string[],
+        intl_tracking_nos: Array.from(new Set(wbs.map((w: any) => w.intl_tracking_no).filter(Boolean))) as string[],
       });
     }
     return { batches };
@@ -3082,9 +2843,7 @@ export const listMyBatches = createServerFn({ method: "GET" })
 // Save/replace the 检查费 line for a customer within a batch (kept as a surcharge row with a marker note).
 export const saveInspectionFee = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
-    (d: { batchId: string; customerCode: string; amountCad: number; note?: string }) => d,
-  )
+  .inputValidator((d: { batchId: string; customerCode: string; amountCad: number; note?: string }) => d)
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -3171,11 +2930,7 @@ export const assignWaybillsToBatch = createServerFn({ method: "POST" })
         .in("id", data.waybillIds);
       if (error) throw new Error(error.message);
     } else {
-      const { data: b } = await supabaseAdmin
-        .from("batches")
-        .select("batch_no")
-        .eq("id", data.batchId)
-        .single();
+      const { data: b } = await supabaseAdmin.from("batches").select("batch_no").eq("id", data.batchId).single();
       const { error } = await supabaseAdmin
         .from("waybills")
         .update({ assigned_batch_id: data.batchId, batch_no: b?.batch_no ?? null })
@@ -3215,8 +2970,7 @@ export const updateBatchStatus = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     // Sync waybills under this batch: shipped → 'shipped', arrived → 'arrived'.
     // Skip terminal/downstream statuses so we don't regress 已签收 etc.
-    const targetWb =
-      data.status === "shipped" ? "shipped" : data.status === "arrived" ? "arrived" : null;
+    const targetWb = data.status === "shipped" ? "shipped" : data.status === "arrived" ? "arrived" : null;
     if (targetWb) {
       await supabaseAdmin
         .from("waybills")
@@ -3512,11 +3266,7 @@ export const getLabelData = createServerFn({ method: "POST" })
       user: any = null,
       entityNo = "";
     if (data.entityType === "order") {
-      const { data: o } = await supabaseAdmin
-        .from("orders")
-        .select("*")
-        .eq("id", data.entityId)
-        .maybeSingle();
+      const { data: o } = await supabaseAdmin.from("orders").select("*").eq("id", data.entityId).maybeSingle();
       if (!o) throw new Error("Order not found");
       parent = o;
       entityNo = o.order_no;
@@ -3545,11 +3295,7 @@ export const getLabelData = createServerFn({ method: "POST" })
       parent = f;
       entityNo = f.request_no || f.tracking_no || "";
       if (f.address_id) {
-        const { data: a } = await supabaseAdmin
-          .from("addresses")
-          .select("*")
-          .eq("id", f.address_id)
-          .maybeSingle();
+        const { data: a } = await supabaseAdmin.from("addresses").select("*").eq("id", f.address_id).maybeSingle();
         address = a;
       }
       const { data: w } = await supabaseAdmin
@@ -3591,10 +3337,7 @@ export const setForwardingInsured = createServerFn({ method: "POST" })
       .eq("id", data.id)
       .maybeSingle();
     if (!before) throw new Error("Not found");
-    const { error } = await supabaseAdmin
-      .from("forwarding_orders")
-      .update({ insured: data.insured })
-      .eq("id", data.id);
+    const { error } = await supabaseAdmin.from("forwarding_orders").update({ insured: data.insured }).eq("id", data.id);
     if (error) throw new Error(error.message);
     await recordLog(supabaseAdmin, {
       entity_type: "forwarding",

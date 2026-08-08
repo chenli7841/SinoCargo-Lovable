@@ -29,14 +29,13 @@ export const Route = createFileRoute("/api/public/wechat/callback")({
         const state = url.searchParams.get("state");
         const appid = process.env.WECHAT_APPID;
         const secret = process.env.WECHAT_APPSECRET;
-        const accountUrl = (params: string) =>
-          new URL(`/account?tab=profile&${params}`, url.origin).toString();
+        const accountUrl = (params: string) => new URL(`/account?tab=profile&${params}`, url.origin).toString();
 
         if (!appid || !secret) {
-          return new Response(
-            "WeChat sign-in not configured. Admin must set WECHAT_APPID and WECHAT_APPSECRET.",
-            { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } },
-          );
+          return new Response("WeChat sign-in not configured. Admin must set WECHAT_APPID and WECHAT_APPSECRET.", {
+            status: 503,
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+          });
         }
         if (!code || !state) {
           return new Response("Missing ?code or ?state", { status: 400 });
@@ -60,6 +59,29 @@ export const Route = createFileRoute("/api/public/wechat/callback")({
           const wechatUser = await userRes.json();
           const nickname: string | null = wechatUser?.nickname ?? null;
 
+          // Login mode: state minted by /api/public/wechat/login (no session yet).
+          if (state.startsWith("login:")) {
+            const { data: linked } = await supabaseAdmin
+              .from("profiles")
+              .select("id, email")
+              .eq("wechat_openid", openid)
+              .maybeSingle();
+
+            if (!linked?.email) {
+              return Response.redirect(new URL("/auth?wechat=notbound", url.origin).toString(), 302);
+            }
+
+            const { data: link, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+              type: "magiclink",
+              email: linked.email,
+              options: { redirectTo: new URL("/account", url.origin).toString() },
+            });
+            if (linkErr || !link?.properties?.action_link) {
+              return Response.redirect(new URL("/auth?wechat=failed", url.origin).toString(), 302);
+            }
+            return Response.redirect(link.properties.action_link, 302);
+          }
+
           // Bind mode: this `state` was minted by startWechatBind for a logged-in user.
           const { data: pending } = await supabaseAdmin
             .from("wechat_bind_states")
@@ -68,14 +90,10 @@ export const Route = createFileRoute("/api/public/wechat/callback")({
             .maybeSingle();
 
           if (!pending) {
-            // No matching state — sign-in-with-WeChat (no existing session) isn't wired up yet.
-            return new Response(
-              "WeChat callback received, but this link has expired. Please try binding again.",
-              {
-                status: 400,
-                headers: { "Content-Type": "text/plain; charset=utf-8" },
-              },
-            );
+            return new Response("WeChat callback received, but this link has expired. Please try binding again.", {
+              status: 400,
+              headers: { "Content-Type": "text/plain; charset=utf-8" },
+            });
           }
 
           await supabaseAdmin.from("wechat_bind_states").delete().eq("state", state);

@@ -83,7 +83,9 @@ import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as AdminShopProductsIndexRouteImport } from './routes/admin/shop.products.index'
 import { Route as AdminShopOrdersIndexRouteImport } from './routes/admin/shop.orders.index'
+import { Route as ApiPublicWechatLoginRouteImport } from './routes/api/public/wechat.login'
 import { Route as ApiPublicWechatCallbackRouteImport } from './routes/api/public/wechat.callback'
+import { Route as ApiPublicHooksOttpayRouteImport } from './routes/api/public/hooks/ottpay'
 import { Route as ApiPublicHooksMarkOverdueRouteImport } from './routes/api/public/hooks/mark-overdue'
 import { Route as AdminShopProductsProductIdRouteImport } from './routes/admin/shop.products.$productId'
 import { Route as AdminShopOrdersProcurementRouteImport } from './routes/admin/shop.orders.procurement'
@@ -467,9 +469,19 @@ const AdminShopOrdersIndexRoute = AdminShopOrdersIndexRouteImport.update({
   path: '/shop/orders/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const ApiPublicWechatLoginRoute = ApiPublicWechatLoginRouteImport.update({
+  id: '/api/public/wechat/login',
+  path: '/api/public/wechat/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicWechatCallbackRoute = ApiPublicWechatCallbackRouteImport.update({
   id: '/api/public/wechat/callback',
   path: '/api/public/wechat/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicHooksOttpayRoute = ApiPublicHooksOttpayRouteImport.update({
+  id: '/api/public/hooks/ottpay',
+  path: '/api/public/hooks/ottpay',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicHooksMarkOverdueRoute =
@@ -572,7 +584,9 @@ export interface FileRoutesByFullPath {
   '/admin/shop/orders/procurement': typeof AdminShopOrdersProcurementRoute
   '/admin/shop/products/$productId': typeof AdminShopProductsProductIdRoute
   '/api/public/hooks/mark-overdue': typeof ApiPublicHooksMarkOverdueRoute
+  '/api/public/hooks/ottpay': typeof ApiPublicHooksOttpayRoute
   '/api/public/wechat/callback': typeof ApiPublicWechatCallbackRoute
+  '/api/public/wechat/login': typeof ApiPublicWechatLoginRoute
   '/admin/shop/orders/': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products/': typeof AdminShopProductsIndexRoute
 }
@@ -650,7 +664,9 @@ export interface FileRoutesByTo {
   '/admin/shop/orders/procurement': typeof AdminShopOrdersProcurementRoute
   '/admin/shop/products/$productId': typeof AdminShopProductsProductIdRoute
   '/api/public/hooks/mark-overdue': typeof ApiPublicHooksMarkOverdueRoute
+  '/api/public/hooks/ottpay': typeof ApiPublicHooksOttpayRoute
   '/api/public/wechat/callback': typeof ApiPublicWechatCallbackRoute
+  '/api/public/wechat/login': typeof ApiPublicWechatLoginRoute
   '/admin/shop/orders': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products': typeof AdminShopProductsIndexRoute
 }
@@ -732,7 +748,9 @@ export interface FileRoutesById {
   '/admin/shop/orders/procurement': typeof AdminShopOrdersProcurementRoute
   '/admin/shop/products/$productId': typeof AdminShopProductsProductIdRoute
   '/api/public/hooks/mark-overdue': typeof ApiPublicHooksMarkOverdueRoute
+  '/api/public/hooks/ottpay': typeof ApiPublicHooksOttpayRoute
   '/api/public/wechat/callback': typeof ApiPublicWechatCallbackRoute
+  '/api/public/wechat/login': typeof ApiPublicWechatLoginRoute
   '/admin/shop/orders/': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products/': typeof AdminShopProductsIndexRoute
 }
@@ -814,7 +832,9 @@ export interface FileRouteTypes {
     | '/admin/shop/orders/procurement'
     | '/admin/shop/products/$productId'
     | '/api/public/hooks/mark-overdue'
+    | '/api/public/hooks/ottpay'
     | '/api/public/wechat/callback'
+    | '/api/public/wechat/login'
     | '/admin/shop/orders/'
     | '/admin/shop/products/'
   fileRoutesByTo: FileRoutesByTo
@@ -892,7 +912,9 @@ export interface FileRouteTypes {
     | '/admin/shop/orders/procurement'
     | '/admin/shop/products/$productId'
     | '/api/public/hooks/mark-overdue'
+    | '/api/public/hooks/ottpay'
     | '/api/public/wechat/callback'
+    | '/api/public/wechat/login'
     | '/admin/shop/orders'
     | '/admin/shop/products'
   id:
@@ -973,7 +995,9 @@ export interface FileRouteTypes {
     | '/admin/shop/orders/procurement'
     | '/admin/shop/products/$productId'
     | '/api/public/hooks/mark-overdue'
+    | '/api/public/hooks/ottpay'
     | '/api/public/wechat/callback'
+    | '/api/public/wechat/login'
     | '/admin/shop/orders/'
     | '/admin/shop/products/'
   fileRoutesById: FileRoutesById
@@ -998,7 +1022,9 @@ export interface RootRouteChildren {
   DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
   Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
   ApiPublicHooksMarkOverdueRoute: typeof ApiPublicHooksMarkOverdueRoute
+  ApiPublicHooksOttpayRoute: typeof ApiPublicHooksOttpayRoute
   ApiPublicWechatCallbackRoute: typeof ApiPublicWechatCallbackRoute
+  ApiPublicWechatLoginRoute: typeof ApiPublicWechatLoginRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1521,11 +1547,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminShopOrdersIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/api/public/wechat/login': {
+      id: '/api/public/wechat/login'
+      path: '/api/public/wechat/login'
+      fullPath: '/api/public/wechat/login'
+      preLoaderRoute: typeof ApiPublicWechatLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/wechat/callback': {
       id: '/api/public/wechat/callback'
       path: '/api/public/wechat/callback'
       fullPath: '/api/public/wechat/callback'
       preLoaderRoute: typeof ApiPublicWechatCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/ottpay': {
+      id: '/api/public/hooks/ottpay'
+      path: '/api/public/hooks/ottpay'
+      fullPath: '/api/public/hooks/ottpay'
+      preLoaderRoute: typeof ApiPublicHooksOttpayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/mark-overdue': {
@@ -1728,7 +1768,9 @@ const rootRouteChildren: RootRouteChildren = {
   DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
   Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
   ApiPublicHooksMarkOverdueRoute: ApiPublicHooksMarkOverdueRoute,
+  ApiPublicHooksOttpayRoute: ApiPublicHooksOttpayRoute,
   ApiPublicWechatCallbackRoute: ApiPublicWechatCallbackRoute,
+  ApiPublicWechatLoginRoute: ApiPublicWechatLoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -14,7 +14,9 @@ import { getMyRoles } from "@/lib/admin.functions";
 import { FileText, Loader2, Trash2, CheckCircle2, Ban, Database, GitMerge, Download } from "lucide-react";
 
 export const Route = createFileRoute("/admin/invoices/")({
-  validateSearch: (s: Record<string, unknown>) => ({ userId: typeof s.userId === "string" ? s.userId : undefined }),
+  validateSearch: (s: Record<string, unknown>) =>
+    ({ userId: typeof s.userId === "string" ? s.userId : undefined }) as { userId?: string },
+
   component: InvoicesPage,
 });
 
