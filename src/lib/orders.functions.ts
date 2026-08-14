@@ -1042,8 +1042,27 @@ export const getWaybillDetail = createServerFn({ method: "POST" })
       unmatched_names = br.unmatched_names;
     }
 
+    // 国内单号来自母单（集运单 / 商城订单）
+    let domestic_tracking_no: string | null = null;
+    if (wb.forwarding_id) {
+      const { data: fo } = await supabaseAdmin
+        .from("forwarding_orders")
+        .select("domestic_tracking_no")
+        .eq("id", wb.forwarding_id)
+        .maybeSingle();
+      domestic_tracking_no = fo?.domestic_tracking_no ?? null;
+    } else if (wb.order_id) {
+      const { data: od } = await supabaseAdmin
+        .from("orders")
+        .select("domestic_tracking_no")
+        .eq("id", wb.order_id)
+        .maybeSingle();
+      domestic_tracking_no = od?.domestic_tracking_no ?? null;
+    }
+
     return {
       waybill: wb,
+      domestic_tracking_no,
       events: (eventsR as any).data ?? [],
       logs: logsR.data ?? [],
       surcharges: (scR as any).data ?? [],
@@ -1057,6 +1076,162 @@ export const getWaybillDetail = createServerFn({ method: "POST" })
       },
       shipment_id: ship?.id ?? null,
     };
+  });
+
+export const updateWaybillDomesticTrackingNo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { waybillId: string; domestic_tracking_no: string; note?: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const operator = await getOperatorName(supabaseAdmin, context.userId);
+    const value = (data.domestic_tracking_no ?? "").trim();
+    if (value.length > 64) throw new Error("国内单号过长");
+
+    const { data: wb } = await supabaseAdmin
+      .from("waybills")
+      .select("id, waybill_no, order_id, forwarding_id")
+      .eq("id", data.waybillId)
+      .maybeSingle();
+    if (!wb) throw new Error("Waybill not found");
+
+    const table = wb.forwarding_id ? "forwarding_orders" : wb.order_id ? "orders" : null;
+    const parentId = wb.forwarding_id ?? wb.order_id;
+    if (!table || !parentId) throw new Error("该运单没有关联的母单，无法修改国内单号");
+
+    const { data: before } = await supabaseAdmin
+      .from(table as any)
+      .select("domestic_tracking_no")
+      .eq("id", parentId)
+      .maybeSingle();
+
+    const { error } = await supabaseAdmin
+      .from(table as any)
+      .update({ domestic_tracking_no: value || null })
+      .eq("id", parentId);
+    if (error) throw new Error(error.message);
+
+    await recordLog(supabaseAdmin, {
+      entity_type: "waybill",
+      entity_id: wb.id,
+      action: "edit_domestic_tracking_no",
+      before: { domestic_tracking_no: (before as any)?.domestic_tracking_no ?? null },
+      after: { domestic_tracking_no: value || null },
+      operator_id: context.userId,
+      operator_name: operator,
+      note: data.note,
+    });
+    await recordLog(supabaseAdmin, {
+      entity_type: wb.forwarding_id ? "forwarding" : "order",
+      entity_id: parentId,
+      action: "edit_domestic_tracking_no",
+      before: { domestic_tracking_no: (before as any)?.domestic_tracking_no ?? null },
+      after: { domestic_tracking_no: value || null },
+      operator_id: context.userId,
+      operator_name: operator,
+      note: `来自运单 ${wb.waybill_no}${data.note ? " · " + data.note : ""}`,
+    });
+
+    return { ok: true, domestic_tracking_no: value || null };
+  });
+
+export const updateOrderDomesticTrackingNo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { orderId: string; domestic_tracking_no: string; note?: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const operator = await getOperatorName(supabaseAdmin, context.userId);
+    const value = (data.domestic_tracking_no ?? "").trim();
+    if (value.length > 64) throw new Error("国内单号过长");
+
+    const { data: before } = await supabaseAdmin
+      .from("orders")
+      .select("domestic_tracking_no")
+      .eq("id", data.orderId)
+      .maybeSingle();
+    if (!before) throw new Error("Order not found");
+
+    const { error } = await supabaseAdmin
+      .from("orders")
+      .update({ domestic_tracking_no: value || null })
+      .eq("id", data.orderId);
+    if (error) throw new Error(error.message);
+
+    await recordLog(supabaseAdmin, {
+      entity_type: "order",
+      entity_id: data.orderId,
+      action: "edit_domestic_tracking_no",
+      before: { domestic_tracking_no: (before as any)?.domestic_tracking_no ?? null },
+      after: { domestic_tracking_no: value || null },
+      operator_id: context.userId,
+      operator_name: operator,
+      note: data.note,
+    });
+
+    return { ok: true, domestic_tracking_no: value || null };
+  });
+
+
+
+const FO_EDITABLE_FIELDS = ["warehouse","shipping_method","destination_code","domestic_tracking_no","intl_tracking_no"] as const;
+type FoEditableField = (typeof FO_EDITABLE_FIELDS)[number];
+
+export const updateForwardingBasicInfo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { forwardingId: string; patch: Partial<Record<FoEditableField, string | null>>; note?: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const operator = await getOperatorName(supabaseAdmin, context.userId);
+
+    const update: Record<string, string | null> = {};
+    for (const key of FO_EDITABLE_FIELDS) {
+      if (!(key in data.patch)) continue;
+      const raw = (data.patch as any)[key];
+      const value = typeof raw === "string" ? raw.trim() : raw ?? null;
+      if (typeof value === "string" && value.length > 64) throw new Error(`字段过长：${key}`);
+      update[key] = value === "" ? null : value;
+    }
+    if (Object.keys(update).length === 0) return { ok: true, changed: [] as string[] };
+
+    const { data: before } = await supabaseAdmin
+      .from("forwarding_orders")
+      .select("warehouse, shipping_method, destination_code, domestic_tracking_no, intl_tracking_no")
+      .eq("id", data.forwardingId)
+      .maybeSingle();
+    if (!before) throw new Error("Forwarding order not found");
+
+    const changed: string[] = [];
+    const beforeVals: Record<string, any> = {};
+    const afterVals: Record<string, any> = {};
+    for (const [k, v] of Object.entries(update)) {
+      const prev = (before as any)[k] ?? null;
+      if (prev === v) continue;
+      changed.push(k);
+      beforeVals[k] = prev;
+      afterVals[k] = v;
+    }
+    if (changed.length === 0) return { ok: true, changed: [] as string[] };
+
+    const { error } = await supabaseAdmin
+      .from("forwarding_orders")
+      .update(afterVals as any)
+      .eq("id", data.forwardingId);
+    if (error) throw new Error(error.message);
+
+    await recordLog(supabaseAdmin, {
+      entity_type: "forwarding",
+      entity_id: data.forwardingId,
+      action: "edit_basic_info",
+      before: beforeVals,
+      after: afterVals,
+      operator_id: context.userId,
+      operator_name: operator,
+      note: data.note ?? `修改字段：${changed.join(", ")}`,
+    });
+
+    return { ok: true, changed };
   });
 
 export const setWaybillStatus = createServerFn({ method: "POST" })
@@ -3313,9 +3488,30 @@ export const getLabelData = createServerFn({ method: "POST" })
         user = u;
       }
     }
+    // 计费重量: max(实重, 材积重) —— 按线路运费规则
+    let rule: any = null;
+    if (parent?.route_id) {
+      const { data: r } = await supabaseAdmin.from("freight_rules").select("*")
+        .eq("route_id", parent.route_id).eq("is_active", true)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      rule = r;
+    }
+    const divisor = Number(rule?.volumetric_divisor) || 6000;
+    const mode = String(rule?.weight_mode ?? "greater");
+    waybills = waybills.map((w: any) => {
+      const aw = Math.max(0, Number(w.weight_kg ?? 0));
+      const volW = divisor > 0 ? (Number(w.length_cm ?? 0) * Number(w.width_cm ?? 0) * Number(w.height_cm ?? 0)) / divisor : 0;
+      const chargeable = mode === "actual" ? aw : mode === "volumetric" ? volW : Math.max(aw, volW);
+      const summary: any[] = Array.isArray(w.items_summary) ? w.items_summary : [];
+      const items_name = summary.length
+        ? summary.map((it: any) => `${it.name ?? it.item_name ?? ""}${it.qty ? `×${it.qty}` : ""}`).filter(Boolean).join("、")
+        : null;
+      return { ...w, chargeable_kg: +chargeable.toFixed(2), items_name };
+    });
     return {
       entityType: data.entityType,
       entityNo,
+      domesticTrackingNo: parent?.domestic_tracking_no ?? null,
       parent,
       waybills,
       address,

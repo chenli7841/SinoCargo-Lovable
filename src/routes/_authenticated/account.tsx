@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useApp } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
-import { startOttTopup, startOttCardTopup, syncOttTopup } from "@/lib/ottpay.functions";
+import { startOttTopup, startOttHostedCardTopup, syncOttTopup } from "@/lib/ottpay.functions";
 import { submitEmtTopup } from "@/lib/wallet.functions";
 
 import { listMyBatches, payMyBatch } from "@/lib/orders.functions";
@@ -1983,16 +1983,33 @@ function MyItemsTab() {
     }
     const hsCode = editing.hs_code.trim().replace(/\s+/g, "");
 
+    // Postgres cancels statements after 8s; a cold/busy DB can trip this on the
+    // very first write. Retry transparently instead of showing a scary error.
+    const withRetry = async <T,>(run: () => Promise<{ data?: T; error: any }>) => {
+      let last: any = null;
+      for (let i = 0; i < 3; i++) {
+        const r = await run();
+        if (!r.error) return r;
+        last = r;
+        const isTimeout = r.error?.code === "57014" || /statement timeout/i.test(r.error?.message ?? "");
+        if (!isTimeout) return r;
+        await new Promise((res) => setTimeout(res, 600 * (i + 1)));
+      }
+      return last;
+    };
+
     // If this HS code already exists in the shared library, its (staff-curated) rates win
     // over whatever the customer typed. Brand-new codes get inserted using their input.
-    const { data: resolved, error: resolveError } = await sb.rpc("resolve_hs_code_rates", {
-      p_hs_code: hsCode,
-      p_name_zh: editing.name.trim(),
-      p_unit: editing.unit?.trim() || null,
-      p_mfn_rate: editing.mfn_rate ?? 0,
-      p_gst_rate: editing.gst_rate ?? 0.05,
-      p_sima_involved: editing.sima_involved ?? false,
-    });
+    const { data: resolved, error: resolveError } = await withRetry<any>(() =>
+      sb.rpc("resolve_hs_code_rates", {
+        p_hs_code: hsCode,
+        p_name_zh: editing.name!.trim(),
+        p_unit: editing.unit?.trim() || null,
+        p_mfn_rate: editing.mfn_rate ?? 0,
+        p_gst_rate: editing.gst_rate ?? 0.05,
+        p_sima_involved: editing.sima_involved ?? false,
+      }),
+    );
     if (resolveError) {
       setBusy(false);
       return toast.error(resolveError.message);
@@ -2010,11 +2027,14 @@ function MyItemsTab() {
       gst_rate: resolved?.gst_rate ?? editing.gst_rate ?? 0.05,
       sima_involved: resolved?.sima_involved ?? editing.sima_involved ?? false,
     };
-    const { error } = editing.id
-      ? await sb.from("my_items").update(payload).eq("id", editing.id)
-      : await sb.from("my_items").insert(payload);
+    const { error } = await withRetry<any>(() =>
+      editing.id
+        ? sb.from("my_items").update(payload).eq("id", editing.id)
+        : sb.from("my_items").insert(payload),
+    );
     setBusy(false);
     if (error) return toast.error(error.message);
+
     toast.success(tr("已保存", "Saved"));
     setEditing(null);
     load();
@@ -2634,7 +2654,7 @@ function WalletTab() {
   const { lang, cadToCny } = useApp();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
   const startOtt = useServerFn(startOttTopup);
-  const startCard = useServerFn(startOttCardTopup);
+  const startHosted = useServerFn(startOttHostedCardTopup);
   const syncOtt = useServerFn(syncOttTopup);
   const submitEmt = useServerFn(submitEmtTopup);
   const [wallet, setWallet] = useState<WalletRow | null>(null);
@@ -2650,9 +2670,6 @@ function WalletTab() {
   const QR_TTL_SEC = 20;
   const [qrLeft, setQrLeft] = useState<number>(QR_TTL_SEC);
 
-  const [cardOpen, setCardOpen] = useState(false);
-  const [card, setCard] = useState({ number: "", name: "", expire: "", cvn2: "" });
-  const [billing, setBilling] = useState({ address: "", city: "", province: "", country: "CA", zip: "", email: "" });
 
   const load = async () => {
     const [{ data: w }, { data: t }] = await Promise.all([
@@ -2710,7 +2727,7 @@ function WalletTab() {
 
   const recharge = async () => {
     if (!amount || amount < 2) return toast.error(tr("最低充值 CA$2", "Min top-up CA$2"));
-    if (channel === "card") return setCardOpen(true);
+    if (channel === "card") return payByCard();
     if (channel === "emt") return submitEmtTopupFlow();
     setBusy(true);
     try {
@@ -2786,47 +2803,20 @@ function WalletTab() {
   }, [qr?.reference]);
 
 
+  // Credit card: OTT Pay + Elavon Converge hosted payment page (card data never touches us)
   const payByCard = async () => {
     setBusy(true);
     try {
-      const r = await startCard({
-        data: {
-          amountCad: amount,
-          card,
-          billing,
-          browser: {
-            userAgent: navigator.userAgent,
-            acceptHeader: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            language: navigator.language,
-            screenHeight: String(window.screen.height),
-            screenWidth: String(window.screen.width),
-            timezone: String(new Date().getTimezoneOffset()),
-            colorDepth: String(window.screen.colorDepth),
-          },
-        },
-      });
-      if (r.challengeHtml) {
-        localStorage.setItem("ott_pending_ref", r.reference);
-        const w = window.open("", "_self");
-        w?.document.write(r.challengeHtml);
-        w?.document.close();
-        return;
-      }
-      if (r.success) {
-        toast.success(tr("充值成功，余额已更新", "Top-up successful, balance updated"));
-        setCardOpen(false);
-        await load();
-      } else {
-        toast.error(tr("支付未完成，请稍后查看流水", "Payment pending — check transactions later"));
-        setCardOpen(false);
-        pollRef(r.reference);
-      }
+      const r = await startHosted({ data: { amountCad: amount } });
+      localStorage.setItem("ott_pending_ref", r.reference);
+      window.location.href = r.url;
     } catch (e: any) {
       toast.error(e.message ?? tr("支付失败", "Payment failed"));
     } finally {
       setBusy(false);
     }
   };
+
 
   if (!wallet || !txs) return <Spinner />;
 
@@ -3030,60 +3020,6 @@ function WalletTab() {
       )}
 
 
-      {cardOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-surface p-6">
-            <h4 className="font-display text-base font-bold">{tr(`信用卡支付 CA$${amount.toFixed(2)}`, `Card payment CA$${amount.toFixed(2)}`)}</h4>
-            <div className="mt-4 space-y-3">
-              <Field label={tr("卡号", "Card number")}>
-                <input className={inputCls} inputMode="numeric" value={card.number} onChange={(e) => setCard({ ...card, number: e.target.value })} placeholder="4111 1111 1111 1111" />
-              </Field>
-              <Field label={tr("持卡人姓名", "Cardholder name")}>
-                <input className={inputCls} value={card.name} onChange={(e) => setCard({ ...card, name: e.target.value })} />
-              </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label={tr("有效期 (MMYY)", "Expiry (MMYY)")}>
-                  <input className={inputCls} value={card.expire} onChange={(e) => setCard({ ...card, expire: e.target.value })} placeholder="1228" />
-                </Field>
-                <Field label="CVV">
-                  <input className={inputCls} value={card.cvn2} onChange={(e) => setCard({ ...card, cvn2: e.target.value })} placeholder="123" />
-                </Field>
-              </div>
-              <Field label={tr("账单地址", "Billing address")}>
-                <input className={inputCls} value={billing.address} onChange={(e) => setBilling({ ...billing, address: e.target.value })} />
-              </Field>
-              <div className="grid grid-cols-3 gap-3">
-                <Field label={tr("城市", "City")}>
-                  <input className={inputCls} value={billing.city} onChange={(e) => setBilling({ ...billing, city: e.target.value })} />
-                </Field>
-                <Field label={tr("省", "Province")}>
-                  <input className={inputCls} value={billing.province} onChange={(e) => setBilling({ ...billing, province: e.target.value })} placeholder="ON" />
-                </Field>
-                <Field label={tr("邮编", "Postal code")}>
-                  <input className={inputCls} value={billing.zip} onChange={(e) => setBilling({ ...billing, zip: e.target.value })} />
-                </Field>
-              </div>
-              <Field label={tr("邮箱", "Email")}>
-                <input className={inputCls} type="email" value={billing.email} onChange={(e) => setBilling({ ...billing, email: e.target.value })} />
-              </Field>
-            </div>
-            <div className="mt-5 flex gap-2">
-              <button onClick={() => setCardOpen(false)} className="flex-1 rounded-full border border-border py-2.5 text-sm">
-                {tr("取消", "Cancel")}
-              </button>
-              <button
-                onClick={payByCard}
-                disabled={busy || !card.number || !card.expire || !card.cvn2}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-cta-gradient py-2.5 text-sm font-semibold text-cta-foreground disabled:opacity-50"
-              >
-                {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-                {tr("立即支付", "Pay now")}
-              </button>
-            </div>
-            <p className="mt-3 text-center text-[11px] text-ink-soft">{tr("卡信息直接传输至 OTT Pay，系统不作保存", "Card details go straight to OTT Pay and are never stored")}</p>
-          </div>
-        </div>
-      )}
 
       <div className="rounded-2xl border border-border bg-surface p-6">
         <h3 className="mb-4 font-display text-lg font-bold">{tr("账单流水", "Transactions")}</h3>

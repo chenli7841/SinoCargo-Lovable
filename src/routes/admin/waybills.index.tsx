@@ -22,7 +22,7 @@ function WaybillsPage() {
 
   const [status, setStatus] = useState<WaybillStatus | "all">("all");
   const [search, setSearch] = useState(""); const [searchInput, setSearchInput] = useState("");
-  const [page, setPage] = useState(1); const pageSize = 25;
+  const [page, setPage] = useState(1); const pageSize = 10;
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const q = useQuery({
@@ -153,28 +153,28 @@ function WaybillsPage() {
             {q.data?.waybills.length === 0 && <tr><td colSpan={12} className="py-10 text-center text-slate-500">暂无数据</td></tr>}
             {q.data?.waybills.map((w: any) => (
               <tr key={w.id} className="hover:bg-white/[0.03]">
-                <td className="px-3 py-3"><input type="checkbox" checked={selected.has(w.id)} onChange={() => toggle(w.id)}/></td>
-                <td className="px-4 py-3 font-mono text-xs">{w.waybill_no}</td>
-                <td className="px-4 py-3 font-mono text-[10px]">
+                <td className="px-3 py-2.5"><input type="checkbox" checked={selected.has(w.id)} onChange={() => toggle(w.id)}/></td>
+                <td className="px-4 py-2.5 font-mono text-base">{w.waybill_no}</td>
+                <td className="px-4 py-2.5 font-mono text-sm">
                   {w.parent_kind === "order" && w.parent_id ? (
                     <Link to="/admin/orders/$orderId" params={{ orderId: w.parent_id }} className="text-brand hover:underline">订 {w.parent_no}</Link>
                   ) : w.parent_kind === "forwarding" && w.parent_id ? (
                     <Link to="/admin/forwardings/$forwardingId" params={{ forwardingId: w.parent_id }} className="text-brand hover:underline">集 {w.parent_no}</Link>
                   ) : <span className="text-slate-500">—</span>}
                 </td>
-                <td className="px-4 py-3 text-xs font-mono">{w.customer_code ?? "—"}</td>
-                <td className="px-4 py-3 text-xs">{METHOD_LABEL[w.shipping_method] ?? "—"}</td>
-                <td className="px-4 py-3"><StatusBadge map={WAYBILL_STATUS_LABEL} color={WAYBILL_STATUS_COLOR} value={w.status}/></td>
-                <td className="px-4 py-3 text-xs">{w.payment_status === "paid" ? <span className="text-emerald-300">已付</span> : <span className="text-amber-300">未付</span>}</td>
-                <td className="px-4 py-3 text-[11px] text-slate-300 max-w-[200px] truncate">{Array.isArray(w.items_summary) && w.items_summary.length ? w.items_summary.map((i:any)=>`${i.name}×${i.quantity}`).join("、") : "—"}</td>
-                <td className="px-4 py-3 text-xs">{w.weight_kg ?? "—"} kg</td>
-                <td className="px-4 py-3 font-mono text-[10px]">
+                <td className="px-4 py-2.5 text-sm font-mono">{w.customer_code ?? "—"}</td>
+                <td className="px-4 py-2.5 text-xs">{METHOD_LABEL[w.shipping_method] ?? "—"}</td>
+                <td className="px-4 py-2.5"><StatusBadge map={WAYBILL_STATUS_LABEL} color={WAYBILL_STATUS_COLOR} value={w.status}/></td>
+                <td className="px-4 py-2.5 text-xs">{w.payment_status === "paid" ? <span className="text-emerald-300">已付</span> : <span className="text-amber-300">未付</span>}</td>
+                <td className="px-4 py-2.5 text-[11px] text-slate-300 max-w-[200px] truncate">{Array.isArray(w.items_summary) && w.items_summary.length ? w.items_summary.map((i:any)=>`${i.name}×${i.quantity}`).join("、") : "—"}</td>
+                <td className="px-4 py-2.5 text-xs">{w.weight_kg ?? "—"} kg</td>
+                <td className="px-4 py-2.5 font-mono text-xs">
                   {w.batch_no && w.assigned_batch_id ? (
                     <Link to="/admin/batches/$batchId" params={{ batchId: w.assigned_batch_id }} className="text-brand hover:underline">{w.batch_no}</Link>
                   ) : <span className="text-slate-500">—</span>}
                 </td>
-                <td className="px-4 py-3 text-xs text-slate-400">{fmtDate(w.created_at)}</td>
-                <td className="px-4 py-3 text-right"><Link to="/admin/waybills/$waybillId" params={{ waybillId: w.id }} className="text-xs text-brand hover:underline">详情 <ArrowRight className="inline h-3 w-3"/></Link></td>
+                <td className="px-4 py-2.5 text-xs text-slate-400">{fmtDate(w.created_at)}</td>
+                <td className="px-4 py-2.5 text-right"><Link to="/admin/waybills/$waybillId" params={{ waybillId: w.id }} className="text-xs text-brand hover:underline">详情 <ArrowRight className="inline h-3 w-3"/></Link></td>
               </tr>
             ))}
           </tbody>

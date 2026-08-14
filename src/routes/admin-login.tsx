@@ -66,8 +66,20 @@ function AdminLoginPage() {
     setBusy(true);
     setDenied(null);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const identifier = email.trim();
+      let loginEmail = identifier;
+      if (!identifier.includes("@")) {
+        const { data: resolvedEmail, error: resolveError } = await supabase.rpc(
+          "resolve_login_email",
+          { p_identifier: identifier },
+        );
+        if (resolveError) throw resolveError;
+        if (!resolvedEmail) throw new Error("账号不存在");
+        loginEmail = resolvedEmail;
+      }
+      const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
       if (error) throw error;
+
 
       const staffRoles = await getStaffRoles(data.user.id);
       if (staffRoles.length === 0) {
@@ -98,6 +110,7 @@ function AdminLoginPage() {
       // /auth 是公开路由，OAuth 回跳后由它在 session 就绪时再跳转到后台。
       const result = await lovable.auth.signInWithOAuth("google", {
         redirect_uri: `${window.location.origin}/auth?redirect=${encodeURIComponent(returnTo)}`,
+        extraParams: { prompt: "select_account" },
       });
       if (result.error) throw new Error(result.error.message || "Google 登录失败");
       if (result.redirected) return;
@@ -176,11 +189,11 @@ function AdminLoginPage() {
               <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
                 required
-                type="email"
+                type="text"
                 autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="邮箱"
+                placeholder="邮箱 / 登录名 / 手机号"
                 className="h-11 w-full rounded-lg border border-white/10 bg-white/5 pl-10 pr-4 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-brand focus:ring-2 focus:ring-brand/30"
               />
             </div>

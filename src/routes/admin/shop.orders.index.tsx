@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { listOrders, type OrderStatus } from "@/lib/orders.functions";
 import { ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, METHOD_LABEL, StatusBadge, Page, fmtDate, fmtCNY } from "@/lib/admin-shared";
+import { Pagination } from "@/components/admin/Pagination";
 import { Search, Loader2, ArrowRight } from "lucide-react";
 
 export const Route = createFileRoute("/admin/shop/orders/")({ component: ShopOrdersPage });
@@ -17,7 +18,7 @@ function ShopOrdersPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const pageSize = 25;
+  const pageSize = 10;
 
   const q = useQuery({
     queryKey: ["shop-admin-orders", { status, pay, search, page }],
@@ -80,22 +81,22 @@ function ShopOrdersPage() {
             {q.data?.orders.length === 0 && <tr><td colSpan={9} className="py-10 text-center text-slate-500">暂无数据</td></tr>}
             {q.data?.orders.map((o: any) => (
               <tr key={o.id} className="hover:bg-white/[0.03]">
-                <td className="px-4 py-3 font-mono text-xs">{o.order_no}</td>
-                <td className="px-4 py-3 text-xs">{o.customer_code ?? "—"}</td>
-                <td className="px-4 py-3 text-xs">
+                <td className="px-4 py-2.5 font-mono text-base">{o.order_no}</td>
+                <td className="px-4 py-2.5 text-xs">{o.customer_code ?? "—"}</td>
+                <td className="px-4 py-2.5 text-xs">
                   <div>{METHOD_LABEL[o.shipping_method] ?? o.shipping_method}</div>
                   <div className="text-slate-500">{o.route_code ?? "—"}</div>
                 </td>
-                <td className="px-4 py-3 text-xs">{fmtCNY(o.total_cny)}</td>
-                <td className="px-4 py-3 text-xs">
+                <td className="px-4 py-2.5 text-xs">{fmtCNY(o.total_cny)}</td>
+                <td className="px-4 py-2.5 text-xs">
                   <span className={o.payment_status === "paid" ? "text-emerald-300" : o.payment_status === "partial" ? "text-amber-300" : "text-rose-300"}>
                     {o.payment_status === "paid" ? "已付" : o.payment_status === "partial" ? "部分" : "未付"}
                   </span>
                 </td>
-                <td className="px-4 py-3"><StatusBadge map={ORDER_STATUS_LABEL} color={ORDER_STATUS_COLOR} value={o.status}/></td>
-                <td className="px-4 py-3 font-mono text-[10px] text-slate-400">{o.batch_no ?? "—"}</td>
-                <td className="px-4 py-3 text-xs text-slate-400">{fmtDate(o.created_at)}</td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-2.5"><StatusBadge map={ORDER_STATUS_LABEL} color={ORDER_STATUS_COLOR} value={o.status}/></td>
+                <td className="px-4 py-2.5 font-mono text-xs text-slate-400">{o.batch_no ?? "—"}</td>
+                <td className="px-4 py-2.5 text-xs text-slate-400">{fmtDate(o.created_at)}</td>
+                <td className="px-4 py-2.5 text-right">
                   <Link to="/admin/orders/$orderId" params={{ orderId: o.id }}
                     className="inline-flex items-center gap-1 text-xs text-brand hover:underline">详情 <ArrowRight className="h-3 w-3"/></Link>
                 </td>
@@ -104,6 +105,8 @@ function ShopOrdersPage() {
           </tbody>
         </table>
       </div>
+
+      {q.data && <Pagination page={page} pageSize={pageSize} total={q.data.total} onChange={setPage}/>}
     </Page>
   );
 }

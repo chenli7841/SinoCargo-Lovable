@@ -233,6 +233,57 @@ export const startOttCardTopup = createServerFn({ method: "POST" })
     };
   });
 
+/**
+ * Credit card top-up via OTT Pay + Elavon Converge Hosted Payment.
+ * Returns a hosted payment page URL; the cardholder enters card data on
+ * Converge's page (nothing sensitive touches our servers).
+ */
+export const startOttHostedCardTopup = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { amountCad: number }) => d)
+  .handler(async ({ data, context }): Promise<{ url: string; reference: string }> => {
+    if (!(data.amountCad >= 2)) throw new Error("最低充值 CA$2");
+    const { hostedConfig, hostedPost, txnTime } = await import("@/lib/ottpay-hosted.server");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { getFxCadPerCny } = await import("@/lib/orders.functions");
+
+    const amountCad = Number(data.amountCad.toFixed(2));
+    const fx = await getFxCadPerCny(supabaseAdmin);
+    const cfg = hostedConfig();
+    const reference = `TOPUP${Date.now()}${Math.floor(Math.random() * 1000)}`;
+
+    const r = await hostedPost("CC_PURCHASE", "2.0", {
+      orderId: reference,
+      merchant_id: cfg.merchantId,
+      operator_id: cfg.operatorId,
+      txnTime: txnTime(),
+      txnAmt: String(Math.round(amountCad * 100)),
+      frontUrl: `${cfg.origin}/account?tab=wallet&ott=${reference}`,
+      backUrl: `${cfg.origin}/api/public/hooks/ottpay-card`,
+      channelType: "ELAVONECOM",
+      bizType: "converge_hosted",
+      cc_channelType: "web",
+    });
+
+    const url = String(r.codeUrl ?? r.code_url ?? "");
+    if (!url) throw new Error(`OTT Pay 未返回支付页面链接 (${r.rspMsg ?? r.rsp_msg ?? ""})`);
+
+    const { error } = await supabaseAdmin.from("wallet_transactions").insert({
+      user_id: context.userId,
+      type: "recharge",
+      amount_cad: amountCad,
+      amount_cny: +(amountCad / fx).toFixed(2),
+      fx_rate_cny_to_cad: fx,
+      status: "pending",
+      channel: "card",
+      ref_no: reference,
+      note: `OTT Pay 信用卡充值 CA$${amountCad} · hosted=1`,
+    } as any);
+    if (error) throw new Error(error.message);
+
+    return { url, reference };
+  });
+
 /** Poll OTT Pay for a pending top-up and settle the wallet transaction. */
 export const syncOttTopup = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -240,6 +291,7 @@ export const syncOttTopup = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { ottPost } = await import("@/lib/ottpay.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
 
     const { data: tx } = await supabaseAdmin
       .from("wallet_transactions")
@@ -250,8 +302,30 @@ export const syncOttTopup = createServerFn({ method: "POST" })
     if (!tx) throw new Error("找不到该充值记录");
     if (tx.status !== "pending") return { status: tx.status };
 
+    // Converge hosted (credit card) uses the frontapi STATUS_QUERY endpoint
+    if (/hosted=1/.test(tx.note ?? "")) {
+      const { hostedConfig, hostedPost, txnTime, HOSTED_PAID_STATES, HOSTED_FAILED_STATES } = await import(
+        "@/lib/ottpay-hosted.server"
+      );
+      const cfg = hostedConfig();
+      const q = await hostedPost("STATUS_QUERY", "1.0", {
+        orderId: data.reference,
+        merchant_id: cfg.merchantId,
+        bizType: "converge_hosted",
+        txnTime: txnTime(),
+        channelType: "ELAVONECOM",
+      });
+      const st = String(q.order_status ?? q.orderStatus ?? "").toLowerCase();
+      let hostedNext: string | null = null;
+      if (HOSTED_PAID_STATES.has(st)) hostedNext = "completed";
+      else if (HOSTED_FAILED_STATES.has(st)) hostedNext = "failed";
+      if (hostedNext) await supabaseAdmin.from("wallet_transactions").update({ status: hostedNext }).eq("id", tx.id);
+      return { status: hostedNext ?? "pending" };
+    }
+
     const pid = /pid=([\w-]+)/.exec(tx.note ?? "")?.[1];
     if (!pid) return { status: "pending" };
+
 
     const r = await ottPost<any>("/api/v1/payment/status-query", { paymentId: pid });
     const s = String(r.paymentStatus ?? "").toLowerCase();

@@ -127,6 +127,7 @@ function AuthPage() {
       // gate, and the gate can run before the OAuth session is hydrated.
       const result = await lovable.auth.signInWithOAuth("google", {
         redirect_uri: `${window.location.origin}/auth?redirect=${encodeURIComponent(returnTo)}`,
+        extraParams: { prompt: "select_account" },
       });
       if (result.error) throw new Error(result.error.message || "Google sign-in failed");
       if (result.redirected) return;

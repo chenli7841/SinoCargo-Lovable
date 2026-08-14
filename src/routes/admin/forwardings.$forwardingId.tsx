@@ -2,9 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { getForwardingDetail, intakeForwarding, addWaybillsToForwarding, getLabelData, previewForwardingFreight, setForwardingInsured } from "@/lib/orders.functions";
+import { getForwardingDetail, intakeForwarding, addWaybillsToForwarding, getLabelData, previewForwardingFreight, setForwardingInsured, updateForwardingBasicInfo } from "@/lib/orders.functions";
 import { adminChangeRoute, adminUpdateWaybillDims } from "@/lib/admin-routing.functions";
 import { listRoutes } from "@/lib/settings.functions";
+import { listDestinations } from "@/lib/presets.functions";
 import { getMyRoles } from "@/lib/admin.functions";
 import { METHOD_LABEL, WAYBILL_STATUS_LABEL, WAYBILL_STATUS_COLOR, StatusBadge, Card, fmtDate, fmtCAD, BackLink } from "@/lib/admin-shared";
 import { Loader2, PackageCheck, Plus, Copy, Printer, X, Calculator, Repeat, Pencil, MapPin, ShieldCheck, ShieldOff, Package } from "lucide-react";
@@ -29,9 +30,12 @@ function FwDetail() {
   const changeRoute = useServerFn(adminChangeRoute);
   const updateDims = useServerFn(adminUpdateWaybillDims);
   const setInsured = useServerFn(setForwardingInsured);
+  const saveBasicFn = useServerFn(updateForwardingBasicInfo);
 
   const detailQ = useQuery({ queryKey: ["admin-fo", id], queryFn: () => fetchDetail({ data: { id } }) });
   const routesQ = useQuery({ queryKey: ["admin-routes"], queryFn: () => fetchRoutes() });
+  const fetchDests = useServerFn(listDestinations);
+  const destsQ = useQuery({ queryKey: ["admin-destinations"], queryFn: () => fetchDests(), staleTime: 300_000 });
   const meQ = useQuery({ queryKey: ["my-roles"], queryFn: () => fetchRoles(), staleTime: 60_000 });
   const canIntake = (meQ.data?.roles ?? []).some(r => ["owner","manager","warehouse_cn","warehouse_ca"].includes(r));
 
@@ -40,6 +44,26 @@ function FwDetail() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<any>(null);
+  const foData: any = (detailQ.data as any)?.fo;
+  const BASIC_FIELDS = ["warehouse","shipping_method","destination_code","domestic_tracking_no","intl_tracking_no"] as const;
+  const [basic, setBasic] = useState<Record<string, string>>({});
+  const [basicRoute, setBasicRoute] = useState("");
+  useEffect(() => {
+    if (!foData) return;
+    setBasic(Object.fromEntries(BASIC_FIELDS.map(f => [f, foData[f] ?? ""])));
+    setBasicRoute(foData.route_code ?? "");
+  }, [foData?.id, foData?.warehouse, foData?.shipping_method, foData?.destination_code, foData?.route_code, foData?.domestic_tracking_no, foData?.intl_tracking_no]);
+  const basicDirty = !!foData && (BASIC_FIELDS.some(f => (basic[f] ?? "") !== (foData[f] ?? "")) || basicRoute !== (foData.route_code ?? ""));
+  const saveBasic = async () => {
+    setBusy(true); setErr(null);
+    try {
+      if (foData && basicRoute && basicRoute !== (foData.route_code ?? "")) {
+        await changeRoute({ data: { entityType: "forwarding", entityId: id, newRouteCode: basicRoute, note: "基础信息修改线路" } });
+      }
+      await saveBasicFn({ data: { forwardingId: id, patch: Object.fromEntries(BASIC_FIELDS.map(f => [f, basic[f] ?? ""])) as any } });
+      await qc.invalidateQueries({ queryKey: ["admin-fo", id] });
+    } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  };
 
   useEffect(() => {
     if (detailQ.data?.fo) {
@@ -138,13 +162,69 @@ function FwDetail() {
         </Card>
         <Card title="基础信息">
           <div className="space-y-1 text-xs text-slate-300">
-            <div>仓库：{fo.warehouse}</div>
-            <div>方式：{METHOD_LABEL[fo.shipping_method] ?? fo.shipping_method}</div>
-            <div>线路：<span className="font-mono">{fo.route_code ?? "—"}</span>{fo.route_name ? <span className="ml-1 text-slate-400">· {fo.route_name}</span> : null}</div>
-            <div>目的地：{fo.destination_code ?? "—"}</div>
-            <div>批次号：<span className="font-mono">{fo.batch_no ?? "—"}</span></div>
-            <div>国内单号：{fo.domestic_tracking_no ?? "—"}</div>
-            <div>国际单号：{fo.intl_tracking_no ?? "—"}</div>
+            {canIntake ? (
+              <div className="space-y-2">
+                <BasicField label="仓库" value={basic.warehouse ?? ""} onChange={(v) => setBasic(b => ({ ...b, warehouse: v }))} />
+                <div className="flex items-center gap-2">
+                  <span className="w-16 shrink-0 text-slate-400">方式</span>
+                  <select
+                    value={basic.shipping_method ?? ""}
+                    onChange={(e) => setBasic(b => ({ ...b, shipping_method: e.target.value }))}
+                    className="w-40 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-100 outline-none focus:border-brand [&>option]:bg-[#0E1626]">
+                    {Object.keys(METHOD_LABEL).map(k => <option key={k} value={k}>{METHOD_LABEL[k]}</option>)}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-16 shrink-0 text-slate-400">线路</span>
+                  <select
+                    value={basicRoute}
+                    onChange={(e) => setBasicRoute(e.target.value)}
+                    className="w-40 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-100 outline-none focus:border-brand [&>option]:bg-[#0E1626]">
+                    <option value="">未选择</option>
+                    {(routesQ.data?.routes ?? []).map((r: any) => (
+                      <option key={r.id} value={r.code}>{r.code} · {r.name_zh ?? r.name ?? ""}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-16 shrink-0 text-slate-400">目的地</span>
+                  <select
+                    value={basic.destination_code ?? ""}
+                    onChange={(e) => setBasic(b => ({ ...b, destination_code: e.target.value }))}
+                    className="w-40 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-100 outline-none focus:border-brand [&>option]:bg-[#0E1626]">
+                    <option value="">未选择</option>
+                    {(destsQ.data?.items ?? []).map((d: any) => (
+                      <option key={d.id} value={d.code}>{d.code} · {d.name_zh ?? d.name ?? ""}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-16 shrink-0 text-slate-400">批次号</span>
+                  <span className="font-mono text-slate-300">{fo.batch_no ?? "—"}</span>
+                  <span className="text-[10px] text-slate-500">（不可修改）</span>
+                </div>
+                <BasicField label="国内单号" value={basic.domestic_tracking_no ?? ""} onChange={(v) => setBasic(b => ({ ...b, domestic_tracking_no: v }))} mono />
+                <BasicField label="国际单号" value={basic.intl_tracking_no ?? ""} onChange={(v) => setBasic(b => ({ ...b, intl_tracking_no: v }))} mono />
+                <div className="flex justify-end">
+                  <button
+                    disabled={busy || !basicDirty}
+                    onClick={saveBasic}
+                    className="rounded-md border border-brand/30 bg-brand/10 px-3 py-1 text-[11px] font-semibold text-brand disabled:opacity-40">
+                    保存基础信息
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div>仓库：{fo.warehouse}</div>
+                <div>方式：{METHOD_LABEL[fo.shipping_method] ?? fo.shipping_method}</div>
+                <div>线路：<span className="font-mono">{fo.route_code ?? "—"}</span>{fo.route_name ? <span className="ml-1 text-slate-400">· {fo.route_name}</span> : null}</div>
+                <div>目的地：{fo.destination_code ?? "—"}</div>
+                <div>批次号：<span className="font-mono">{fo.batch_no ?? "—"}</span></div>
+                <div>国内单号：<span className="font-mono">{fo.domestic_tracking_no ?? "—"}</span></div>
+                <div>国际单号：<span className="font-mono">{fo.intl_tracking_no ?? "—"}</span></div>
+              </>
+            )}
             {(() => {
               const seenC = new Map<string, string>();
               const seenP = new Map<string, string>();
@@ -629,4 +709,16 @@ function ItemsCustomerCard({ items }: { items: any[] }) {
   );
 }
 
-
+function BasicField({ label, value, onChange, mono }: { label: string; value: string; onChange: (v: string) => void; mono?: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-16 shrink-0 text-slate-400">{label}</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="未填写"
+        className={`w-40 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-100 outline-none focus:border-brand ${mono ? "font-mono" : ""}`}
+      />
+    </div>
+  );
+}

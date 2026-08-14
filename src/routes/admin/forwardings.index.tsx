@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { listForwardings } from "@/lib/orders.functions";
 import { METHOD_LABEL, Page, fmtDate, fmtCAD } from "@/lib/admin-shared";
+import { Pagination } from "@/components/admin/Pagination";
 import { Search, Loader2, ArrowRight } from "lucide-react";
 
 export const Route = createFileRoute("/admin/forwardings/")({ component: ForwardingsPage });
@@ -20,7 +21,7 @@ function ForwardingsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const pageSize = 25;
+  const pageSize = 10;
 
   const q = useQuery({
     queryKey: ["admin-forwardings", { status, search, page }],
@@ -66,23 +67,23 @@ function ForwardingsPage() {
             {q.data?.items.length === 0 && <tr><td colSpan={11} className="py-10 text-center text-slate-500">暂无数据</td></tr>}
             {q.data?.items.map((f: any) => (
               <tr key={f.id} className="hover:bg-white/[0.03]">
-                <td className="px-4 py-3 font-mono text-xs">{f.request_no}</td>
-                <td className="px-4 py-3 text-xs">{f.customer_code ?? "—"}</td>
-                <td className="px-4 py-3 text-xs">{f.warehouse} · {METHOD_LABEL[f.shipping_method] ?? f.shipping_method}</td>
-                <td className="px-4 py-3 text-xs">
+                <td className="px-4 py-2.5 font-mono text-base">{f.request_no}</td>
+                <td className="px-4 py-2.5 text-xs">{f.customer_code ?? "—"}</td>
+                <td className="px-4 py-2.5 text-xs">{f.warehouse} · {METHOD_LABEL[f.shipping_method] ?? f.shipping_method}</td>
+                <td className="px-4 py-2.5 text-xs">
                   {f.route_code ? (
                     <span><span className="font-mono">{f.route_code}</span>{f.route_name ? <span className="ml-1 text-slate-400">· {f.route_name}</span> : null}</span>
                   ) : "—"}
                 </td>
-                <td className="px-4 py-3 text-center text-xs">{f.waybill_count ?? f.box_count ?? 0}</td>
-                <td className="px-4 py-3 font-mono text-[10px] text-slate-300">{f.domestic_tracking_no ?? "—"}</td>
-                <td className="px-4 py-3 text-xs">
+                <td className="px-4 py-2.5 text-center text-xs">{f.waybill_count ?? f.box_count ?? 0}</td>
+                <td className="px-4 py-2.5 font-mono text-base text-brand">{f.domestic_tracking_no ?? "—"}</td>
+                <td className="px-4 py-2.5 text-xs">
                   {f.intake_at ? <span className="text-emerald-300">已入库 · {fmtDate(f.intake_at)}</span> : <span className="text-amber-300">待入库</span>}
                 </td>
-                <td className="px-4 py-3 text-xs">{(() => { const snap = f.freight_snapshot ?? {}; const cad = Number(snap.total_cad ?? ((Number(snap.freight_cad ?? 0)) + Number(snap.duty_cad ?? 0) + Number(snap.insurance_cad ?? 0) + Number(snap.surcharges_cad ?? 0))); return cad > 0 ? fmtCAD(cad) : "—"; })()}</td>
-                <td className="px-4 py-3 font-mono text-[10px] text-slate-400">{f.batch_no ?? "—"}</td>
-                <td className="px-4 py-3 text-xs text-slate-400">{fmtDate(f.created_at)}</td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-2.5 text-xs">{(() => { const snap = f.freight_snapshot ?? {}; const cad = Number(snap.total_cad ?? ((Number(snap.freight_cad ?? 0)) + Number(snap.duty_cad ?? 0) + Number(snap.insurance_cad ?? 0) + Number(snap.surcharges_cad ?? 0))); return cad > 0 ? fmtCAD(cad) : "—"; })()}</td>
+                <td className="px-4 py-2.5 font-mono text-xs text-slate-400">{f.batch_no ?? "—"}</td>
+                <td className="px-4 py-2.5 text-xs text-slate-400">{fmtDate(f.created_at)}</td>
+                <td className="px-4 py-2.5 text-right">
                   <Link to="/admin/forwardings/$forwardingId" params={{ forwardingId: f.id }}
                     className="inline-flex items-center gap-1 text-xs text-brand hover:underline">详情 <ArrowRight className="h-3 w-3"/></Link>
                 </td>
@@ -91,6 +92,8 @@ function ForwardingsPage() {
           </tbody>
         </table>
       </div>
+
+      {q.data && <Pagination page={page} pageSize={pageSize} total={q.data.total} onChange={setPage}/>}
     </Page>
   );
 }

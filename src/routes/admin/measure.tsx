@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useRef, useState, useEffect } from "react";
-import { measureLookup, measureSaveDims, measureCreatePalletsBatch } from "@/lib/scan.functions";
+import { measureLookup, measureSaveDims, measureCreatePalletsBatch, getWaybillsLabelData } from "@/lib/scan.functions";
+import { renderLabel } from "@/lib/label-render";
 import { Page } from "@/lib/admin-shared";
 import { Ruler, Search, Loader2, Copy, Save, Layers, X, CheckSquare, Square, Plus, Trash2, StickyNote } from "lucide-react";
 
@@ -33,6 +34,7 @@ function MeasurePage() {
   const lookup = useServerFn(measureLookup);
   const save = useServerFn(measureSaveDims);
   const createPallets = useServerFn(measureCreatePalletsBatch);
+  const fetchLabels = useServerFn(getWaybillsLabelData);
 
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -104,7 +106,19 @@ function MeasurePage() {
         weight_kg: r.weight_kg ?? null,
       }));
       const r: any = await save({ data: { items } });
-      setMsg({ ok: true, text: `✓ 已保存 ${r.updated} 条尺寸/重量，可扫描下一个单号` });
+      // 保存后自动打印面单
+      const ids = rows.map((x) => x.id);
+      let printText = "";
+      if (ids.length) {
+        try {
+          const labels: any = await fetchLabels({ data: { waybillIds: ids } });
+          renderLabel(labels.items as any);
+          printText = `，已打印 ${ids.length} 张面单`;
+        } catch (e: any) {
+          printText = `，面单打印失败: ${e.message}`;
+        }
+      }
+      setMsg({ ok: true, text: `✓ 已保存 ${r.updated} 条尺寸/重量${printText}，可扫描下一个单号` });
       // Auto-refresh: clear and refocus scan input
       setRows([]); setParent(null); setParentKind(null); setParentNo(null); setSelected(new Set());
       setCode("");
@@ -186,7 +200,7 @@ function MeasurePage() {
   const customerNote: string | null = parent?.buyer_note || parent?.note || null;
 
   return (
-    <Page title="量尺称重" subtitle="扫描单号后录入 长×宽×高 / 重量 · 方向键在格子间移动 · Enter 保存并跳到下一个">
+    <Page title="量尺称重" subtitle="扫描单号后录入 长×宽×高 / 重量 · 方向键在格子间移动 · Enter 保存并打印面单">
       <div className="space-y-4">
         <form onSubmit={onSearch} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <label className="text-xs font-semibold text-slate-300 inline-flex items-center gap-1.5"><Ruler className="h-4 w-4 text-brand"/>扫描单号</label>
@@ -228,7 +242,7 @@ function MeasurePage() {
                   <Layers className="h-3.5 w-3.5"/>新建托盘 / 入托 (支持多个)
                 </button>
                 <button onClick={onSaveAll} disabled={busy} className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500/90 disabled:opacity-50">
-                  <Save className="h-3.5 w-3.5"/>保存全部
+                  <Save className="h-3.5 w-3.5"/>保存全部并打印面单
                 </button>
               </div>
             </div>

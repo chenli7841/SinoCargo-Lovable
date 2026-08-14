@@ -1,9 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useState, useRef, useEffect } from "react";
-import { intakeScanSearch, intakeScanCommit, markDetained, getWaybillsLabelData, intakeScanReceiveWaybill, intakeScanReceiveOrder } from "@/lib/scan.functions";
+import { intakeScanSearch, intakeScanCommit, markDetained, intakeScanReceiveWaybill, intakeScanReceiveOrder } from "@/lib/scan.functions";
 import { Page } from "@/lib/admin-shared";
-import { renderLabel } from "@/lib/label-render";
 import { ScanLine, Search, Package, AlertTriangle, Loader2, Check, StickyNote } from "lucide-react";
 
 export const Route = createFileRoute("/admin/intake-scan")({ component: IntakeScanPage });
@@ -16,7 +15,6 @@ function IntakeScanPage() {
   const receiveWb = useServerFn(intakeScanReceiveWaybill);
   const receiveOrder = useServerFn(intakeScanReceiveOrder);
   const detain = useServerFn(markDetained);
-  const fetchLabels = useServerFn(getWaybillsLabelData);
 
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,16 +40,14 @@ function IntakeScanPage() {
       setMatchType(r.match);
       setCandidates(r.candidates ?? []);
       if (r.match === "waybill" && r.waybill) {
-        // 运单号 → 直接入库 + 自动打印面单
+        // 运单号 → 直接入库（面单在量尺称重保存时打印）
         try {
           await receiveWb({ data: { waybillId: r.waybill.id } });
-          const labels = await fetchLabels({ data: { waybillIds: [r.waybill.id] } });
-          renderLabel(labels.items as any);
           const note = r.waybill.parent_buyer_note || r.waybill.parent_note;
           const noteText = note ? ` | 客户备注: ${note}` : "";
-          setMsg({ ok: true, text: `✓ 运单 ${r.waybill.waybill_no} 已收件并打印面单${noteText}` });
+          setMsg({ ok: true, text: `✓ 运单 ${r.waybill.waybill_no} 已收件${noteText}` });
           setWaybillNote(note || null);
-          setLog(l => [{ time: new Date().toLocaleTimeString("zh-CN", { hour12: false }), code: c, action: `运单收件 ${r.waybill.waybill_no} (已打印)${noteText}` }, ...l].slice(0, 30));
+          setLog(l => [{ time: new Date().toLocaleTimeString("zh-CN", { hour12: false }), code: c, action: `运单收件 ${r.waybill.waybill_no}${noteText}` }, ...l].slice(0, 30));
           // keep the note visible — only clear input
           setCode(""); setCandidates([]); setPicked(null); setMatchType(null);
           setTimeout(() => inputRef.current?.focus(), 50);
@@ -86,12 +82,8 @@ function IntakeScanPage() {
     try {
       const r: any = await receiveOrder({ data: { orderId: cand.id } });
       const ids = (r.waybills ?? []).map((w: any) => w.id);
-      if (ids.length) {
-        const labels = await fetchLabels({ data: { waybillIds: ids } });
-        renderLabel(labels.items as any);
-      }
-      setMsg({ ok: true, text: `✓ 电商订单 ${r.parentNo} 已按 ${ids.length} 个运单全部收件并打印` });
-      setLog(l => [{ time: new Date().toLocaleTimeString("zh-CN", { hour12: false }), code: c, action: `电商订单收件 ${r.parentNo} → ${ids.length}单 (已打印)` }, ...l].slice(0, 30));
+      setMsg({ ok: true, text: `✓ 电商订单 ${r.parentNo} 已按 ${ids.length} 个运单全部收件` });
+      setLog(l => [{ time: new Date().toLocaleTimeString("zh-CN", { hour12: false }), code: c, action: `电商订单收件 ${r.parentNo} → ${ids.length}单` }, ...l].slice(0, 30));
       reset();
     } catch (err: any) {
       setMsg({ ok: false, text: `电商订单收件失败: ${err.message}` });
@@ -104,11 +96,8 @@ function IntakeScanPage() {
     setBusy(true); setMsg(null);
     try {
       const r = await commit({ data: { parentKind: picked.kind, parentId: picked.id, boxCount, weightPerBox: weight ? Number(weight) : undefined } });
-      setMsg({ ok: true, text: `✓ 已生成 ${r.waybills.length} 个运单 (${r.parentNo})` });
+      setMsg({ ok: true, text: `✓ 已生成 ${r.waybills.length} 个运单 (${r.parentNo})，面单请在量尺称重保存时打印` });
       setLog(l => [{ time: new Date().toLocaleTimeString("zh-CN", { hour12: false }), code: code.trim(), action: `入库 ${picked.display_no} → ${r.waybills.length}单` }, ...l].slice(0, 30));
-      // auto-print
-      const labels = await fetchLabels({ data: { waybillIds: r.waybills.map((w: any) => w.id) } });
-      renderLabel(labels.items as any);
       reset();
     } catch (err: any) { setMsg({ ok: false, text: err.message }); } finally { setBusy(false); }
   };
@@ -131,13 +120,13 @@ function IntakeScanPage() {
   };
 
   return (
-    <Page title="入库扫描" subtitle="运单号/电商订单号 → 直接收件并打印; 集运订单号/国内单号 → 手动输入箱数生成运单; 无匹配 → 自动登记滞留">
+    <Page title="入库扫描" subtitle="运单号/电商订单号 → 直接收件; 集运订单号/国内单号 → 手动输入箱数生成运单; 无匹配 → 自动登记滞留">
       <div className="mx-auto max-w-4xl space-y-4">
         <form onSubmit={onSearch} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <label className="text-xs font-semibold text-slate-300 inline-flex items-center gap-1.5"><ScanLine className="h-4 w-4 text-brand"/>扫描单号 (运单号 / 电商订单号 / 集运订单号 / 国内单号 均可)</label>
           <div className="mt-2 flex gap-2">
             <input ref={inputRef} value={code} onChange={(e) => setCode(e.target.value)}
-              placeholder="扫描或输入任意单号后按回车 — 运单号→自动收件+打印; 订单号/国内号→手动输入箱数"
+              placeholder="扫描或输入任意单号后按回车 — 运单号→自动收件; 订单号/国内号→手动输入箱数"
               className="flex-1 rounded-md border border-brand/40 bg-white/5 px-3 py-2.5 text-sm text-slate-100 focus:border-brand focus:outline-none"
               autoComplete="off"/>
             <button type="submit" disabled={busy} className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
@@ -248,7 +237,7 @@ function IntakeScanPage() {
                     </label>
                     <button onClick={doIntake} disabled={busy} className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500/90 disabled:opacity-50">
                       <Package className="h-4 w-4"/>
-                      {picked.existing_waybill_count > 0 ? `收件并打印 (${picked.existing_waybill_count}单已有)` : `入库并打印面单 (${boxCount}单)`}
+                      {picked.existing_waybill_count > 0 ? `入库 (${picked.existing_waybill_count}单已有)` : `入库 (${boxCount}单)`}
                     </button>
                   </div>
                 </div>
