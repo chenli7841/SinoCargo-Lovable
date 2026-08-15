@@ -6,7 +6,8 @@ export const Route = createFileRoute("/api/public/hooks/ottpay-card")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const { decryptHosted } = await import("@/lib/ottpay-hosted.server");
+        const { decryptHosted, HOSTED_PAID_STATES, HOSTED_FAILED_STATES } =
+          await import("@/lib/ottpay-hosted.server");
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
         let payload: any;
@@ -37,20 +38,48 @@ export const Route = createFileRoute("/api/public/hooks/ottpay-card")({
         if (!tx) return new Response("SUCCESS");
         if (tx.status === "completed") return new Response("SUCCESS"); // idempotent
 
-        const rsp = String(payload.rsp_code ?? "").toUpperCase();
-        const paid = rsp === "SUCCESS";
+        // Money decision comes from the AES-encrypted (signKey-derived) payload,
+        // never from the outer plaintext rsp_code/rsp_msg — those aren't signed
+        // or encrypted (see the Payload comment above), so a client that has ever
+        // captured one genuine encrypted callback for their own reference could
+        // otherwise replay it with rsp_code swapped to "SUCCESS" and self-credit
+        // their wallet without actually paying. rsp_code is only used below as a
+        // non-authoritative hint for logging.
+        const st = String(info.order_status ?? info.orderStatus ?? "").toLowerCase();
+        const paid = HOSTED_PAID_STATES.has(st);
+        const failed = HOSTED_FAILED_STATES.has(st);
+        if (!paid && !failed) {
+          // Inconclusive decrypted status (includes "processing" and anything
+          // unrecognized) — don't guess. Leave the transaction pending; the
+          // client's post-redirect syncOttTopup() poll (STATUS_QUERY, also
+          // authenticated) is what actually resolves it.
+          console.warn("[ottpay-card] inconclusive status, leaving pending", reference, {
+            order_status: st,
+            rsp_code: payload.rsp_code,
+          });
+          return new Response("SUCCESS");
+        }
+
         const cents = Number(info.amount ?? 0);
-        if (paid && cents && Math.abs(cents / 100 - Number(tx.amount_cad)) > 0.01) {
+        if (paid && !cents) {
+          // Paid but the decrypted payload didn't include an amount to verify
+          // against — treat as suspicious rather than silently trusting it.
+          console.error("[ottpay-card] paid callback missing amount, leaving pending", reference);
+          return new Response("SUCCESS");
+        }
+        if (paid && Math.abs(cents / 100 - Number(tx.amount_cad)) > 0.01) {
           console.error("[ottpay-card] amount mismatch", reference, cents, tx.amount_cad);
           return new Response("SUCCESS");
         }
-        if (rsp === "PROCESSING") return new Response("SUCCESS");
 
         const patch: Record<string, any> = { status: paid ? "completed" : "failed" };
         if (info.bizpay_order_id && !/pid=/.test(tx.note ?? "")) {
           patch.note = `${tx.note ?? ""} · pid=${info.bizpay_order_id}`;
         }
-        await supabaseAdmin.from("wallet_transactions").update(patch as any).eq("id", tx.id);
+        await supabaseAdmin
+          .from("wallet_transactions")
+          .update(patch as any)
+          .eq("id", tx.id);
 
         return new Response("SUCCESS");
       },
