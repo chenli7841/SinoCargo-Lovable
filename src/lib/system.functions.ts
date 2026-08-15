@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { recordAdminLog } from "@/lib/admin-log";
 
 async function assertOwnerOrManager(supabase: any, userId: string) {
   const [{ data: o }, { data: m }] = await Promise.all([
@@ -34,8 +35,16 @@ export const setAppSetting = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertOwnerOrManager(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("app_settings")
+    const { error } = await supabaseAdmin
+      .from("app_settings")
       .upsert({ key: data.key, value: data.value }, { onConflict: "key" });
     if (error) throw new Error(error.message);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "app_setting",
+      entity_id: data.key,
+      action: "set",
+      after: { value: data.value },
+      operator_id: context.userId,
+    });
     return { ok: true };
   });

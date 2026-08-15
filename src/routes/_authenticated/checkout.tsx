@@ -1,12 +1,23 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
-import { useCart, type CartLine } from "@/lib/cart";
+import { useCart, cartLineKey, type CartLine } from "@/lib/cart";
 import { useApp } from "@/lib/i18n";
 import { supabase } from "@/integrations/supabase/client";
 import { listPublicRoutes } from "@/lib/shop-public.functions";
 import { toast } from "sonner";
-import { Plane, Ship, Truck, MapPin, Loader2, CheckCircle2, Route as RouteIcon, Tag, X, Clock } from "lucide-react";
+import {
+  Plane,
+  Ship,
+  Truck,
+  MapPin,
+  Loader2,
+  CheckCircle2,
+  Route as RouteIcon,
+  Tag,
+  X,
+  Clock,
+} from "lucide-react";
 import { z } from "zod";
 
 export const Route = createFileRoute("/_authenticated/checkout")({
@@ -42,7 +53,9 @@ const sb = supabase as any;
 
 // Empty/undefined availableRouteCodes means the product isn't restricted — any active route works.
 function allowedCodes(i: CartLine, allCodes: string[]): string[] {
-  return i.availableRouteCodes && i.availableRouteCodes.length > 0 ? i.availableRouteCodes : allCodes;
+  return i.availableRouteCodes && i.availableRouteCodes.length > 0
+    ? i.availableRouteCodes
+    : allCodes;
 }
 
 function CheckoutPage() {
@@ -52,11 +65,12 @@ function CheckoutPage() {
   const navigate = useNavigate();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
 
-  // Filter by search.slugs if present, otherwise selected items
+  // Filter by search.slugs if present (actually cart line keys — see cartLineKey — kept the
+  // "slugs" search-param name for URL stability), otherwise selected items.
   const items = useMemo(() => {
     if (search.slugs) {
       const set = new Set(search.slugs.split(","));
-      return allItems.filter((i) => set.has(i.slug));
+      return allItems.filter((i) => set.has(cartLineKey(i)));
     }
     return selectedItems.length > 0 ? selectedItems : allItems;
   }, [search.slugs, allItems, selectedItems]);
@@ -125,7 +139,12 @@ function CheckoutPage() {
       _payload: {
         route_code: routeCode,
         shipping_method: selectedRoute?.shipping_method,
-        items: items.map((i) => ({ slug: i.slug, quantity: i.quantity, mode: i.purchaseType })),
+        items: items.map((i) => ({
+          slug: i.slug,
+          quantity: i.quantity,
+          mode: i.purchaseType,
+          variant_id: i.variantId,
+        })),
         coupon_code: couponCode || undefined,
       },
     })
@@ -141,7 +160,9 @@ function CheckoutPage() {
               ),
             );
           } else if (reason === "below_moq") {
-            toast.error(tr(`${data.slug} 未达起订量 ${data.moq}`, `${data.slug} below MOQ ${data.moq}`));
+            toast.error(
+              tr(`${data.slug} 未达起订量 ${data.moq}`, `${data.slug} below MOQ ${data.moq}`),
+            );
           } else if (reason) {
             toast.error(tr(`报价失败: ${reason}`, `Quote failed: ${reason}`));
           }
@@ -150,7 +171,11 @@ function CheckoutPage() {
         }
       })
       .finally(() => setQuoting(false));
-  }, [routeCode, couponCode, items.map((i) => `${i.slug}:${i.quantity}:${i.purchaseType}`).join(",")]);
+  }, [
+    routeCode,
+    couponCode,
+    items.map((i) => `${cartLineKey(i)}:${i.quantity}:${i.purchaseType}`).join(","),
+  ]);
 
   const subtotal = quote?.subtotal_cny ?? items.reduce((s, i) => s + i.priceCNY * i.quantity, 0);
   const freight = quote?.freight_cny ?? 0;
@@ -166,7 +191,10 @@ function CheckoutPage() {
     if (data?.ok) {
       setCouponCode(code);
       setCouponMsg(
-        tr(`已应用：-${formatPrice(Number(data.discount_cny))}`, `Applied: -${formatPrice(Number(data.discount_cny))}`),
+        tr(
+          `已应用：-${formatPrice(Number(data.discount_cny))}`,
+          `Applied: -${formatPrice(Number(data.discount_cny))}`,
+        ),
       );
     } else {
       setCouponCode("");
@@ -202,7 +230,12 @@ function CheckoutPage() {
         route_code: routeCode,
         shipping_method: selectedRoute?.shipping_method,
         address_snapshot: addr,
-        items: items.map((i) => ({ slug: i.slug, quantity: i.quantity, mode: i.purchaseType })),
+        items: items.map((i) => ({
+          slug: i.slug,
+          quantity: i.quantity,
+          mode: i.purchaseType,
+          variant_id: i.variantId,
+        })),
         note: note || null,
       };
       if (couponCode) payload.coupon_code = couponCode;
@@ -227,9 +260,11 @@ function CheckoutPage() {
         }
         throw new Error(data?.reason ?? "下单失败");
       }
-      clearSlugs(items.map((i) => i.slug));
+      clearSlugs(items.map(cartLineKey));
       const pointsMsg =
-        data.points_earned > 0 ? tr(`，获得 ${data.points_earned} 积分`, `, earned ${data.points_earned} points`) : "";
+        data.points_earned > 0
+          ? tr(`，获得 ${data.points_earned} 积分`, `, earned ${data.points_earned} points`)
+          : "";
       toast.success(
         tr(
           `已生成 ${data.orders_count} 个订单，账单 ${data.invoice_no}${pointsMsg}`,
@@ -247,7 +282,9 @@ function CheckoutPage() {
   if (items.length === 0) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-20 text-center">
-        <h1 className="font-display text-2xl font-bold">{tr("没有要结算的商品", "Nothing to checkout")}</h1>
+        <h1 className="font-display text-2xl font-bold">
+          {tr("没有要结算的商品", "Nothing to checkout")}
+        </h1>
         <Link to="/cart" className="mt-4 inline-block text-brand hover:underline">
           {tr("← 返回购物车", "← Back to cart")}
         </Link>
@@ -281,7 +318,9 @@ function CheckoutPage() {
                     onClick={() => setAddrId(a.id)}
                     className={`relative rounded-xl border p-4 text-left transition ${addrId === a.id ? "border-brand bg-brand/5" : "border-border hover:border-brand/40"}`}
                   >
-                    {addrId === a.id && <CheckCircle2 className="absolute right-3 top-3 h-5 w-5 text-brand" />}
+                    {addrId === a.id && (
+                      <CheckCircle2 className="absolute right-3 top-3 h-5 w-5 text-brand" />
+                    )}
                     <div className="font-semibold">
                       {a.recipient} · {a.phone}
                     </div>
@@ -315,7 +354,12 @@ function CheckoutPage() {
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
                 {commonRoutes.map((r) => {
-                  const Icon = r.shipping_method === "sea" ? Ship : r.shipping_method === "truck" ? Truck : Plane;
+                  const Icon =
+                    r.shipping_method === "sea"
+                      ? Ship
+                      : r.shipping_method === "truck"
+                        ? Truck
+                        : Plane;
                   const active = routeCode === r.code;
                   return (
                     <button
@@ -329,7 +373,9 @@ function CheckoutPage() {
                         <Icon className="h-4 w-4" />
                       </span>
                       <div className="flex-1">
-                        <div className="font-semibold">{lang === "zh" ? r.name_zh : (r.name_en ?? r.name_zh)}</div>
+                        <div className="font-semibold">
+                          {lang === "zh" ? r.name_zh : (r.name_en ?? r.name_zh)}
+                        </div>
                         {(r.transit_days_min || r.transit_days_max) && (
                           <div className="flex items-center gap-1 text-xs text-ink-soft">
                             <Clock className="h-3 w-3" />
@@ -346,12 +392,16 @@ function CheckoutPage() {
 
           {quote?.lines?.length > 0 && (
             <section className="rounded-2xl border border-border bg-surface p-6">
-              <h2 className="mb-4 font-display text-lg font-bold">{tr("运费明细", "Freight breakdown")}</h2>
+              <h2 className="mb-4 font-display text-lg font-bold">
+                {tr("运费明细", "Freight breakdown")}
+              </h2>
               <div className="space-y-5">
                 {groupLinesByRoute(quote.lines).map((g) => {
                   const modes = Array.from(new Set(g.lines.map((l: any) => l.mode)));
                   const modeLabel = modes
-                    .map((m) => (m === "business" ? tr("商业采购", "Business") : tr("个人采购", "Personal")))
+                    .map((m) =>
+                      m === "business" ? tr("商业采购", "Business") : tr("个人采购", "Personal"),
+                    )
                     .join(" / ");
                   return (
                     <div key={g.route_code} className="rounded-xl border border-border">
@@ -368,7 +418,9 @@ function CheckoutPage() {
                         </div>
                         <div className="text-xs text-ink-soft">
                           {tr("线路小计", "Route subtotal")}：
-                          <span className="ml-1 font-semibold text-foreground">{formatPrice(g.subtotal)}</span>
+                          <span className="ml-1 font-semibold text-foreground">
+                            {formatPrice(g.subtotal)}
+                          </span>
                         </div>
                       </div>
                       <div className="overflow-x-auto">
@@ -385,22 +437,38 @@ function CheckoutPage() {
                           </thead>
                           <tbody>
                             {g.lines.map((l: any) => {
-                              const it = items.find((x) => x.slug === l.slug);
+                              const it = items.find(
+                                (x) =>
+                                  x.slug === l.slug &&
+                                  (x.variantId ?? null) === (l.variant_id ?? null),
+                              );
                               return (
-                                <tr key={l.slug} className="border-t border-border">
+                                <tr
+                                  key={`${l.slug}::${l.variant_id ?? ""}`}
+                                  className="border-t border-border"
+                                >
                                   <td className="px-4 py-1.5">
                                     <div className="line-clamp-1">
                                       {it ? (lang === "zh" ? it.nameZh : it.nameEn) : l.slug}
+                                      {it?.variantLabel && (
+                                        <span className="ml-1 text-[10px] text-ink-soft">
+                                          ({it.variantLabel})
+                                        </span>
+                                      )}
                                     </div>
                                     <div className="text-[10px] text-ink-soft">
-                                      {l.mode === "business" ? tr("商业", "Business") : tr("个人", "Personal")}
+                                      {l.mode === "business"
+                                        ? tr("商业", "Business")
+                                        : tr("个人", "Personal")}
                                     </div>
                                   </td>
                                   <td>{Number(l.units ?? 0)}</td>
                                   <td>{Number(l.chargeable_kg ?? 0).toFixed(2)} kg</td>
                                   <td>{formatPrice(l.freight_cny)}</td>
                                   <td>{formatPrice(l.customs_cny)}</td>
-                                  <td className="px-4 text-right">{formatPrice(l.insurance_cny)}</td>
+                                  <td className="px-4 text-right">
+                                    {formatPrice(l.insurance_cny)}
+                                  </td>
                                 </tr>
                               );
                             })}
@@ -412,7 +480,9 @@ function CheckoutPage() {
                               </td>
                               <td className="py-2 font-semibold">{formatPrice(g.freight)}</td>
                               <td className="py-2 font-semibold">{formatPrice(g.customs)}</td>
-                              <td className="px-4 py-2 text-right font-semibold">{formatPrice(g.insurance)}</td>
+                              <td className="px-4 py-2 text-right font-semibold">
+                                {formatPrice(g.insurance)}
+                              </td>
                             </tr>
                           </tfoot>
                         </table>
@@ -423,7 +493,10 @@ function CheckoutPage() {
               </div>
               {!quote.has_freight_rule && (
                 <p className="mt-3 text-xs text-amber-500">
-                  {tr("部分线路未配置运费规则，运费按 0 计算", "Some routes have no freight rule; freight = 0")}
+                  {tr(
+                    "部分线路未配置运费规则，运费按 0 计算",
+                    "Some routes have no freight rule; freight = 0",
+                  )}
                 </p>
               )}
             </section>
@@ -463,7 +536,9 @@ function CheckoutPage() {
                 </button>
               </div>
             )}
-            {!couponCode && couponMsg && <p className="mt-2 text-xs text-destructive">{couponMsg}</p>}
+            {!couponCode && couponMsg && (
+              <p className="mt-2 text-xs text-destructive">{couponMsg}</p>
+            )}
           </section>
 
           <section className="rounded-2xl border border-border bg-surface p-6">
@@ -482,9 +557,12 @@ function CheckoutPage() {
           <h2 className="mb-4 font-display text-lg font-bold">{tr("订单摘要", "Order summary")}</h2>
           <div className="mb-4 max-h-48 space-y-2 overflow-y-auto text-sm">
             {items.map((i) => (
-              <div key={i.slug} className="flex justify-between gap-3">
+              <div key={cartLineKey(i)} className="flex justify-between gap-3">
                 <span className="line-clamp-1">
-                  {lang === "zh" ? i.nameZh : i.nameEn} × {i.quantity}
+                  {lang === "zh" ? i.nameZh : i.nameEn}
+                  {i.variantLabel && (
+                    <span className="text-ink-soft"> ({i.variantLabel})</span>
+                  )} × {i.quantity}
                 </span>
                 <span className="shrink-0 font-medium">{formatPrice(i.priceCNY * i.quantity)}</span>
               </div>
@@ -494,17 +572,22 @@ function CheckoutPage() {
             <Row label={tr("商品小计", "Items subtotal")} value={formatPrice(subtotal)} />
             {quote?.lines?.length > 0 && (
               <div className="rounded-lg bg-accent/30 p-2.5 space-y-1.5">
-                <div className="text-[11px] font-semibold text-ink-soft">{tr("按线路小计", "By route")}</div>
+                <div className="text-[11px] font-semibold text-ink-soft">
+                  {tr("按线路小计", "By route")}
+                </div>
                 {groupLinesByRoute(quote.lines).map((g) => (
                   <div key={g.route_code} className="text-xs">
                     <div className="flex justify-between font-mono">
                       <span className="text-foreground">{g.route_code}</span>
-                      <span className="font-semibold">{formatPrice(g.freight + g.customs + g.insurance)}</span>
+                      <span className="font-semibold">
+                        {formatPrice(g.freight + g.customs + g.insurance)}
+                      </span>
                     </div>
                     <div className="flex justify-between text-ink-soft">
                       <span>{tr("运/税/险", "Frt/Duty/Ins")}</span>
                       <span>
-                        {formatPrice(g.freight)} / {formatPrice(g.customs)} / {formatPrice(g.insurance)}
+                        {formatPrice(g.freight)} / {formatPrice(g.customs)} /{" "}
+                        {formatPrice(g.insurance)}
                       </span>
                     </div>
                   </div>
@@ -513,7 +596,10 @@ function CheckoutPage() {
             )}
             <Row label={tr("运费合计", "Shipping")} value={quoting ? "…" : formatPrice(freight)} />
             <Row label={tr("关税合计", "Duty")} value={quoting ? "…" : formatPrice(customs)} />
-            <Row label={tr("保险合计", "Insurance")} value={quoting ? "…" : formatPrice(insurance)} />
+            <Row
+              label={tr("保险合计", "Insurance")}
+              value={quoting ? "…" : formatPrice(insurance)}
+            />
             {discount > 0 && (
               <Row
                 label={
@@ -542,7 +628,9 @@ function CheckoutPage() {
           <div className="flex items-baseline justify-between">
             <span className="text-sm font-medium">{tr("合计", "Total")}</span>
             <div className="text-right">
-              <div className="font-display text-2xl font-bold text-brand-gradient">{formatPrice(total)}</div>
+              <div className="font-display text-2xl font-bold text-brand-gradient">
+                {formatPrice(total)}
+              </div>
               <div className="text-xs text-ink-soft">≈ CA${cnyToCad(total).toFixed(2)}</div>
             </div>
           </div>
@@ -555,7 +643,10 @@ function CheckoutPage() {
             {tr("提交订单并付款", "Place order & pay")}
           </button>
           <p className="mt-3 text-center text-[11px] text-ink-soft">
-            {tr("提交后从账户余额扣款并生成账单", "Submit deducts wallet balance and creates an invoice")}
+            {tr(
+              "提交后从账户余额扣款并生成账单",
+              "Submit deducts wallet balance and creates an invoice",
+            )}
           </p>
         </aside>
       </div>
@@ -563,7 +654,15 @@ function CheckoutPage() {
   );
 }
 
-function Row({ label, value, muted }: { label: React.ReactNode; value: React.ReactNode; muted?: boolean }) {
+function Row({
+  label,
+  value,
+  muted,
+}: {
+  label: React.ReactNode;
+  value: React.ReactNode;
+  muted?: boolean;
+}) {
   return (
     <div className={`flex justify-between ${muted ? "text-ink-soft" : ""}`}>
       <span>{label}</span>

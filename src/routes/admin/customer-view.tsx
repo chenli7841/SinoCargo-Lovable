@@ -12,7 +12,15 @@ import {
   listCustomerItems,
   saveCustomerItem,
   deleteCustomerItem,
+  getCustomerOrders,
+  getCustomerInventory,
+  getCustomerBatches,
+  listShippingOptions,
+  previewCustomerStorageFee,
+  payCustomerStorageFee,
+  createCustomerForwarding,
 } from "@/lib/admin-customer-view.functions";
+import { deductWalletForBatch } from "@/lib/orders.functions";
 import { ROLE_LABEL, ROLE_COLOR } from "@/lib/admin-roles";
 import { VIP_LABEL, VIP_COLOR } from "@/lib/vip-levels";
 import {
@@ -32,6 +40,15 @@ import {
   Plus,
   Trash2,
   Save,
+  Warehouse,
+  Layers,
+  Plane,
+  Ship,
+  Box,
+  CreditCard,
+  ArrowRight,
+  AlertTriangle,
+  Send,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/customer-view")({
@@ -44,7 +61,7 @@ export const Route = createFileRoute("/admin/customer-view")({
   component: CustomerViewPage,
 });
 
-type Tab = "overview" | "profile" | "addresses" | "items";
+type Tab = "overview" | "myOrders" | "inventory" | "items" | "batches" | "addresses" | "profile";
 
 // This page never switches the acting session — every read/write goes
 // through admin-customer-view.functions.ts (service role, explicit
@@ -65,11 +82,18 @@ function CustomerViewPage() {
   const profile = q.data?.profile ?? null;
   const roles = (q.data?.roles ?? []) as string[];
 
+  // Same order as the real customer-facing "我的账户" sidebar, minus 我的钱包
+  // (that tab is recharge/transaction-history for the customer's own payment
+  // method — not something staff act on; the wallet balance is still visible
+  // as a read-only stat on 概览, and batch payment on 我的批次 still works).
   const nav: { k: Tab; l: string; i: React.ReactNode }[] = [
     { k: "overview", l: "概览", i: <LayoutIcon /> },
-    { k: "profile", l: "资料", i: <UserIcon className="h-4 w-4" /> },
-    { k: "addresses", l: "收货地址", i: <MapPin className="h-4 w-4" /> },
+    { k: "myOrders", l: "我的订单/运单", i: <Package className="h-4 w-4" /> },
+    { k: "inventory", l: "我的库存", i: <Warehouse className="h-4 w-4" /> },
     { k: "items", l: "我的物品", i: <Tags className="h-4 w-4" /> },
+    { k: "batches", l: "我的批次", i: <Layers className="h-4 w-4" /> },
+    { k: "addresses", l: "收货地址", i: <MapPin className="h-4 w-4" /> },
+    { k: "profile", l: "个人资料", i: <UserIcon className="h-4 w-4" /> },
   ];
 
   return (
@@ -77,8 +101,8 @@ function CustomerViewPage() {
       <div className="mb-5">
         <h1 className="font-display text-2xl font-bold">客户视图</h1>
         <p className="mt-1 text-sm text-slate-400">
-          按客户号查找客户，代客查看 / 编辑资料、地址与「我的物品」库 —
-          以你自己的员工身份操作，不会切换登录状态。
+          按客户号查找客户，跟客户自己看到的「我的账户」一样的栏目——订单/运单、库存、我的物品、批次、地址、资料
+          （不含钱包充值/流水） — 以你自己的员工身份操作，不会切换登录状态。
         </p>
       </div>
 
@@ -201,9 +225,12 @@ function CustomerViewPage() {
 
             <section>
               {tab === "overview" && <OverviewTab userId={profile.id} />}
+              {tab === "myOrders" && <MyOrdersTab userId={profile.id} />}
+              {tab === "inventory" && <InventoryTab userId={profile.id} />}
+              {tab === "items" && <ItemsTab userId={profile.id} />}
+              {tab === "batches" && <BatchesTab userId={profile.id} />}
               {tab === "profile" && <ProfileTab userId={profile.id} initial={profile} />}
               {tab === "addresses" && <AddressesTab userId={profile.id} />}
-              {tab === "items" && <ItemsTab userId={profile.id} />}
             </section>
           </div>
         </>
@@ -316,6 +343,626 @@ function StatCard({
         {label}
       </div>
       <div className="mt-1.5 font-display text-lg font-bold text-slate-100">{value}</div>
+    </div>
+  );
+}
+
+// ===================== My orders / waybills (read-only list) =====================
+const PAY_LABEL: Record<string, [string, string]> = {
+  paid: ["已付款", "bg-emerald-500/15 text-emerald-300"],
+  unpaid: ["待付款", "bg-amber-500/15 text-amber-300"],
+  partial: ["部分付款", "bg-amber-500/15 text-amber-300"],
+};
+
+function MyOrdersTab({ userId }: { userId: string }) {
+  const fetchOrders = useServerFn(getCustomerOrders);
+  const q = useQuery({
+    queryKey: ["admin-customer-orders", userId],
+    queryFn: () => fetchOrders({ data: { userId } }),
+  });
+
+  if (q.isLoading) return <Spinner />;
+  const items = q.data?.items ?? [];
+
+  return (
+    <div className="space-y-4">
+      <h3 className="font-display text-base font-bold">我的订单/运单（{items.length}）</h3>
+      {items.length === 0 ? (
+        <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-6 text-center text-sm text-slate-500">
+          还没有订单或集运单
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02]">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500">
+                <th className="px-3 py-2">类型</th>
+                <th className="px-3 py-2">单号</th>
+                <th className="px-3 py-2">状态</th>
+                <th className="px-3 py-2">付款</th>
+                <th className="px-3 py-2 text-right">金额 ¥</th>
+                <th className="px-3 py-2">运输方式</th>
+                <th className="px-3 py-2">国际单号</th>
+                <th className="px-3 py-2">创建时间</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((r: any) => {
+                const pay = PAY_LABEL[r.payment_status] ?? [
+                  r.payment_status ?? "—",
+                  "bg-white/5 text-slate-400",
+                ];
+                return (
+                  <tr
+                    key={`${r.kind}-${r.id}`}
+                    className="border-t border-white/5 hover:bg-white/[0.02]"
+                  >
+                    <td className="px-3 py-2">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${r.kind === "order" ? "bg-brand/15 text-brand" : "bg-cyan-500/15 text-cyan-300"}`}
+                      >
+                        {r.kind === "order" ? (
+                          <Package className="h-3 w-3" />
+                        ) : (
+                          <Truck className="h-3 w-3" />
+                        )}
+                        {r.kind === "order" ? "商城" : "集运"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 font-mono text-slate-200">{r.no ?? "—"}</td>
+                    <td className="px-3 py-2 text-slate-300">{r.status ?? "—"}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${pay[1]}`}
+                      >
+                        {pay[0]}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right text-slate-300">
+                      {r.amount_cny != null ? `¥${Number(r.amount_cny).toFixed(2)}` : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-slate-400">{r.shipping_method ?? "—"}</td>
+                    <td className="px-3 py-2 font-mono text-slate-400">{r.tracking_no ?? "—"}</td>
+                    <td className="px-3 py-2 text-slate-500">
+                      {r.created_at
+                        ? new Date(r.created_at).toLocaleString("zh-CN", { hour12: false })
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <Link
+                        to={
+                          r.kind === "order"
+                            ? "/admin/orders/$orderId"
+                            : "/admin/forwardings/$forwardingId"
+                        }
+                        params={r.kind === "order" ? { orderId: r.id } : { forwardingId: r.id }}
+                        className="inline-flex items-center gap-1 rounded px-2 py-1 text-brand hover:bg-brand/10"
+                      >
+                        详情 <ArrowRight className="h-3 w-3" />
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===================== My inventory (read-only, grouped by product/SKU/warehouse) =====================
+interface InvGroup {
+  key: string;
+  productName: string;
+  sku: string;
+  qtyPerBox: number;
+  warehouseId: string | null;
+  warehouseCode: string | null;
+  warehouseName: string | null;
+  boxes: { id: string; waybillNo: string; storedAt: string }[];
+}
+
+function buildInvGroups(rows: any[]): InvGroup[] {
+  const map = new Map<string, InvGroup>();
+  for (const wb of rows) {
+    const summary = Array.isArray(wb.items_summary) ? wb.items_summary : [];
+    const entries = summary.length > 0 ? summary : [{ name: null, sku: null, quantity: null }];
+    const warehouseId = wb.warehouse?.id ?? null;
+    const warehouseCode = wb.warehouse?.code ?? null;
+    const warehouseName = wb.warehouse?.name_zh ?? null;
+    for (const it of entries) {
+      const productName = it?.name || it?.name_zh || it?.name_en || "—";
+      const sku = it?.sku || "—";
+      const qtyPerBox = Number(it?.quantity ?? 0);
+      const k = `${productName}__${sku}__${qtyPerBox}__${warehouseId ?? "unknown"}`;
+      if (!map.has(k))
+        map.set(k, {
+          key: k,
+          productName,
+          sku,
+          qtyPerBox,
+          warehouseId,
+          warehouseCode,
+          warehouseName,
+          boxes: [],
+        });
+      map.get(k)!.boxes.push({ id: wb.id, waybillNo: wb.waybill_no, storedAt: wb.updated_at });
+    }
+  }
+  return Array.from(map.values());
+}
+
+function InventoryTab({ userId }: { userId: string }) {
+  const qc = useQueryClient();
+  const fetchInv = useServerFn(getCustomerInventory);
+  const fetchAddresses = useServerFn(listCustomerAddresses);
+  const fetchOpts = useServerFn(listShippingOptions);
+  const previewFee = useServerFn(previewCustomerStorageFee);
+  const doPayFee = useServerFn(payCustomerStorageFee);
+  const doCreateFwd = useServerFn(createCustomerForwarding);
+
+  const invQ = useQuery({
+    queryKey: ["admin-customer-inventory", userId],
+    queryFn: () => fetchInv({ data: { userId } }),
+  });
+  const addrQ = useQuery({
+    queryKey: ["admin-customer-addresses", userId],
+    queryFn: () => fetchAddresses({ data: { userId } }),
+  });
+  const optsQ = useQuery({
+    queryKey: ["admin-shipping-options"],
+    queryFn: () => fetchOpts(),
+  });
+  const feeQ = useQuery({
+    queryKey: ["admin-customer-storage-fee", userId],
+    queryFn: () => previewFee({ data: { userId } }),
+  });
+
+  const [shipBoxes, setShipBoxes] = useState<Record<string, number>>({});
+  const [addressId, setAddressId] = useState("");
+  const [routeCode, setRouteCode] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [payingFee, setPayingFee] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  if (invQ.isLoading) return <Spinner />;
+  const groups = buildInvGroups(invQ.data?.items ?? []);
+  const totalBoxes = groups.reduce((s, g) => s + g.boxes.length, 0);
+  const addresses: any[] = addrQ.data?.items ?? [];
+  const warehouses: any[] = optsQ.data?.warehouses ?? [];
+  const routes: any[] = optsQ.data?.routes ?? [];
+  const fee = feeQ.data as { total_cad?: number } | undefined;
+
+  const setBoxesFor = (g: InvGroup, raw: number) => {
+    const n = Math.max(0, Math.min(g.boxes.length, Math.floor(raw) || 0));
+    setShipBoxes((s) => ({ ...s, [g.key]: n }));
+  };
+
+  const toShip = groups.filter((g) => (shipBoxes[g.key] ?? 0) > 0);
+  const totalBoxesToShip = toShip.reduce((s, g) => s + (shipBoxes[g.key] ?? 0), 0);
+  const shipWarehouseIds = new Set(toShip.map((g) => g.warehouseId ?? "unknown"));
+  const shipWarehouseId = shipWarehouseIds.size === 1 ? [...shipWarehouseIds][0] : null;
+  const multiWarehouse = shipWarehouseIds.size > 1 || shipWarehouseIds.has("unknown");
+  const availableRoutes = shipWarehouseId
+    ? routes.filter(
+        (r) =>
+          r.origin_warehouse_id === shipWarehouseId ||
+          (r.is_bidirectional && r.destination_warehouse_id === shipWarehouseId),
+      )
+    : [];
+
+  const submitForwarding = async () => {
+    if (toShip.length === 0 || multiWarehouse) return;
+    if (!addressId) return setMsg({ kind: "err", text: "请选择该客户的收货地址" });
+    if (!routeCode) return setMsg({ kind: "err", text: "请选择运输线路" });
+    const warehouse = warehouses.find((w) => w.id === shipWarehouseId);
+    if (!warehouse) return setMsg({ kind: "err", text: "仓库信息缺失" });
+    const payload = {
+      warehouse: warehouse.code,
+      route_code: routeCode,
+      address_id: addressId,
+      domestic_tracking_no: null,
+      note: "[代客户发起集运]",
+      insured: false,
+      items: toShip.map((g) => {
+        const boxCount = shipBoxes[g.key] ?? 0;
+        return {
+          name: g.productName,
+          quantity: boxCount * g.qtyPerBox,
+          unit_price_cad: 0,
+          extras: {
+            sku: g.sku !== "—" ? g.sku : null,
+            // These boxes already have real waybills in storage — withhold
+            // box_count/inner_qty so place_forwarding doesn't spawn new ones,
+            // same as the customer's own "ship from inventory" flow.
+            box_count: null,
+            inner_qty: null,
+          },
+        };
+      }),
+    };
+    setSubmitting(true);
+    setMsg(null);
+    try {
+      const r: any = await doCreateFwd({ data: { userId, payload } });
+      setMsg({ kind: "ok", text: `已代客户发起集运，生成运单 ${r.waybills ?? 0} 个` });
+      setShipBoxes({});
+      setRouteCode("");
+      await qc.invalidateQueries({ queryKey: ["admin-customer-inventory", userId] });
+      await qc.invalidateQueries({ queryKey: ["admin-customer-batches", userId] });
+      await qc.invalidateQueries({ queryKey: ["admin-customer-orders", userId] });
+    } catch (e: any) {
+      setMsg({ kind: "err", text: e?.message ?? "发起集运失败" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const payStorageFee = async () => {
+    if (!fee?.total_cad || fee.total_cad <= 0) return;
+    if (!confirm(`确认代客户从其钱包支付仓储费 CA$${fee.total_cad.toFixed(2)}？`)) return;
+    setPayingFee(true);
+    setMsg(null);
+    try {
+      const r: any = await doPayFee({ data: { userId } });
+      if (!r?.ok) {
+        setMsg({
+          kind: "err",
+          text:
+            r?.reason === "insufficient"
+              ? `钱包余额不足：需要 CA$${r.need_cad}，当前 CA$${r.balance_cad}`
+              : "付款失败",
+        });
+      } else {
+        setMsg({ kind: "ok", text: `仓储费付款成功 CA$${r.paid_cad}，账单 ${r.invoice_no}` });
+      }
+      await qc.invalidateQueries({ queryKey: ["admin-customer-storage-fee", userId] });
+      await qc.invalidateQueries({ queryKey: ["admin-customer-overview", userId] });
+    } catch (e: any) {
+      setMsg({ kind: "err", text: e?.message ?? "付款失败" });
+    } finally {
+      setPayingFee(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="font-display text-base font-bold">我的库存（{totalBoxes} 箱）</h3>
+        <p className="mt-1 text-xs text-slate-400">仓库里等待发货的货物，按品名/SKU/仓库分组。</p>
+      </div>
+
+      {msg && (
+        <div
+          className={`rounded-md border px-3 py-1.5 text-xs ${msg.kind === "ok" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-rose-500/30 bg-rose-500/10 text-rose-300"}`}
+        >
+          {msg.text}
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <StatCard
+          icon={<Warehouse className="h-4 w-4" />}
+          label="库存总箱数"
+          value={String(totalBoxes)}
+          accent="text-amber-400"
+        />
+        <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4">
+          <div className="inline-flex items-center gap-1.5 text-xs text-brand">
+            <Wallet className="h-4 w-4" />
+            待付仓储费
+          </div>
+          <div className="mt-1.5 flex items-center gap-3">
+            <span className="font-display text-lg font-bold text-slate-100">
+              CA${(fee?.total_cad ?? 0).toFixed(2)}
+            </span>
+            {(fee?.total_cad ?? 0) > 0 && (
+              <button
+                onClick={payStorageFee}
+                disabled={payingFee}
+                className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-brand px-3 py-1 text-[11px] font-semibold text-white hover:bg-brand/90 disabled:opacity-50"
+              >
+                {payingFee && <Loader2 className="h-3 w-3 animate-spin" />}
+                代客户支付
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {groups.length === 0 ? (
+        <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-6 text-center text-sm text-slate-500">
+          仓库里没有该客户的货物
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {groups.map((g) => (
+            <div key={g.key} className="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+              <div className="flex items-center gap-2 font-semibold text-slate-100">
+                <Box className="h-4 w-4 text-slate-400" />
+                {g.productName}
+              </div>
+              <div className="mt-1 text-xs text-slate-400">
+                SKU {g.sku} · 每箱 {g.qtyPerBox} 件 · {g.warehouseName ?? "未知仓库"}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {g.boxes.map((b) => (
+                  <span
+                    key={b.id}
+                    className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-slate-300"
+                  >
+                    {b.waybillNo}
+                  </span>
+                ))}
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <label className="text-[11px] text-slate-500">发货箱数</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={g.boxes.length}
+                  step={1}
+                  value={shipBoxes[g.key] ?? ""}
+                  onChange={(e) => setBoxesFor(g, Number(e.target.value))}
+                  placeholder="0"
+                  className="h-8 w-20 rounded-md border border-white/10 bg-white/[0.03] px-2 text-xs text-slate-100 outline-none focus:border-brand"
+                />
+                <span className="text-[11px] text-slate-500">/ {g.boxes.length} 箱</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {totalBoxesToShip > 0 && (
+        <div className="space-y-3 rounded-2xl border border-brand/30 bg-white/[0.03] p-4">
+          <div className="flex items-center gap-2 font-semibold text-slate-100">
+            <Send className="h-4 w-4 text-brand" />
+            代客户发起集运（已选 {totalBoxesToShip} 箱）
+          </div>
+          {multiWarehouse ? (
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 p-2.5 text-xs text-amber-300">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              所选货物分属不同仓库，请分开发起集运
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-xs text-slate-400">
+                收货地址
+                <select
+                  value={addressId}
+                  onChange={(e) => setAddressId(e.target.value)}
+                  className="mt-1 block h-9 w-full rounded-md border border-white/10 bg-white/[0.03] px-2 text-xs text-slate-100 outline-none focus:border-brand"
+                >
+                  <option value="">请选择该客户的地址…</option>
+                  {addresses.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.recipient} · {a.line1}
+                      {a.is_default ? "（默认）" : ""}
+                    </option>
+                  ))}
+                </select>
+                {addresses.length === 0 && (
+                  <span className="mt-1 block text-[11px] text-amber-400">
+                    该客户还没有收货地址，请先到"地址"页新增
+                  </span>
+                )}
+              </label>
+              <label className="block text-xs text-slate-400">
+                运输线路
+                <select
+                  value={routeCode}
+                  onChange={(e) => setRouteCode(e.target.value)}
+                  className="mt-1 block h-9 w-full rounded-md border border-white/10 bg-white/[0.03] px-2 text-xs text-slate-100 outline-none focus:border-brand"
+                >
+                  <option value="">请选择线路…</option>
+                  {availableRoutes.map((r) => (
+                    <option key={r.id} value={r.code}>
+                      {r.name_zh}（{r.shipping_method === "air" ? "空运" : "海运"}）
+                    </option>
+                  ))}
+                </select>
+                {shipWarehouseId && availableRoutes.length === 0 && (
+                  <span className="mt-1 block text-[11px] text-amber-400">
+                    该仓库暂无可用集运线路
+                  </span>
+                )}
+              </label>
+            </div>
+          )}
+          <button
+            onClick={submitForwarding}
+            disabled={submitting || multiWarehouse || !addressId || !routeCode}
+            className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-40"
+          >
+            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            <ArrowRight className="h-4 w-4" />
+            提交集运申请
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===================== My batches (list + pay-from-wallet) =====================
+const BATCH_STATUS_LABEL: Record<string, [string, string]> = {
+  shipped: ["运输中", "bg-blue-500/15 text-blue-300"],
+  arrived: ["已到达", "bg-cyan-500/15 text-cyan-300"],
+  closed: ["已关闭", "bg-white/5 text-slate-400"],
+};
+
+function BatchesTab({ userId }: { userId: string }) {
+  const qc = useQueryClient();
+  const fetchBatches = useServerFn(getCustomerBatches);
+  const doPay = useServerFn(deductWalletForBatch);
+  const q = useQuery({
+    queryKey: ["admin-customer-batches", userId],
+    queryFn: () => fetchBatches({ data: { userId } }),
+  });
+  const [paying, setPaying] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  const pay = async (batchId: string, batchNo: string, amountCad: number) => {
+    if (!confirm(`确认代客户从其钱包支付 CA$${amountCad.toFixed(2)} 给批次 ${batchNo}？`)) return;
+    setPaying(batchId);
+    setMsg(null);
+    try {
+      const r: any = await doPay({ data: { batchId, userId, amountCad } });
+      if (!r?.ok) {
+        if (r?.reason === "already_paid") {
+          setMsg({ kind: "ok", text: "该批次已结清" });
+        } else {
+          setMsg({ kind: "err", text: r?.reason ?? "付款失败" });
+        }
+      } else {
+        setMsg({ kind: "ok", text: `付款成功 CA$${r.deducted_cad}，账单已生成` });
+      }
+      await qc.invalidateQueries({ queryKey: ["admin-customer-batches", userId] });
+      await qc.invalidateQueries({ queryKey: ["admin-customer-overview", userId] });
+    } catch (e: any) {
+      setMsg({ kind: "err", text: e?.message ?? "付款失败" });
+    } finally {
+      setPaying(null);
+    }
+  };
+
+  if (q.isLoading) return <Spinner />;
+  const batches = q.data?.batches ?? [];
+
+  return (
+    <div className="space-y-4">
+      <h3 className="font-display text-base font-bold">我的批次（{batches.length}）</h3>
+      {msg && (
+        <div
+          className={`rounded-md border px-3 py-1.5 text-xs ${msg.kind === "ok" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-rose-500/30 bg-rose-500/10 text-rose-300"}`}
+        >
+          {msg.text}
+        </div>
+      )}
+      {batches.length === 0 ? (
+        <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-6 text-center text-sm text-slate-500">
+          该客户还没有可结算的批次
+        </div>
+      ) : (
+        batches.map((b: any) => {
+          const [zh, cls] = BATCH_STATUS_LABEL[b.status] ?? [b.status, "bg-white/5 text-slate-400"];
+          return (
+            <div
+              key={b.batch_id}
+              className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.03]"
+            >
+              <header
+                className={`flex flex-wrap items-center gap-3 border-b border-white/5 px-5 py-3 ${b.is_paid ? "bg-emerald-500/5" : "bg-white/[0.02]"}`}
+              >
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 text-brand">
+                  {b.shipping_method === "air" ? (
+                    <Plane className="h-4 w-4" />
+                  ) : (
+                    <Ship className="h-4 w-4" />
+                  )}
+                </span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-display text-sm font-bold text-slate-100">
+                      {b.batch_no}
+                    </span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
+                      {zh}
+                    </span>
+                    {b.is_paid ? (
+                      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                        已结清
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                        待付款
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-slate-400">
+                    {b.items.length} 项{" "}
+                    {b.eta ? `· 预计到达 ${new Date(b.eta).toLocaleDateString("zh-CN")}` : ""}
+                  </div>
+                </div>
+                <div className="ml-auto text-right">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500">
+                    {b.is_paid ? "批次合计" : "批次待付"}
+                  </div>
+                  <div className="font-display text-lg font-bold text-brand">
+                    CA${b.subtotal_cad.toFixed(2)}
+                  </div>
+                </div>
+              </header>
+              <ul className="divide-y divide-white/5">
+                {b.items.map((it: any) => (
+                  <li
+                    key={`${it.kind}-${it.id}`}
+                    className="flex flex-wrap items-center gap-3 px-5 py-2.5 text-xs"
+                  >
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${it.kind === "order" ? "bg-brand/15 text-brand" : "bg-cyan-500/15 text-cyan-300"}`}
+                    >
+                      {it.kind === "order" ? "商城" : "集运"}
+                    </span>
+                    <span className="font-mono text-slate-300">{it.no}</span>
+                    {it.tracking_no && <span className="text-slate-500">· {it.tracking_no}</span>}
+                    <span
+                      className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold ${it.payment_status === "paid" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}
+                    >
+                      {it.payment_status === "paid" ? "已付款" : "待付款"}
+                    </span>
+                    <Link
+                      to={
+                        it.kind === "order"
+                          ? "/admin/orders/$orderId"
+                          : "/admin/forwardings/$forwardingId"
+                      }
+                      params={it.kind === "order" ? { orderId: it.id } : { forwardingId: it.id }}
+                      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-brand hover:bg-brand/10"
+                    >
+                      详情 <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {!b.is_paid && b.subtotal_cad > 0 && (
+                <div className="flex items-center gap-3 border-t border-white/5 px-5 py-3">
+                  <div className="text-xs text-slate-400">
+                    待付{" "}
+                    <span className="font-display text-sm font-bold text-slate-100">
+                      CA${b.subtotal_cad.toFixed(2)}
+                    </span>
+                  </div>
+                  <button
+                    disabled={paying === b.batch_id}
+                    onClick={() => pay(b.batch_id, b.batch_no, b.subtotal_cad)}
+                    className="ml-auto inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand/90 disabled:opacity-50"
+                  >
+                    {paying === b.batch_id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <CreditCard className="h-3.5 w-3.5" />
+                    )}
+                    代客户从钱包付款
+                  </button>
+                </div>
+              )}
+              <Link
+                to="/admin/batches/$batchId"
+                params={{ batchId: b.batch_id }}
+                className="flex items-center justify-center gap-1 border-t border-white/5 px-5 py-2 text-[11px] text-slate-500 hover:bg-white/[0.02] hover:text-brand"
+              >
+                批次完整详情（线路/费用明细/日志）
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }

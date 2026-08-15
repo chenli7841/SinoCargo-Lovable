@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { VipLevel } from "@/lib/vip-levels";
+import { recordAdminLog } from "@/lib/admin-log";
 
 export type Warehouse = {
   id: string;
@@ -182,7 +183,9 @@ export const listWarehouses = createServerFn({ method: "GET" })
 
 export const upsertWarehouse = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { id?: string; payload: Omit<Warehouse, "id" | "created_at" | "updated_at"> }) => d)
+  .inputValidator(
+    (d: { id?: string; payload: Omit<Warehouse, "id" | "created_at" | "updated_at"> }) => d,
+  )
   .handler(async ({ data, context }) => {
     await assertManagerOrOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -190,10 +193,28 @@ export const upsertWarehouse = createServerFn({ method: "POST" })
     if (data.id) {
       const { error } = await supabaseAdmin.from("warehouses").update(row).eq("id", data.id);
       if (error) throw new Error(error.message);
+      await recordAdminLog(supabaseAdmin, {
+        entity_type: "warehouse",
+        entity_id: data.id,
+        action: "update",
+        after: row,
+        operator_id: context.userId,
+      });
       return { ok: true, id: data.id };
     } else {
-      const { data: inserted, error } = await supabaseAdmin.from("warehouses").insert(row).select("id").single();
+      const { data: inserted, error } = await supabaseAdmin
+        .from("warehouses")
+        .insert(row)
+        .select("id")
+        .single();
       if (error) throw new Error(error.message);
+      await recordAdminLog(supabaseAdmin, {
+        entity_type: "warehouse",
+        entity_id: inserted!.id,
+        action: "create",
+        after: row,
+        operator_id: context.userId,
+      });
       return { ok: true, id: inserted!.id };
     }
   });
@@ -204,8 +225,20 @@ export const deleteWarehouse = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertManagerOrOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: before } = await supabaseAdmin
+      .from("warehouses")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
     const { error } = await supabaseAdmin.from("warehouses").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "warehouse",
+      entity_id: data.id,
+      action: "delete",
+      before,
+      operator_id: context.userId,
+    });
     return { ok: true };
   });
 
@@ -222,7 +255,9 @@ export const listRoutes = createServerFn({ method: "GET" })
         .order("code", { ascending: true }),
       context.supabase.from("freight_rules").select("*").eq("is_active", true),
       context.supabase.from("customs_rules").select("*"),
-      context.supabase.from("warehouses").select("id, code, name_zh, country, type, can_origin, can_destination"),
+      context.supabase
+        .from("warehouses")
+        .select("id, code, name_zh, country, type, can_origin, can_destination"),
     ]);
     if (routesR.error) throw new Error(routesR.error.message);
     if (freightR.error) throw new Error(freightR.error.message);
@@ -243,7 +278,9 @@ export const listRoutes = createServerFn({ method: "GET" })
     const rows = (routesR.data ?? []).map((r: any) => ({
       ...r,
       origin: r.origin_warehouse_id ? (whById.get(r.origin_warehouse_id) ?? null) : null,
-      destination: r.destination_warehouse_id ? (whById.get(r.destination_warehouse_id) ?? null) : null,
+      destination: r.destination_warehouse_id
+        ? (whById.get(r.destination_warehouse_id) ?? null)
+        : null,
       freight: freightByRoute.get(r.id) ?? null,
       freight_reverse: freightReverseByRoute.get(r.id) ?? null,
       customs: customsByRoute.get(r.id) ?? null,
@@ -268,10 +305,17 @@ export const upsertRoute = createServerFn({ method: "POST" })
 
     let routeId = data.id;
     if (routeId) {
-      const { error } = await supabaseAdmin.from("shipping_routes").update(data.route).eq("id", routeId);
+      const { error } = await supabaseAdmin
+        .from("shipping_routes")
+        .update(data.route)
+        .eq("id", routeId);
       if (error) throw new Error(error.message);
     } else {
-      const { data: ins, error } = await supabaseAdmin.from("shipping_routes").insert(data.route).select("id").single();
+      const { data: ins, error } = await supabaseAdmin
+        .from("shipping_routes")
+        .insert(data.route)
+        .select("id")
+        .single();
       if (error) throw new Error(error.message);
       routeId = ins!.id;
     }
@@ -327,6 +371,14 @@ export const upsertRoute = createServerFn({ method: "POST" })
     );
     if (cErr) throw new Error(cErr.message);
 
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "shipping_route",
+      entity_id: routeId!,
+      action: data.id ? "update" : "create",
+      after: { route: data.route, freight: data.freight, customs: data.customs },
+      operator_id: context.userId,
+    });
+
     return { ok: true, id: routeId };
   });
 
@@ -336,8 +388,20 @@ export const deleteRoute = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertManagerOrOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: before } = await supabaseAdmin
+      .from("shipping_routes")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
     const { error } = await supabaseAdmin.from("shipping_routes").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "shipping_route",
+      entity_id: data.id,
+      action: "delete",
+      before,
+      operator_id: context.userId,
+    });
     return { ok: true };
   });
 
@@ -368,7 +432,11 @@ export const quoteFreight = createServerFn({ method: "POST" })
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
-      context.supabase.from("customs_rules").select("*").eq("route_id", data.route_id).maybeSingle(),
+      context.supabase
+        .from("customs_rules")
+        .select("*")
+        .eq("route_id", data.route_id)
+        .maybeSingle(),
       context.supabase
         .from("shipping_routes")
         .select("sales_tax_enabled, sales_tax_rate_pct")
@@ -381,12 +449,18 @@ export const quoteFreight = createServerFn({ method: "POST" })
     const w = Math.max(0, Number(data.weight_kg) || 0);
     const v = Math.max(0, Number(data.volume_cm3) || 0);
     const volW = rule.volumetric_divisor > 0 ? v / Number(rule.volumetric_divisor) : 0;
-    const chargeable = rule.weight_mode === "actual" ? w : rule.weight_mode === "volumetric" ? volW : Math.max(w, volW);
+    const chargeable =
+      rule.weight_mode === "actual"
+        ? w
+        : rule.weight_mode === "volumetric"
+          ? volW
+          : Math.max(w, volW);
     // Prefer CAD columns; fall back to legacy CNY * 0.19 for older rows.
     const fx = 0.19;
     const unit_cad = Number(rule.unit_price_cad ?? 0) || Number(rule.unit_price_cny ?? 0) * fx;
     const min_cad = Number(rule.min_charge_cad ?? 0) || Number(rule.min_charge_cny ?? 0) * fx;
-    const clearance_cad = Number(rule.clearance_fee_cad ?? 0) || Number(rule.extra_fee_cny ?? 0) * fx;
+    const clearance_cad =
+      Number(rule.clearance_fee_cad ?? 0) || Number(rule.extra_fee_cny ?? 0) * fx;
 
     const pricing_mode = (rule.pricing_mode as PricingMode) ?? "weight";
     let freight_cad = 0;
@@ -413,17 +487,26 @@ export const quoteFreight = createServerFn({ method: "POST" })
     if (freight_cad < min_cad) freight_cad = +min_cad.toFixed(2);
 
     let duty_cad = 0;
-    if (customs?.enabled && data.declared_cad && data.declared_cad >= Number(customs.threshold_cad)) {
+    if (
+      customs?.enabled &&
+      data.declared_cad &&
+      data.declared_cad >= Number(customs.threshold_cad)
+    ) {
       duty_cad = +(data.declared_cad * (Number(customs.rate_pct) / 100)).toFixed(2);
     }
 
     const insurance_rate_pct = Number(rule.insurance_rate_pct ?? 0);
     const insurance_cad =
-      data.declared_cad && insurance_rate_pct > 0 ? +(data.declared_cad * (insurance_rate_pct / 100)).toFixed(2) : 0;
+      data.declared_cad && insurance_rate_pct > 0
+        ? +(data.declared_cad * (insurance_rate_pct / 100)).toFixed(2)
+        : 0;
 
-    const sales_tax_rate_pct = route?.sales_tax_enabled ? Number(route?.sales_tax_rate_pct ?? 0) : 0;
+    const sales_tax_rate_pct = route?.sales_tax_enabled
+      ? Number(route?.sales_tax_rate_pct ?? 0)
+      : 0;
     const taxable_base = freight_cad + clearance_cad + duty_cad + insurance_cad;
-    const sales_tax_cad = sales_tax_rate_pct > 0 ? +(taxable_base * (sales_tax_rate_pct / 100)).toFixed(2) : 0;
+    const sales_tax_cad =
+      sales_tax_rate_pct > 0 ? +(taxable_base * (sales_tax_rate_pct / 100)).toFixed(2) : 0;
 
     return {
       ok: true as const,
@@ -480,7 +563,9 @@ export const listOversizeRules = createServerFn({ method: "GET" })
 
 export const upsertOversizeRule = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { id?: string; payload: Omit<OversizeRule, "id" | "created_at" | "updated_at"> }) => d)
+  .inputValidator(
+    (d: { id?: string; payload: Omit<OversizeRule, "id" | "created_at" | "updated_at"> }) => d,
+  )
   .handler(async ({ data, context }) => {
     await assertManagerOrOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -502,10 +587,28 @@ export const upsertOversizeRule = createServerFn({ method: "POST" })
     if (data.id) {
       const { error } = await supabaseAdmin.from("oversize_rules").update(row).eq("id", data.id);
       if (error) throw new Error(error.message);
+      await recordAdminLog(supabaseAdmin, {
+        entity_type: "oversize_rule",
+        entity_id: data.id,
+        action: "update",
+        after: row,
+        operator_id: context.userId,
+      });
       return { ok: true, id: data.id };
     }
-    const { data: ins, error } = await supabaseAdmin.from("oversize_rules").insert(row).select("id").single();
+    const { data: ins, error } = await supabaseAdmin
+      .from("oversize_rules")
+      .insert(row)
+      .select("id")
+      .single();
     if (error) throw new Error(error.message);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "oversize_rule",
+      entity_id: ins!.id,
+      action: "create",
+      after: row,
+      operator_id: context.userId,
+    });
     return { ok: true, id: ins!.id };
   });
 
@@ -515,8 +618,20 @@ export const deleteOversizeRule = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertManagerOrOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: before } = await supabaseAdmin
+      .from("oversize_rules")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
     const { error } = await supabaseAdmin.from("oversize_rules").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "oversize_rule",
+      entity_id: data.id,
+      action: "delete",
+      before,
+      operator_id: context.userId,
+    });
     return { ok: true };
   });
 
@@ -565,8 +680,10 @@ export function judgeOversize(
   if (rule.max_height_cm && H > rule.max_height_cm) reasons.push(`高 ${H} > ${rule.max_height_cm}`);
   if (rule.max_single_side_cm && single > rule.max_single_side_cm)
     reasons.push(`单边 ${single} > ${rule.max_single_side_cm}`);
-  if (rule.max_weight_kg && kg > rule.max_weight_kg) reasons.push(`重量 ${kg}kg > ${rule.max_weight_kg}`);
-  if (rule.max_volume_m3 && vol > rule.max_volume_m3) reasons.push(`体积 ${vol}m³ > ${rule.max_volume_m3}`);
+  if (rule.max_weight_kg && kg > rule.max_weight_kg)
+    reasons.push(`重量 ${kg}kg > ${rule.max_weight_kg}`);
+  if (rule.max_volume_m3 && vol > rule.max_volume_m3)
+    reasons.push(`体积 ${vol}m³ > ${rule.max_volume_m3}`);
   if (rule.max_girth_cm && L && W && H) {
     const girth = L + 2 * (W + H);
     if (girth > rule.max_girth_cm) reasons.push(`周长 ${girth} > ${rule.max_girth_cm}`);

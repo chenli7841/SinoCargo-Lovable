@@ -14,6 +14,7 @@ import { getMyRoles, type AppRole } from "@/lib/admin.functions";
 import { listNavItems } from "@/lib/admin-nav.functions";
 import { ROLE_LABEL, ROLE_COLOR, ADMIN_CONSOLE_ROLES } from "@/lib/admin-roles";
 import { useAuth } from "@/lib/auth";
+import { useCompanyInfo } from "@/lib/company";
 import {
   LayoutDashboard,
   Users,
@@ -159,7 +160,12 @@ const DEFAULT_NAV_GROUPS: NavGroup[] = [
     title: "系统管理",
     roles: OWNER_MANAGER,
     items: [
-      { to: "/admin/customer-view", label: "客户视图", icon: UserSearch, roles: ["owner"] },
+      {
+        to: "/admin/customer-view",
+        label: "客户视图",
+        icon: UserSearch,
+        roles: ["owner", "warehouse_cn", "warehouse_ca", "support", "sales"],
+      },
       { to: "/admin/users", label: "用户管理", icon: Users },
       { to: "/admin/messages", label: "留言信息", icon: Mail },
       { to: "/admin/logs", label: "操作日志", icon: History },
@@ -178,6 +184,7 @@ const DEFAULT_NAV_GROUPS: NavGroup[] = [
 
 function AdminLayout() {
   const { user, signOut } = useAuth();
+  const company = useCompanyInfo();
   const navigate = useNavigate();
   const fetchRoles = useServerFn(getMyRoles);
   const fetchNavItems = useServerFn(listNavItems);
@@ -278,11 +285,19 @@ function AdminLayout() {
       {/* Sidebar */}
       <aside className="hidden w-60 shrink-0 flex-col border-r border-white/5 bg-[#0A0F1A] md:flex">
         <div className="flex h-14 items-center gap-2 border-b border-white/5 px-4">
-          <div className="grid h-7 w-7 place-items-center rounded-md bg-gradient-to-br from-brand to-cta font-display text-xs font-bold text-white">
-            SC
-          </div>
-          <div>
-            <div className="text-sm font-bold leading-tight">SinoCargo</div>
+          {company.logo_url ? (
+            <img
+              src={company.logo_url}
+              alt={company.name}
+              className="h-7 w-7 shrink-0 rounded-md object-cover"
+            />
+          ) : (
+            <div className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-gradient-to-br from-brand to-cta font-display text-xs font-bold text-white">
+              {(company.name || "SC").slice(0, 2).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="truncate text-sm font-bold leading-tight">{company.name}</div>
             <div className="text-[10px] uppercase tracking-wider text-slate-400">Admin Console</div>
           </div>
         </div>
@@ -347,7 +362,7 @@ function AdminLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Header */}
         <header className="flex h-14 items-center gap-3 border-b border-white/5 bg-[#0A0F1A] px-4">
-          <div className="md:hidden font-display text-sm font-bold">SinoCargo Admin</div>
+          <div className="md:hidden font-display text-sm font-bold">{company.name} Admin</div>
           <div className="ml-auto flex items-center gap-2">
             <div className="hidden flex-wrap items-center gap-1 sm:flex">
               {roles

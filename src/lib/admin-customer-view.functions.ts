@@ -1,19 +1,23 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getFxCadPerCny, computeBatchFeeSummary } from "@/lib/orders.functions";
 
-// Backs the admin "客户视图" page: owner-only (see NAV_GROUPS in
-// admin/route.tsx, where this link overrides its group's default
-// owner+manager access) can look a customer up by customer_code and
+// Backs the admin "客户视图" page: owner/warehouse/support/sales (see
+// NAV_GROUPS in admin/route.tsx, where this link overrides its group's
+// default owner+manager access) can look a customer up by customer_code and
 // view/edit a slice of their account data on their behalf, without ever
 // switching sessions (the acting admin's identity is preserved
 // end-to-end). Every write here is attributed via admin_action_logs — same
 // table/shape src/lib/orders.functions.ts already uses for staff actions.
 // The nav hides this from everyone else, but that's client-side only —
 // this check is what actually enforces it.
-async function assertOwner(supabase: any, userId: string) {
-  const { data, error } = await supabase.rpc("has_role", { _user_id: userId, _role: "owner" });
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Forbidden: owner only");
+const CUSTOMER_VIEW_ROLES = ["owner", "warehouse_cn", "warehouse_ca", "support", "sales"] as const;
+async function assertCustomerViewAccess(supabase: any, userId: string) {
+  const results = await Promise.all(
+    CUSTOMER_VIEW_ROLES.map((role) => supabase.rpc("has_role", { _user_id: userId, _role: role })),
+  );
+  for (const { error } of results) if (error) throw new Error(error.message);
+  if (!results.some((r) => r.data)) throw new Error("Forbidden: no customer-view access");
 }
 
 async function getOperatorName(admin: any, userId: string): Promise<string> {
@@ -55,7 +59,7 @@ export const findCustomerByCode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { code: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertOwner(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId);
     const code = data.code.trim();
     if (!code) throw new Error("请输入客户号");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -80,7 +84,7 @@ export const getCustomerOverview = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertOwner(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [{ data: wallet }, { data: orders }, { data: fwd }, { data: unpaidInv }] =
       await Promise.all([
@@ -138,7 +142,7 @@ export const saveCustomerProfile = createServerFn({ method: "POST" })
     }) => d,
   )
   .handler(async ({ data, context }) => {
-    await assertOwner(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId);
     const { userId, username, ...rest } = data;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: before } = await supabaseAdmin
@@ -189,7 +193,7 @@ export const listCustomerAddresses = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertOwner(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: rows, error } = await supabaseAdmin
       .from("addresses")
@@ -204,7 +208,7 @@ export const saveCustomerAddress = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string; address: any }) => d)
   .handler(async ({ data, context }) => {
-    await assertOwner(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { id, ...rest } = data.address ?? {};
     if (rest.is_default) {
@@ -236,7 +240,7 @@ export const deleteCustomerAddress = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string; addressId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertOwner(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("addresses")
@@ -261,7 +265,7 @@ export const listCustomerItems = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertOwner(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: rows, error } = await supabaseAdmin
       .from("my_items")
@@ -290,7 +294,7 @@ export const saveCustomerItem = createServerFn({ method: "POST" })
     }) => d,
   )
   .handler(async ({ data, context }) => {
-    await assertOwner(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId);
     if (!data.name.trim()) throw new Error("请填写物品名称");
     if (!data.hs_code.trim()) throw new Error("请填写 HS 编码");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -343,7 +347,7 @@ export const deleteCustomerItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string; itemId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertOwner(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("my_items")
@@ -361,4 +365,285 @@ export const deleteCustomerItem = createServerFn({ method: "POST" })
       operator_name,
     });
     return { ok: true };
+  });
+
+// ============ Orders / waybills (read-only) — mirrors the customer's own
+// "我的订单/运单" tab. Rows link out to the existing /admin/orders/$orderId and
+// /admin/forwardings/$forwardingId pages, which already have the full staff
+// toolset (status changes, payment, tracking) — this list doesn't duplicate that. ============
+export const getCustomerOrders = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertCustomerViewAccess(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const [{ data: orders, error: oErr }, { data: fwds, error: fErr }] = await Promise.all([
+      supabaseAdmin
+        .from("orders")
+        .select(
+          "id, order_no, status, payment_status, total_cny, tracking_no, shipping_method, created_at",
+        )
+        .eq("user_id", data.userId)
+        .eq("source", "shop")
+        .order("created_at", { ascending: false }),
+      supabaseAdmin
+        .from("forwarding_orders")
+        .select(
+          "id, request_no, status, payment_status, fee_cny, items_desc, tracking_no, shipping_method, created_at",
+        )
+        .eq("user_id", data.userId)
+        .order("created_at", { ascending: false }),
+    ]);
+    if (oErr) throw new Error(oErr.message);
+    if (fErr) throw new Error(fErr.message);
+    const items = [
+      ...(orders ?? []).map((o: any) => ({
+        kind: "order" as const,
+        id: o.id,
+        no: o.order_no,
+        status: o.status,
+        payment_status: o.payment_status,
+        amount_cny: o.total_cny,
+        tracking_no: o.tracking_no,
+        shipping_method: o.shipping_method,
+        created_at: o.created_at,
+      })),
+      ...(fwds ?? []).map((f: any) => ({
+        kind: "forwarding" as const,
+        id: f.id,
+        no: f.request_no,
+        status: f.status,
+        payment_status: f.payment_status,
+        amount_cny: f.fee_cny,
+        label: f.items_desc,
+        tracking_no: f.tracking_no,
+        shipping_method: f.shipping_method,
+        created_at: f.created_at,
+      })),
+    ].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+    return { items };
+  });
+
+// ============ Inventory (read-only) — mirrors "我的库存": waybills currently
+// sitting in a warehouse (status='storage'), grouped by product/SKU/warehouse.
+// The real page's "发起集运" handoff creates a NEW forwarding order under the
+// customer's own session (sessionStorage prefill → /forwarding); there's no
+// admin-safe equivalent yet, so this view is read-only — staff can see what's
+// in storage but not start a shipment from here. Flagged in the UI, not silently
+// dropped. ============
+export const getCustomerInventory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertCustomerViewAccess(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: wbRows, error } = await supabaseAdmin
+      .from("waybills")
+      .select("id,waybill_no,items_summary,updated_at,forwarding_id")
+      .eq("user_id", data.userId)
+      .eq("status", "storage")
+      .order("updated_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    const rows = wbRows ?? [];
+    const fwdIds = Array.from(new Set(rows.map((w: any) => w.forwarding_id).filter(Boolean)));
+    const [{ data: fwdRows }, { data: whRows }] = await Promise.all([
+      fwdIds.length
+        ? supabaseAdmin.from("forwarding_orders").select("id,warehouse").in("id", fwdIds)
+        : Promise.resolve({ data: [] as any[] }),
+      supabaseAdmin.from("warehouses").select("id,code,name_zh,name_en").eq("is_active", true),
+    ]);
+    const whByCode = new Map((whRows ?? []).map((w: any) => [w.code, w]));
+    const warehouseByFwdId = new Map(
+      (fwdRows ?? []).map((f: any) => [
+        f.id,
+        f.warehouse ? (whByCode.get(f.warehouse) ?? null) : null,
+      ]),
+    );
+    const items = rows.map((w: any) => ({
+      ...w,
+      warehouse: w.forwarding_id ? (warehouseByFwdId.get(w.forwarding_id) ?? null) : null,
+    }));
+    return { items };
+  });
+
+// ============ Reference data for the "代客发起集运" form ============
+// Warehouses + active forwarding-usable routes — same tables/filters the
+// customer's own /forwarding page reads directly (public reference data,
+// nothing customer-specific), just re-exposed through a server fn to keep
+// this whole page's convention of "every read goes through
+// admin-customer-view.functions.ts".
+export const listShippingOptions = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertCustomerViewAccess(context.supabase, context.userId);
+    const [{ data: warehouses }, { data: routes }] = await Promise.all([
+      context.supabase
+        .from("warehouses")
+        .select("id,code,name_zh,name_en")
+        .eq("is_active", true)
+        .order("sort_order"),
+      context.supabase
+        .from("shipping_routes")
+        .select(
+          "id,code,name_zh,name_en,shipping_method,origin_warehouse_id,destination_warehouse_id,is_bidirectional",
+        )
+        .eq("is_active", true)
+        .in("usage_scope", ["forwarding", "both"])
+        .order("sort_order"),
+    ]);
+    return { warehouses: warehouses ?? [], routes: routes ?? [] };
+  });
+
+// ============ Storage fee: preview + pay on behalf of the customer ============
+// Both wrap the storage-fee RPCs' new optional _target_user_id (see the
+// pay_storage_fees/preview_storage_fees migration) — same fee math, same
+// invoice, the only difference is whose wallet gets charged. Uses
+// context.supabase (not supabaseAdmin) so auth.uid() inside the RPC resolves
+// to the acting staff member, which is what the RPC's own staff check and
+// admin_action_logs entry are keyed on.
+export const previewCustomerStorageFee = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertCustomerViewAccess(context.supabase, context.userId);
+    const { data: result, error } = await context.supabase.rpc("preview_storage_fees", {
+      _target_user_id: data.userId,
+    });
+    if (error) throw new Error(error.message);
+    return result as any;
+  });
+
+export const payCustomerStorageFee = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertCustomerViewAccess(context.supabase, context.userId);
+    const { data: result, error } = await context.supabase.rpc("pay_storage_fees", {
+      _target_user_id: data.userId,
+    });
+    if (error) throw new Error(error.message);
+    return result as any;
+  });
+
+// ============ Forwarding: file a new request on behalf of the customer ============
+// Same wrap of place_forwarding's new optional _target_user_id. The admin-side
+// form is deliberately simpler than the customer's own /forwarding page (no
+// per-route dynamic required-field validation UI) — if a route needs fields
+// this form doesn't collect, place_forwarding still rejects it with a clear
+// message, it just won't be caught client-side first.
+export const createCustomerForwarding = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string; payload: any }) => d)
+  .handler(async ({ data, context }) => {
+    await assertCustomerViewAccess(context.supabase, context.userId);
+    const { data: result, error } = await context.supabase.rpc("place_forwarding", {
+      _payload: data.payload,
+      _target_user_id: data.userId,
+    });
+    if (error) throw new Error(error.message);
+    const r = result as any;
+    if (!r?.ok) throw new Error(r?.reason ?? "发起集运失败");
+    return r;
+  });
+
+// ============ Batches (read-only list) — mirrors "我的批次". The pay action
+// itself already has an admin-safe equivalent (deductWalletForBatch, used
+// elsewhere in the batch admin screens) — this list just surfaces it here too. ============
+export const getCustomerBatches = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertCustomerViewAccess(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("customer_code")
+      .eq("id", data.userId)
+      .maybeSingle();
+    const customerCode = (profile as any)?.customer_code ?? null;
+
+    const { data: myWbs } = await supabaseAdmin
+      .from("waybills")
+      .select(
+        "id, assigned_batch_id, order_id, forwarding_id, waybill_no, status, payment_status, intl_tracking_no",
+      )
+      .eq("user_id", data.userId)
+      .not("assigned_batch_id", "is", null);
+    const wbRows = (myWbs ?? []) as any[];
+    const batchIds = Array.from(new Set(wbRows.map((w) => w.assigned_batch_id).filter(Boolean)));
+    if (!batchIds.length) return { batches: [] };
+
+    const { data: batchRows } = await supabaseAdmin
+      .from("batches")
+      .select("id, batch_no, status, shipping_method, eta_date")
+      .in("id", batchIds)
+      .in("status", ["shipped", "arrived", "closed"]);
+    const visibleBatches = (batchRows ?? []) as any[];
+    if (!visibleBatches.length) return { batches: [] };
+
+    const FX = await getFxCadPerCny(supabaseAdmin);
+
+    const wbByBatch = new Map<string, any[]>();
+    for (const w of wbRows) {
+      if (!w.assigned_batch_id) continue;
+      const arr = wbByBatch.get(w.assigned_batch_id) ?? [];
+      arr.push(w);
+      wbByBatch.set(w.assigned_batch_id, arr);
+    }
+    const orderIds = Array.from(new Set(wbRows.map((w) => w.order_id).filter(Boolean)));
+    const fwdIds = Array.from(new Set(wbRows.map((w) => w.forwarding_id).filter(Boolean)));
+    const [oR, fR] = await Promise.all([
+      orderIds.length
+        ? supabaseAdmin
+            .from("orders")
+            .select("id, order_no, status, tracking_no")
+            .in("id", orderIds)
+        : Promise.resolve({ data: [] as any[] }),
+      fwdIds.length
+        ? supabaseAdmin
+            .from("forwarding_orders")
+            .select("id, request_no, status, tracking_no")
+            .in("id", fwdIds)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const oMap = new Map<string, any>(((oR as any).data ?? []).map((o: any) => [o.id, o]));
+    const fMap = new Map<string, any>(((fR as any).data ?? []).map((f: any) => [f.id, f]));
+
+    const batches = [];
+    for (const b of visibleBatches) {
+      const summary = await computeBatchFeeSummary(supabaseAdmin, b.id);
+      const mine = customerCode
+        ? summary.per_customer.filter((p: any) => p.customer_code === customerCode)
+        : [];
+      const subtotalCny = +mine.reduce((s: number, p: any) => s + p.subtotal_cny, 0).toFixed(2);
+
+      const wbs = wbByBatch.get(b.id) ?? [];
+      const items = wbs.map((w: any) => {
+        const o = w.order_id ? oMap.get(w.order_id) : null;
+        const fo = w.forwarding_id ? fMap.get(w.forwarding_id) : null;
+        return {
+          kind: w.order_id ? ("order" as const) : ("forwarding" as const),
+          id: w.order_id ?? w.forwarding_id ?? w.id,
+          no: o?.order_no ?? fo?.request_no ?? w.waybill_no,
+          status: o?.status ?? fo?.status ?? w.status,
+          tracking_no: w.intl_tracking_no ?? o?.tracking_no ?? fo?.tracking_no ?? null,
+          payment_status: w.payment_status,
+        };
+      });
+      const allPaid = wbs.length > 0 && wbs.every((w: any) => w.payment_status === "paid");
+      batches.push({
+        batch_id: b.id,
+        batch_no: b.batch_no,
+        status: b.status as "shipped" | "arrived" | "closed",
+        shipping_method: b.shipping_method,
+        eta: b.eta_date,
+        subtotal_cad: +(subtotalCny * FX).toFixed(2),
+        is_paid: allPaid,
+        items,
+        intl_tracking_nos: Array.from(
+          new Set(wbs.map((w: any) => w.intl_tracking_no).filter(Boolean)),
+        ) as string[],
+      });
+    }
+    return { batches };
   });

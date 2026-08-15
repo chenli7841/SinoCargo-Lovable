@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { AppRole } from "@/lib/admin.functions";
+import { recordAdminLog } from "@/lib/admin-log";
 
 // Backs the admin sidebar (admin/route.tsx) and its owner-only settings page
 // (admin/nav-settings.tsx): which roles can see each section, which category
@@ -75,5 +76,12 @@ export const saveNavConfig = createServerFn({ method: "POST" })
         .eq("id", it.id);
       if (error) throw new Error(error.message);
     }
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "nav_config",
+      entity_id: "nav_config",
+      action: "save",
+      after: { item_count: data.items.length },
+      operator_id: context.userId,
+    });
     return { ok: true };
   });

@@ -1380,7 +1380,7 @@ export const deleteTrackingPreset = createServerFn({ method: "POST" })
 // ---- Fee summary computation (shared between detail view and persist-on-lock) ----
 // Returns: { totals: {freight,customs,insurance,clearance,storage,delivery,inspection,surcharge,grand_total},
 //            per_customer: [{...}], unassigned: {...}, independent_clearance: {...} }
-async function computeBatchFeeSummary(admin: any, batchId: string) {
+export async function computeBatchFeeSummary(admin: any, batchId: string) {
   // === 1. Load raw entities under the batch ===
   const [batchR, directWbsR, cartonsR, palletsR] = await Promise.all([
     admin.from("batches").select("id, batch_no").eq("id", batchId).maybeSingle(),

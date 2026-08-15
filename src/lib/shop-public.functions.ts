@@ -49,10 +49,54 @@ export type PublicProduct = {
   pack_volume_m3: number | null;
   available_route_codes: string[] | null;
   is_featured: boolean;
+  origin_location: string | null;
+  origin_location_en: string | null;
+  packaging_note: string | null;
+  packaging_note_en: string | null;
+  lead_time_note: string | null;
+  lead_time_note_en: string | null;
+  origin_port_note: string | null;
+  origin_port_note_en: string | null;
+  faq_items: Array<{ q: string; a: string; q_en?: string; a_en?: string }>;
+  trust_points: Array<{ text: string; text_en?: string } | string>;
 };
 
-const SELECT_COLS =
+const BASE_COLS =
   "id,slug,name,name_en,subtitle,subtitle_en,description,description_en,brand,price_cny,compare_price_cny,compare_price_cad,weight_kg,cover_url,images,tags,total_stock,sold_count,hs_code,manufacturer,detail_blocks,purchase_type,allow_personal,allow_business,moq,customs_mfn_rate,customs_gst_rate,customs_antidumping_rate,freight_cny,personal_freight_mode,personal_per_unit_freight_cny,pack_qty,pack_weight_kg,pack_length_cm,pack_width_cm,pack_height_cm,pack_volume_m3,available_route_codes,is_featured,category:product_categories(slug,name,name_en)";
+// origin_location(_en) / packaging_note(_en) / lead_time_note(_en) / origin_port_note(_en) /
+// faq_items / trust_points ship in migrations 20260814110000 + 20260814150000 + 20260814190000 —
+// until those have been deployed, selecting them errors with "column products.x does not exist",
+// so every query below falls back to BASE_COLS and fills these in as defaults rather than
+// 500ing the whole page.
+const NEW_COLS =
+  "origin_location,origin_location_en,packaging_note,packaging_note_en,lead_time_note,lead_time_note_en,origin_port_note,origin_port_note_en,faq_items,trust_points";
+const SELECT_COLS = `${BASE_COLS},${NEW_COLS}`;
+const DEFAULT_TRUST_POINTS = [
+  {
+    text: "国内官方渠道直采，保证正品",
+    text_en: "Sourced from official China channels, guaranteed authentic",
+  },
+  {
+    text: "支持合箱集运，节省 40% 运费",
+    text_en: "Box consolidation supported, saves up to 40% on freight",
+  },
+  { text: "全程运单追踪，节点透明", text_en: "Full tracking with visibility at every node" },
+];
+const NEW_COLS_DEFAULTS = {
+  origin_location: null,
+  origin_location_en: null,
+  packaging_note: null,
+  packaging_note_en: null,
+  lead_time_note: null,
+  lead_time_note_en: null,
+  origin_port_note: null,
+  origin_port_note_en: null,
+  faq_items: [],
+  trust_points: DEFAULT_TRUST_POINTS,
+};
+const isMissingNewColumn = (err: any) => !!err && /does not exist/i.test(err.message ?? "");
+const withNewColDefaults = (row: any) => (row ? { ...NEW_COLS_DEFAULTS, ...row } : row);
+const withNewColDefaultsList = (rows: any[] | null) => (rows ?? []).map(withNewColDefaults);
 
 export const listPublicCategories = createServerFn({ method: "GET" }).handler(async () => {
   const sb = pubClient();
@@ -66,30 +110,40 @@ export const listPublicCategories = createServerFn({ method: "GET" }).handler(as
 });
 
 export const listPublicProducts = createServerFn({ method: "POST" })
-  .inputValidator((d: { category?: string; q?: string; limit?: number; featuredOnly?: boolean } = {}) => d)
+  .inputValidator(
+    (d: { category?: string; q?: string; limit?: number; featuredOnly?: boolean } = {}) => d,
+  )
   .handler(async ({ data }) => {
     const sb = pubClient();
     const limit = Math.min(200, data.limit ?? 100);
-    let q = sb
-      .from("products")
-      .select(SELECT_COLS)
-      .eq("status", "active" as any);
-    if (data.featuredOnly) q = q.eq("is_featured", true as any);
-    q = q.order("created_at", { ascending: false }).limit(limit);
-    if (data.q) q = q.ilike("name", `%${data.q}%`);
-    const { data: rows, error } = await q;
+    const buildMain = (cols: string) => {
+      let q = sb
+        .from("products")
+        .select(cols)
+        .eq("status", "active" as any);
+      if (data.featuredOnly) q = q.eq("is_featured", true as any);
+      q = q.order("created_at", { ascending: false }).limit(limit);
+      if (data.q) q = q.ilike("name", `%${data.q}%`);
+      return q;
+    };
+    let { data: rows, error } = await buildMain(SELECT_COLS);
+    if (isMissingNewColumn(error)) ({ data: rows, error } = await buildMain(BASE_COLS));
     if (error) throw new Error(error.message);
-    let items = (rows ?? []) as any as PublicProduct[];
+    let items = withNewColDefaultsList(rows) as any as PublicProduct[];
     if (data.featuredOnly && items.length === 0) {
       // no products marked as featured yet — fall back to the most recent active products
-      const { data: fallbackRows, error: fbErr } = await sb
-        .from("products")
-        .select(SELECT_COLS)
-        .eq("status", "active" as any)
-        .order("created_at", { ascending: false })
-        .limit(limit);
+      const buildFallback = (cols: string) =>
+        sb
+          .from("products")
+          .select(cols)
+          .eq("status", "active" as any)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+      let { data: fallbackRows, error: fbErr } = await buildFallback(SELECT_COLS);
+      if (isMissingNewColumn(fbErr))
+        ({ data: fallbackRows, error: fbErr } = await buildFallback(BASE_COLS));
       if (fbErr) throw new Error(fbErr.message);
-      items = (fallbackRows ?? []) as any as PublicProduct[];
+      items = withNewColDefaultsList(fallbackRows) as any as PublicProduct[];
     }
     if (data.category && data.category !== "all") {
       items = items.filter((p) => p.category?.slug === data.category);
@@ -101,31 +155,54 @@ export const getPublicProduct = createServerFn({ method: "POST" })
   .inputValidator((d: { slug: string }) => d)
   .handler(async ({ data }) => {
     const sb = pubClient();
-    const { data: product, error } = await sb
-      .from("products")
-      .select(SELECT_COLS)
-      .eq("slug", data.slug)
-      .eq("status", "active" as any)
-      .maybeSingle();
+    const buildProduct = (cols: string) =>
+      sb
+        .from("products")
+        .select(cols)
+        .eq("slug", data.slug)
+        .eq("status", "active" as any)
+        .maybeSingle();
+    let { data: product, error } = await buildProduct(SELECT_COLS);
+    if (isMissingNewColumn(error)) ({ data: product, error } = await buildProduct(BASE_COLS));
     if (error) throw new Error(error.message);
     if (!product) return { product: null, related: [] as PublicProduct[], variants: [] as any[] };
-    const { data: variants } = await sb
-      .from("product_variants")
-      .select("id,sku,attrs,price_cny,stock,is_active")
-      .eq("product_id", (product as any).id)
-      .eq("is_active", true);
+    product = withNewColDefaults(product);
+    // weight_kg/length_cm/.../pack_volume_m3 ship in migration 20260814210000 — same
+    // not-yet-deployed fallback as the product-level NEW_COLS above.
+    const VARIANT_FREIGHT_COLS =
+      "weight_kg,length_cm,width_cm,height_cm,pack_qty,pack_weight_kg,pack_length_cm,pack_width_cm,pack_height_cm,pack_volume_m3";
+    const buildVariants = (cols: string) =>
+      sb
+        .from("product_variants")
+        .select(cols)
+        .eq("product_id", (product as any).id)
+        .eq("is_active", true);
+    let { data: variants, error: varErr } = await buildVariants(
+      `id,sku,attrs,price_cny,stock,is_active,${VARIANT_FREIGHT_COLS}`,
+    );
+    if (isMissingNewColumn(varErr))
+      ({ data: variants } = await buildVariants("id,sku,attrs,price_cny,stock,is_active"));
     const cat = (product as any).category?.slug as string | undefined;
     let related: PublicProduct[] = [];
     if (cat) {
-      const { data: rel } = await sb
-        .from("products")
-        .select(SELECT_COLS)
-        .eq("status", "active" as any)
-        .neq("slug", data.slug)
-        .limit(8);
-      related = ((rel ?? []) as any as PublicProduct[]).filter((p) => p.category?.slug === cat).slice(0, 4);
+      const buildRelated = (cols: string) =>
+        sb
+          .from("products")
+          .select(cols)
+          .eq("status", "active" as any)
+          .neq("slug", data.slug)
+          .limit(8);
+      let { data: rel, error: relErr } = await buildRelated(SELECT_COLS);
+      if (isMissingNewColumn(relErr)) ({ data: rel } = await buildRelated(BASE_COLS));
+      related = (withNewColDefaultsList(rel) as any as PublicProduct[])
+        .filter((p) => p.category?.slug === cat)
+        .slice(0, 4);
     }
-    return { product: product as any as PublicProduct, related, variants: (variants ?? []) as any[] };
+    return {
+      product: product as any as PublicProduct,
+      related,
+      variants: (variants ?? []) as any[],
+    };
   });
 
 export const listPublicRoutes = createServerFn({ method: "GET" }).handler(async () => {

@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { recordAdminLog } from "@/lib/admin-log";
 
 async function assertStaff(supabase: any, userId: string) {
   const { data } = await supabase.rpc("is_staff", { _user_id: userId });
@@ -12,7 +13,11 @@ export const listHsCodes = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    let q = supabaseAdmin.from("hs_codes").select("*").order("hs_code", { ascending: true }).limit(1000);
+    let q = supabaseAdmin
+      .from("hs_codes")
+      .select("*")
+      .order("hs_code", { ascending: true })
+      .limit(1000);
     if (data.search?.trim()) {
       const s = data.search.trim();
       // 支持 HS 编码 / 中英文品名 / 别名（aliases 数组）模糊匹配
@@ -28,22 +33,24 @@ export const listHsCodes = createServerFn({ method: "POST" })
 
 export const upsertHsCode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: {
-    id?: string;
-    hs_code: string;
-    chapter?: string;
-    name_zh: string;
-    name_en?: string;
-    unit?: string;
-    mfn_rate?: number;
-    gst_rate?: number;
-    anti_dumping_rate?: number;
-    anti_dumping_note?: string;
-    note?: string;
-    aliases?: string[];
-    sima_involved?: boolean;
-    is_active?: boolean;
-  }) => d)
+  .inputValidator(
+    (d: {
+      id?: string;
+      hs_code: string;
+      chapter?: string;
+      name_zh: string;
+      name_en?: string;
+      unit?: string;
+      mfn_rate?: number;
+      gst_rate?: number;
+      anti_dumping_rate?: number;
+      anti_dumping_note?: string;
+      note?: string;
+      aliases?: string[];
+      sima_involved?: boolean;
+      is_active?: boolean;
+    }) => d,
+  )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -60,18 +67,31 @@ export const upsertHsCode = createServerFn({ method: "POST" })
       anti_dumping_rate: data.anti_dumping_rate ?? 0,
       anti_dumping_note: data.anti_dumping_note ?? null,
       note: data.note ?? null,
-      aliases: (data.aliases ?? []).map(s => s.trim()).filter(Boolean),
+      aliases: (data.aliases ?? []).map((s) => s.trim()).filter(Boolean),
       sima_involved: data.sima_involved ?? false,
       is_active: data.is_active ?? true,
     };
 
+    let id = data.id;
     if (data.id) {
       const { error } = await supabaseAdmin.from("hs_codes").update(payload).eq("id", data.id);
       if (error) throw new Error(error.message);
     } else {
-      const { error } = await supabaseAdmin.from("hs_codes").insert(payload);
+      const { data: ins, error } = await supabaseAdmin
+        .from("hs_codes")
+        .insert(payload)
+        .select("id")
+        .single();
       if (error) throw new Error(error.message);
+      id = ins!.id;
     }
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "hs_code",
+      entity_id: id!,
+      action: data.id ? "update" : "create",
+      after: payload,
+      operator_id: context.userId,
+    });
     return { ok: true };
   });
 
@@ -81,8 +101,20 @@ export const deleteHsCode = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: before } = await supabaseAdmin
+      .from("hs_codes")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
     const { error } = await supabaseAdmin.from("hs_codes").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "hs_code",
+      entity_id: data.id,
+      action: "delete",
+      before,
+      operator_id: context.userId,
+    });
     return { ok: true };
   });
 
@@ -95,13 +127,26 @@ export const bindNameToHs = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const name = (data.name ?? "").trim();
     if (!name) throw new Error("name required");
-    const { data: row, error: e1 } = await supabaseAdmin.from("hs_codes")
-      .select("id, aliases").eq("hs_code", data.hs_code).maybeSingle();
+    const { data: row, error: e1 } = await supabaseAdmin
+      .from("hs_codes")
+      .select("id, aliases")
+      .eq("hs_code", data.hs_code)
+      .maybeSingle();
     if (e1) throw new Error(e1.message);
     if (!row) throw new Error("HS 编码不存在");
     const set = new Set<string>([...(row.aliases ?? []), name]);
-    const { error } = await supabaseAdmin.from("hs_codes").update({ aliases: [...set] }).eq("id", row.id);
+    const { error } = await supabaseAdmin
+      .from("hs_codes")
+      .update({ aliases: [...set] })
+      .eq("id", row.id);
     if (error) throw new Error(error.message);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "hs_code",
+      entity_id: row.id,
+      action: "bind_name",
+      after: { name },
+      operator_id: context.userId,
+    });
     return { ok: true };
   });
 
@@ -112,8 +157,17 @@ export const setForwardingItemHs = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("forwarding_items")
-      .update({ hs_code: data.hs_code || null }).eq("id", data.item_id);
+    const { error } = await supabaseAdmin
+      .from("forwarding_items")
+      .update({ hs_code: data.hs_code || null })
+      .eq("id", data.item_id);
     if (error) throw new Error(error.message);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "forwarding_item",
+      entity_id: data.item_id,
+      action: "set_hs_code",
+      after: { hs_code: data.hs_code },
+      operator_id: context.userId,
+    });
     return { ok: true };
   });

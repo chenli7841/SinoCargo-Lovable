@@ -2,13 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { recordAdminLog } from "@/lib/admin-log";
 
 async function assertStaff(supabase: any, userId: string) {
   const { data, error } = await supabase.rpc("is_staff", { _user_id: userId });
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Forbidden");
 }
-
 
 function pubClient() {
   return createClient<Database>(process.env.SUPABASE_URL!, process.env.SUPABASE_PUBLISHABLE_KEY!, {
@@ -76,7 +76,9 @@ export const submitContactMessage = createServerFn({ method: "POST" })
     if (!name || !email || !message) throw new Error("请填写姓名、邮箱和留言内容");
 
     const supabase = pubClient();
-    const { error } = await supabase.from("contact_messages").insert({ name, email, phone, message });
+    const { error } = await supabase
+      .from("contact_messages")
+      .insert({ name, email, phone, message });
     if (error) throw new Error(error.message);
 
     try {
@@ -101,7 +103,14 @@ export type ContactMessage = {
 
 export const listContactMessages = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { status?: "all" | "new" | "read" | "archived"; search?: string; page?: number; pageSize?: number }) => d)
+  .inputValidator(
+    (d: {
+      status?: "all" | "new" | "read" | "archived";
+      search?: string;
+      page?: number;
+      pageSize?: number;
+    }) => d,
+  )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const page = Math.max(1, data.page ?? 1);
@@ -129,8 +138,17 @@ export const updateContactMessageStatus = createServerFn({ method: "POST" })
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
-      .from("contact_messages").update({ status: data.status }).eq("id", data.id);
+      .from("contact_messages")
+      .update({ status: data.status })
+      .eq("id", data.id);
     if (error) throw new Error(error.message);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "contact_message",
+      entity_id: data.id,
+      action: "update_status",
+      after: { status: data.status },
+      operator_id: context.userId,
+    });
     return { ok: true };
   });
 
@@ -140,8 +158,19 @@ export const deleteContactMessage = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: before } = await supabaseAdmin
+      .from("contact_messages")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
     const { error } = await supabaseAdmin.from("contact_messages").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "contact_message",
+      entity_id: data.id,
+      action: "delete",
+      before,
+      operator_id: context.userId,
+    });
     return { ok: true };
   });
-

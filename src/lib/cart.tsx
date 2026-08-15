@@ -1,6 +1,25 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Product } from "./mock-data";
 
+// A selected variant, as picked on the product page. Every weight/dims/pack field is
+// optional — when a variant doesn't set one, the line falls back to the product's own
+// value (same fallback order the checkout pricing functions use server-side).
+export interface CartVariant {
+  id: string;
+  sku: string;
+  label: string; // e.g. "红色 / 26寸" — shown under the product name in the cart
+  priceCNY?: number | null;
+  weightKg?: number | null;
+  lengthCm?: number | null;
+  widthCm?: number | null;
+  heightCm?: number | null;
+  packQty?: number | null;
+  packWeightKg?: number | null;
+  packLengthCm?: number | null;
+  packWidthCm?: number | null;
+  packHeightCm?: number | null;
+}
+
 export interface CartLine {
   slug: string;
   nameZh: string;
@@ -15,11 +34,24 @@ export interface CartLine {
   /** Shipping routes this product is restricted to; empty = all routes allowed */
   availableRouteCodes?: string[];
   quantity: number;
+  /** Present when this line is a specific SKU rather than the product's default. */
+  variantId?: string;
+  variantSku?: string;
+  variantLabel?: string;
+}
+
+// Same product + different variant = different cart line (so a shopper can order
+// two colors of the same item independently). No variant = plain product-level line,
+// exactly as before.
+export function cartLineKey(i: { slug: string; variantId?: string }): string {
+  return i.variantId ? `${i.slug}::${i.variantId}` : i.slug;
 }
 
 // Personal: per-unit chargeable weight × quantity.
 // Business: package/carton weight × number of packs (quantity ÷ units-per-pack) — falls
 // back to the personal formula if no pack weight has been configured for the product yet.
+// This is a client-side estimate only — the authoritative number always comes from the
+// quote_shop_order/place_shop_order server functions, which apply the identical fallback.
 export function lineWeightKg(i: CartLine): number {
   if (i.purchaseType === "business" && i.packWeightKg && i.packQty) {
     return i.packWeightKg * (i.quantity / i.packQty);
@@ -37,14 +69,14 @@ interface CartCtx {
   selectedCount: number;
   selectedSubtotalCNY: number;
   selectedWeightKg: number;
-  toggleSelect: (slug: string) => void;
+  toggleSelect: (slug: string, variantId?: string) => void;
   setAllSelected: (v: boolean) => void;
-  isSelected: (slug: string) => boolean;
-  add: (p: Product, qty?: number) => void;
-  update: (slug: string, qty: number) => void;
-  remove: (slug: string) => void;
+  isSelected: (slug: string, variantId?: string) => boolean;
+  add: (p: Product, qty?: number, variant?: CartVariant) => void;
+  update: (slug: string, qty: number, variantId?: string) => void;
+  remove: (slug: string, variantId?: string) => void;
   clear: () => void;
-  clearSlugs: (slugs: string[]) => void;
+  clearSlugs: (keys: string[]) => void;
 }
 
 const Ctx = createContext<CartCtx | null>(null);
@@ -73,11 +105,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [items, selected, hydrated]);
 
-  const add = (p: Product, qty = 1) => {
+  const add = (p: Product, qty = 1, variant?: CartVariant) => {
     const minQty = p.purchaseType === "business" ? Math.max(qty, p.moq ?? 1) : qty;
+    const key = cartLineKey({ slug: p.slug, variantId: variant?.id });
     setItems((prev) => {
-      const ex = prev.find((i) => i.slug === p.slug);
-      if (ex) return prev.map((i) => (i.slug === p.slug ? { ...i, quantity: i.quantity + qty } : i));
+      const ex = prev.find((i) => cartLineKey(i) === key);
+      if (ex)
+        return prev.map((i) => (cartLineKey(i) === key ? { ...i, quantity: i.quantity + qty } : i));
       return [
         ...prev,
         {
@@ -85,37 +119,44 @@ export function CartProvider({ children }: { children: ReactNode }) {
           nameZh: p.name.zh,
           nameEn: p.name.en,
           image: p.image,
-          priceCNY: p.priceCNY,
-          weightKg: p.weightKg,
+          priceCNY: variant?.priceCNY ?? p.priceCNY,
+          weightKg: variant?.weightKg ?? p.weightKg,
           purchaseType: p.purchaseType,
           moq: p.moq,
-          packQty: p.packQty,
-          packWeightKg: p.packWeightKg,
+          packQty: variant?.packQty ?? p.packQty,
+          packWeightKg: variant?.packWeightKg ?? p.packWeightKg,
           availableRouteCodes: p.availableRouteCodes ?? [],
           quantity: minQty,
+          variantId: variant?.id,
+          variantSku: variant?.sku,
+          variantLabel: variant?.label,
         },
       ];
     });
-    setSelected((s) => ({ ...s, [p.slug]: true }));
+    setSelected((s) => ({ ...s, [key]: true }));
   };
 
-  const update = (slug: string, qty: number) => {
-    const line = items.find((i) => i.slug === slug);
+  const update = (slug: string, qty: number, variantId?: string) => {
+    const key = cartLineKey({ slug, variantId });
+    const line = items.find((i) => cartLineKey(i) === key);
     if (line?.purchaseType === "business") {
       // Wholesale items can never drop below their minimum order quantity — clamp
       // instead of removing, even if the user keeps pressing "-" at the floor.
       const floor = Math.max(line.moq ?? 1, 1);
-      setItems((prev) => prev.map((i) => (i.slug === slug ? { ...i, quantity: Math.max(qty, floor) } : i)));
+      setItems((prev) =>
+        prev.map((i) => (cartLineKey(i) === key ? { ...i, quantity: Math.max(qty, floor) } : i)),
+      );
       return;
     }
-    if (qty <= 0) return remove(slug);
-    setItems((prev) => prev.map((i) => (i.slug === slug ? { ...i, quantity: qty } : i)));
+    if (qty <= 0) return remove(slug, variantId);
+    setItems((prev) => prev.map((i) => (cartLineKey(i) === key ? { ...i, quantity: qty } : i)));
   };
-  const remove = (slug: string) => {
-    setItems((prev) => prev.filter((i) => i.slug !== slug));
+  const remove = (slug: string, variantId?: string) => {
+    const key = cartLineKey({ slug, variantId });
+    setItems((prev) => prev.filter((i) => cartLineKey(i) !== key));
     setSelected((s) => {
       const n = { ...s };
-      delete n[slug];
+      delete n[key];
       return n;
     });
   };
@@ -123,25 +164,35 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems([]);
     setSelected({});
   };
-  const clearSlugs = (slugs: string[]) => {
-    const set = new Set(slugs);
-    setItems((prev) => prev.filter((i) => !set.has(i.slug)));
+  const clearSlugs = (keys: string[]) => {
+    const set = new Set(keys);
+    setItems((prev) => prev.filter((i) => !set.has(cartLineKey(i))));
     setSelected((s) => {
       const n = { ...s };
-      for (const x of slugs) delete n[x];
+      for (const k of keys) delete n[k];
       return n;
     });
   };
 
-  const isSelected = (slug: string) => selected[slug] !== false; // default selected
-  const toggleSelect = (slug: string) => setSelected((s) => ({ ...s, [slug]: !isSelected(slug) }));
-  const setAllSelected = (v: boolean) => setSelected(Object.fromEntries(items.map((i) => [i.slug, v])));
+  const isSelected = (slug: string, variantId?: string) => {
+    const key = cartLineKey({ slug, variantId });
+    return selected[key] !== false; // default selected
+  };
+  const toggleSelect = (slug: string, variantId?: string) => {
+    const key = cartLineKey({ slug, variantId });
+    setSelected((s) => ({ ...s, [key]: !(s[key] !== false) }));
+  };
+  const setAllSelected = (v: boolean) =>
+    setSelected(Object.fromEntries(items.map((i) => [cartLineKey(i), v])));
 
   const count = items.reduce((n, i) => n + i.quantity, 0);
   const subtotalCNY = items.reduce((s, i) => s + i.priceCNY * i.quantity, 0);
   const totalWeightKg = items.reduce((w, i) => w + lineWeightKg(i), 0);
 
-  const selectedItems = useMemo(() => items.filter((i) => isSelected(i.slug)), [items, selected]);
+  const selectedItems = useMemo(
+    () => items.filter((i) => isSelected(i.slug, i.variantId)),
+    [items, selected],
+  );
   const selectedCount = selectedItems.reduce((n, i) => n + i.quantity, 0);
   const selectedSubtotalCNY = selectedItems.reduce((s, i) => s + i.priceCNY * i.quantity, 0);
   const selectedWeightKg = selectedItems.reduce((w, i) => w + lineWeightKg(i), 0);

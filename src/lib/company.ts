@@ -17,7 +17,8 @@ export interface CompanyInfo {
 
 export const COMPANY_INFO_DEFAULT: CompanyInfo = {
   name: "SinoCargo",
-  logo_url: "",
+  logo_url: "/eplus-logo-preview.jpg", // TEMP local preview only — remove once real logo is uploaded in 系统设置
+
   phone: "",
   email: "",
   address: "",
@@ -36,7 +37,10 @@ export function useCompanyInfo(): CompanyInfo {
     },
     staleTime: 5 * 60 * 1000,
   });
-  return { ...COMPANY_INFO_DEFAULT, ...(q.data ?? {}) };
+  const merged = { ...COMPANY_INFO_DEFAULT, ...(q.data ?? {}) };
+  // TEMP: preview fallback so a not-yet-uploaded DB logo still shows locally — remove with the default above.
+  if (!merged.logo_url) merged.logo_url = COMPANY_INFO_DEFAULT.logo_url;
+  return merged;
 }
 
 export interface PrintTemplate {

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getFxCadPerCny } from "./orders.functions";
+import { recordAdminLog } from "@/lib/admin-log";
 
 async function assertStaff(supabase: any, userId: string) {
   const { data } = await supabase.rpc("is_staff", { _user_id: userId });
@@ -211,6 +212,13 @@ export const generateInvoiceForWaybill = createServerFn({ method: "POST" })
       amount_cny: total,
       meta: fees.meta,
     });
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "invoice",
+      entity_id: inv.id,
+      action: "generate_for_waybill",
+      after: { invoice_no: inv.invoice_no, total_cny: total, waybill_id: wb.id },
+      operator_id: context.userId,
+    });
     return { ok: true, invoice: inv };
   });
 
@@ -289,6 +297,17 @@ export const generateBatchInvoice = createServerFn({ method: "POST" })
         created.push(inv);
       }
     }
+    await Promise.all(
+      created.map((inv) =>
+        recordAdminLog(supabaseAdmin, {
+          entity_type: "invoice",
+          entity_id: inv.id,
+          action: "generate_for_batch",
+          after: { invoice_no: inv.invoice_no, total_cny: inv.total_cny, batch_id: data.batch_id },
+          operator_id: context.userId,
+        }),
+      ),
+    );
     return { ok: true, count: created.length, invoices: created };
   });
 
@@ -316,6 +335,13 @@ export const updateInvoiceStatus = createServerFn({ method: "POST" })
     if (data.status === "paid") patch.paid_at = new Date().toISOString();
     const { error } = await supabaseAdmin.from("invoices").update(patch).eq("id", data.id);
     if (error) throw new Error(error.message);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "invoice",
+      entity_id: data.id,
+      action: "update_status",
+      after: { status: data.status, note: data.note },
+      operator_id: context.userId,
+    });
     return { ok: true };
   });
 
@@ -326,8 +352,20 @@ export const deleteInvoice = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: before } = await supabaseAdmin
+      .from("invoices")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
     const { error } = await supabaseAdmin.from("invoices").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "invoice",
+      entity_id: data.id,
+      action: "delete",
+      before,
+      operator_id: context.userId,
+    });
     return { ok: true };
   });
 
@@ -418,6 +456,13 @@ export const mergeInvoices = createServerFn({ method: "POST" })
       .from("invoices")
       .update({ status: "void", note: `合并到 ${newInv.invoice_no}` })
       .in("id", data.ids);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "invoice",
+      entity_id: newInv.id,
+      action: "merge",
+      after: { invoice_no: newInv.invoice_no, total_cny: total, merged_from: data.ids },
+      operator_id: context.userId,
+    });
     return { ok: true, invoice: newInv };
   });
 
@@ -486,6 +531,14 @@ export const splitInvoice = createServerFn({ method: "POST" })
       } as any)
       .eq("id", data.id);
 
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "invoice",
+      entity_id: newInv.id,
+      action: "split",
+      after: { invoice_no: newInv.invoice_no, total_cny: newTotal, split_from: data.id },
+      operator_id: context.userId,
+    });
+
     return { ok: true, invoice: newInv };
   });
 
@@ -535,6 +588,13 @@ export const addOfflinePayment = createServerFn({ method: "POST" })
       .select("*")
       .single();
     if (error) throw new Error(error.message);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "offline_payment",
+      entity_id: row.id,
+      action: "create",
+      after: { invoice_id: data.invoice_id, amount_cad: data.amount_cad, method: data.method },
+      operator_id: context.userId,
+    });
     return { ok: true, payment: row };
   });
 
@@ -544,7 +604,19 @@ export const deleteOfflinePayment = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: before } = await supabaseAdmin
+      .from("offline_payments")
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
     const { error } = await supabaseAdmin.from("offline_payments").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
+    await recordAdminLog(supabaseAdmin, {
+      entity_type: "offline_payment",
+      entity_id: data.id,
+      action: "delete",
+      before,
+      operator_id: context.userId,
+    });
     return { ok: true };
   });

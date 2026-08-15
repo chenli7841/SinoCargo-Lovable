@@ -265,6 +265,7 @@ export type Database = {
       }
       cartons: {
         Row: {
+          address_snapshot: Json | null
           batch_id: string | null
           carton_no: string | null
           closed_at: string | null
@@ -296,6 +297,7 @@ export type Database = {
           width_cm: number | null
         }
         Insert: {
+          address_snapshot?: Json | null
           batch_id?: string | null
           carton_no?: string | null
           closed_at?: string | null
@@ -327,6 +329,7 @@ export type Database = {
           width_cm?: number | null
         }
         Update: {
+          address_snapshot?: Json | null
           batch_id?: string | null
           carton_no?: string | null
           closed_at?: string | null
@@ -1843,6 +1846,7 @@ export type Database = {
       }
       pallets: {
         Row: {
+          address_snapshot: Json | null
           batch_id: string | null
           closed_at: string | null
           created_at: string
@@ -1873,6 +1877,7 @@ export type Database = {
           width_cm: number | null
         }
         Insert: {
+          address_snapshot?: Json | null
           batch_id?: string | null
           closed_at?: string | null
           created_at?: string
@@ -1903,6 +1908,7 @@ export type Database = {
           width_cm?: number | null
         }
         Update: {
+          address_snapshot?: Json | null
           batch_id?: string | null
           closed_at?: string | null
           created_at?: string
@@ -2001,37 +2007,67 @@ export type Database = {
           attrs: Json
           barcode: string | null
           created_at: string
+          height_cm: number | null
           id: string
           is_active: boolean
+          length_cm: number | null
+          pack_height_cm: number | null
+          pack_length_cm: number | null
+          pack_qty: number | null
+          pack_volume_m3: number | null
+          pack_weight_kg: number | null
+          pack_width_cm: number | null
           price_cny: number
           product_id: string
           sku: string
           stock: number
           updated_at: string
+          weight_kg: number | null
+          width_cm: number | null
         }
         Insert: {
           attrs?: Json
           barcode?: string | null
           created_at?: string
+          height_cm?: number | null
           id?: string
           is_active?: boolean
+          length_cm?: number | null
+          pack_height_cm?: number | null
+          pack_length_cm?: number | null
+          pack_qty?: number | null
+          pack_volume_m3?: number | null
+          pack_weight_kg?: number | null
+          pack_width_cm?: number | null
           price_cny?: number
           product_id: string
           sku: string
           stock?: number
           updated_at?: string
+          weight_kg?: number | null
+          width_cm?: number | null
         }
         Update: {
           attrs?: Json
           barcode?: string | null
           created_at?: string
+          height_cm?: number | null
           id?: string
           is_active?: boolean
+          length_cm?: number | null
+          pack_height_cm?: number | null
+          pack_length_cm?: number | null
+          pack_qty?: number | null
+          pack_volume_m3?: number | null
+          pack_weight_kg?: number | null
+          pack_width_cm?: number | null
           price_cny?: number
           product_id?: string
           sku?: string
           stock?: number
           updated_at?: string
+          weight_kg?: number | null
+          width_cm?: number | null
         }
         Relationships: [
           {
@@ -2063,23 +2099,33 @@ export type Database = {
           description: string | null
           description_en: string | null
           detail_blocks: Json
+          faq_items: Json
           freight_cny: number
           height_cm: number | null
           hs_code: string | null
           id: string
           images: Json
           is_featured: boolean
+          lead_time_note: string | null
+          lead_time_note_en: string | null
           length_cm: number | null
           manufacturer: string | null
+          manufacturer_contact: Json
           moq: number
           name: string
           name_en: string | null
+          origin_location: string | null
+          origin_location_en: string | null
+          origin_port_note: string | null
+          origin_port_note_en: string | null
           pack_height_cm: number | null
           pack_length_cm: number | null
           pack_qty: number
           pack_volume_m3: number | null
           pack_weight_kg: number | null
           pack_width_cm: number | null
+          packaging_note: string | null
+          packaging_note_en: string | null
           personal_air_route_code: string | null
           personal_freight_mode: string
           personal_per_unit_freight_air_cny: number
@@ -2096,6 +2142,7 @@ export type Database = {
           subtitle_en: string | null
           tags: string[]
           total_stock: number
+          trust_points: Json
           updated_at: string
           weight_kg: number | null
           width_cm: number | null
@@ -2119,23 +2166,33 @@ export type Database = {
           description?: string | null
           description_en?: string | null
           detail_blocks?: Json
+          faq_items?: Json
           freight_cny?: number
           height_cm?: number | null
           hs_code?: string | null
           id?: string
           images?: Json
           is_featured?: boolean
+          lead_time_note?: string | null
+          lead_time_note_en?: string | null
           length_cm?: number | null
           manufacturer?: string | null
+          manufacturer_contact?: Json
           moq?: number
           name: string
           name_en?: string | null
+          origin_location?: string | null
+          origin_location_en?: string | null
+          origin_port_note?: string | null
+          origin_port_note_en?: string | null
           pack_height_cm?: number | null
           pack_length_cm?: number | null
           pack_qty?: number
           pack_volume_m3?: number | null
           pack_weight_kg?: number | null
           pack_width_cm?: number | null
+          packaging_note?: string | null
+          packaging_note_en?: string | null
           personal_air_route_code?: string | null
           personal_freight_mode?: string
           personal_per_unit_freight_air_cny?: number
@@ -2152,6 +2209,7 @@ export type Database = {
           subtitle_en?: string | null
           tags?: string[]
           total_stock?: number
+          trust_points?: Json
           updated_at?: string
           weight_kg?: number | null
           width_cm?: number | null
@@ -2175,23 +2233,33 @@ export type Database = {
           description?: string | null
           description_en?: string | null
           detail_blocks?: Json
+          faq_items?: Json
           freight_cny?: number
           height_cm?: number | null
           hs_code?: string | null
           id?: string
           images?: Json
           is_featured?: boolean
+          lead_time_note?: string | null
+          lead_time_note_en?: string | null
           length_cm?: number | null
           manufacturer?: string | null
+          manufacturer_contact?: Json
           moq?: number
           name?: string
           name_en?: string | null
+          origin_location?: string | null
+          origin_location_en?: string | null
+          origin_port_note?: string | null
+          origin_port_note_en?: string | null
           pack_height_cm?: number | null
           pack_length_cm?: number | null
           pack_qty?: number
           pack_volume_m3?: number | null
           pack_weight_kg?: number | null
           pack_width_cm?: number | null
+          packaging_note?: string | null
+          packaging_note_en?: string | null
           personal_air_route_code?: string | null
           personal_freight_mode?: string
           personal_per_unit_freight_air_cny?: number
@@ -2208,6 +2276,7 @@ export type Database = {
           subtitle_en?: string | null
           tags?: string[]
           total_stock?: number
+          trust_points?: Json
           updated_at?: string
           weight_kg?: number | null
           width_cm?: number | null
@@ -3260,10 +3329,10 @@ export type Database = {
       pay_batch: { Args: { _batch_no: string }; Returns: Json }
       pay_invoice: { Args: { _invoice_id: string }; Returns: Json }
       pay_order_items: { Args: { _item_ids: string[] }; Returns: Json }
-      pay_storage_fees: { Args: never; Returns: Json }
-      place_forwarding: { Args: { _payload: Json }; Returns: Json }
+      pay_storage_fees: { Args: { _target_user_id?: string }; Returns: Json }
+      place_forwarding: { Args: { _payload: Json; _target_user_id?: string }; Returns: Json }
       place_shop_order: { Args: { _payload: Json }; Returns: Json }
-      preview_storage_fees: { Args: never; Returns: Json }
+      preview_storage_fees: { Args: { _target_user_id?: string }; Returns: Json }
       quote_shop_order: { Args: { _payload: Json }; Returns: Json }
       recompute_mark_nos_for_parent: {
         Args: { _forwarding_id: string; _order_id: string }
