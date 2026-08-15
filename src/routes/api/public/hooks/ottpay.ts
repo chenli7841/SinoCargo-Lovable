@@ -37,17 +37,35 @@ export const Route = createFileRoute("/api/public/hooks/ottpay")({
         if (!tx) return new Response("SUCCESS");
         if (tx.status === "completed") return new Response("SUCCESS"); // idempotent
 
+        // order_status is a real field on the decrypted (signKey-verified)
+        // callback data per OTT Pay's integration docs (example values
+        // "authorised"/"captured" — same strings OTT_SUCCESS_STATES already
+        // matches), not something wallet callbacks omit. A callback that's
+        // missing or has an unrecognized status is anomalous — treat it as
+        // still-pending rather than defaulting to paid.
         const status = String(info.order_status ?? "").toLowerCase();
-        const paid = OTT_SUCCESS_STATES.has(status) || !status; // wallet callbacks omit order_status
+        if (!status) {
+          console.warn("[ottpay] callback missing order_status, leaving pending", reference);
+          return new Response("SUCCESS");
+        }
+        const paid = OTT_SUCCESS_STATES.has(status);
         const cents = Number(info.amount ?? 0);
-        if (paid && cents && Math.abs(cents / 100 - Number(tx.amount_cad)) > 0.01) {
+        if (paid && !cents) {
+          console.error("[ottpay] paid callback missing amount, leaving pending", reference);
+          return new Response("SUCCESS");
+        }
+        if (paid && Math.abs(cents / 100 - Number(tx.amount_cad)) > 0.01) {
           console.error("[ottpay] amount mismatch", reference, cents, tx.amount_cad);
           return new Response("SUCCESS");
         }
 
         const patch: Record<string, any> = { status: paid ? "completed" : "failed" };
-        if (info.order_id && !/pid=/.test(tx.note ?? "")) patch.note = `${tx.note ?? ""} · pid=${info.order_id}`;
-        await supabaseAdmin.from("wallet_transactions").update(patch as any).eq("id", tx.id);
+        if (info.order_id && !/pid=/.test(tx.note ?? ""))
+          patch.note = `${tx.note ?? ""} · pid=${info.order_id}`;
+        await supabaseAdmin
+          .from("wallet_transactions")
+          .update(patch as any)
+          .eq("id", tx.id);
 
         return new Response("SUCCESS");
       },
