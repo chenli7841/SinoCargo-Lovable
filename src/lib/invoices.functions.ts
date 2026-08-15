@@ -325,11 +325,7 @@ export const deleteInvoice = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("invoices")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("invoices").select("*").eq("id", data.id).maybeSingle();
     const { error } = await supabaseAdmin.from("invoices").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     await recordAdminLog(supabaseAdmin, {
@@ -564,11 +560,7 @@ export const deleteOfflinePayment = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("offline_payments")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("offline_payments").select("*").eq("id", data.id).maybeSingle();
     const { error } = await supabaseAdmin.from("offline_payments").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     await recordAdminLog(supabaseAdmin, {

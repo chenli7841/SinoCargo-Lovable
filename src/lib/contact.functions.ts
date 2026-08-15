@@ -34,8 +34,6 @@ async function sendNotifyEmail(
     from_email?: string;
     to_email?: string;
     cc_emails?: string[];
-    subject_template?: string;
-    body_template?: string;
   };
   if (!cfg.enabled || !cfg.from_email) return;
 
@@ -44,25 +42,6 @@ async function sendNotifyEmail(
     console.error("[contact] GMAIL_APP_PASSWORD is not set — skipping notification email");
     return;
   }
-
-  // Admin-configurable templates (app_settings.contact_email_notify).
-  const vars: Record<string, string> = {
-    name: msg.name,
-    email: msg.email,
-    phone: msg.phone || "（未填写）",
-    message: msg.message,
-    time: new Date().toLocaleString("zh-CN", { timeZone: "America/Toronto" }),
-  };
-  const render = (tpl: string) => tpl.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k: string) => vars[k] ?? "");
-  const subject = render(
-    cfg.subject_template?.trim() || "[SinoCargo 官网留言] {{name}}",
-  );
-  const text = render(
-    cfg.body_template?.trim() ||
-      ["姓名：{{name}}", "邮箱：{{email}}", "电话：{{phone}}", "时间：{{time}}", "", "留言内容：", "{{message}}"].join(
-        "\n",
-      ),
-  );
 
   const nodemailer = await import("nodemailer");
   const transporter = nodemailer.default.createTransport({
@@ -75,11 +54,17 @@ async function sendNotifyEmail(
     to: cfg.to_email || cfg.from_email,
     cc: (cfg.cc_emails ?? []).filter(Boolean),
     replyTo: msg.email,
-    subject,
-    text,
+    subject: `[SinoCargo 官网留言] ${msg.name}`,
+    text: [
+      `姓名：${msg.name}`,
+      `邮箱：${msg.email}`,
+      `电话：${msg.phone || "（未填写）"}`,
+      "",
+      "留言内容：",
+      msg.message,
+    ].join("\n"),
   });
 }
-
 
 export const submitContactMessage = createServerFn({ method: "POST" })
   .inputValidator((d: { name: string; email: string; phone?: string; message: string }) => d)
@@ -91,9 +76,7 @@ export const submitContactMessage = createServerFn({ method: "POST" })
     if (!name || !email || !message) throw new Error("请填写姓名、邮箱和留言内容");
 
     const supabase = pubClient();
-    const { error } = await supabase
-      .from("contact_messages")
-      .insert({ name, email, phone, message });
+    const { error } = await supabase.from("contact_messages").insert({ name, email, phone, message });
     if (error) throw new Error(error.message);
 
     try {
@@ -119,12 +102,7 @@ export type ContactMessage = {
 export const listContactMessages = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (d: {
-      status?: "all" | "new" | "read" | "archived";
-      search?: string;
-      page?: number;
-      pageSize?: number;
-    }) => d,
+    (d: { status?: "all" | "new" | "read" | "archived"; search?: string; page?: number; pageSize?: number }) => d,
   )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
@@ -152,10 +130,7 @@ export const updateContactMessageStatus = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("contact_messages")
-      .update({ status: data.status })
-      .eq("id", data.id);
+    const { error } = await supabaseAdmin.from("contact_messages").update({ status: data.status }).eq("id", data.id);
     if (error) throw new Error(error.message);
     await recordAdminLog(supabaseAdmin, {
       entity_type: "contact_message",
@@ -173,11 +148,7 @@ export const deleteContactMessage = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("contact_messages")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("contact_messages").select("*").eq("id", data.id).maybeSingle();
     const { error } = await supabaseAdmin.from("contact_messages").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     await recordAdminLog(supabaseAdmin, {

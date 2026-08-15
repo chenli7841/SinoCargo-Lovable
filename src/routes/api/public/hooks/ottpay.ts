@@ -60,8 +60,7 @@ export const Route = createFileRoute("/api/public/hooks/ottpay")({
         }
 
         const patch: Record<string, any> = { status: paid ? "completed" : "failed" };
-        if (info.order_id && !/pid=/.test(tx.note ?? ""))
-          patch.note = `${tx.note ?? ""} · pid=${info.order_id}`;
+        if (info.order_id && !/pid=/.test(tx.note ?? "")) patch.note = `${tx.note ?? ""} · pid=${info.order_id}`;
         await supabaseAdmin
           .from("wallet_transactions")
           .update(patch as any)

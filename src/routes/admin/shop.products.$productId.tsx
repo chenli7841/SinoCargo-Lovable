@@ -146,17 +146,13 @@ function ProductEdit() {
         ...p,
         images: Array.isArray(p.images) ? p.images : [],
         detail_blocks: Array.isArray(p.detail_blocks) ? p.detail_blocks : [],
-        available_route_codes: Array.isArray(p.available_route_codes)
-          ? p.available_route_codes
-          : [],
+        available_route_codes: Array.isArray(p.available_route_codes) ? p.available_route_codes : [],
         faq_items: Array.isArray(p.faq_items) ? p.faq_items : [],
         trust_points: (Array.isArray(p.trust_points) ? p.trust_points : []).map((t: any) =>
           typeof t === "string" ? { text: t, text_en: "" } : t,
         ),
         manufacturer_contact:
-          p.manufacturer_contact && typeof p.manufacturer_contact === "object"
-            ? p.manufacturer_contact
-            : {},
+          p.manufacturer_contact && typeof p.manufacturer_contact === "object" ? p.manufacturer_contact : {},
       });
       setVariants(q.data.variants);
     }
@@ -182,8 +178,7 @@ function ProductEdit() {
       setMsg("✓ 已保存");
       qc.invalidateQueries({ queryKey: ["shop-products"] });
       qc.invalidateQueries({ queryKey: ["shop-product", productId] });
-      if (isNew && r.id)
-        navigate({ to: "/admin/shop/products/$productId", params: { productId: r.id } });
+      if (isNew && r.id) navigate({ to: "/admin/shop/products/$productId", params: { productId: r.id } });
     } catch (e: any) {
       setMsg("✗ " + e.message);
     } finally {
@@ -241,8 +236,7 @@ function ProductEdit() {
     setForm({ ...form, faq_items: form.faq_items.filter((_: any, idx: number) => idx !== i) });
 
   // Trust points ("商品亮点" / 前台保障文案，逐商品可编辑)
-  const addTrust = () =>
-    setForm({ ...form, trust_points: [...form.trust_points, { text: "", text_en: "" }] });
+  const addTrust = () => setForm({ ...form, trust_points: [...form.trust_points, { text: "", text_en: "" }] });
   const updateTrust = (i: number, patch: any) => {
     const n = [...form.trust_points];
     n[i] = { ...n[i], ...patch };
@@ -304,11 +298,7 @@ function ProductEdit() {
             disabled={busy}
             className="inline-flex items-center gap-1.5 rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-50"
           >
-            {busy ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Save className="h-3.5 w-3.5" />
-            )}
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             保存
           </button>
         </div>
@@ -377,10 +367,7 @@ function ProductEdit() {
         {/* ===== hero: gallery left / buy-box right, same as the real page ===== */}
         <div className="grid gap-10 lg:grid-cols-2">
           <div>
-            <CoverDropzone
-              value={form.cover_url ?? ""}
-              onChange={(v) => setForm({ ...form, cover_url: v })}
-            />
+            <CoverDropzone value={form.cover_url ?? ""} onChange={(v) => setForm({ ...form, cover_url: v })} />
             <PasteUrlRow onSubmit={(v) => setForm({ ...form, cover_url: v })} />
             <ThumbGrid images={form.images} onAdd={addImageUrl} onRemove={removeImage} />
             <PasteUrlRow onSubmit={addImageUrl} />
@@ -517,9 +504,7 @@ function ProductEdit() {
                 运输方式（勾选后才会显示在这里）
               </div>
               <div className="grid grid-cols-2 gap-3">
-                {routes.length === 0 && (
-                  <div className="col-span-2 text-xs text-ink-soft">暂无启用中的线路</div>
-                )}
+                {routes.length === 0 && <div className="col-span-2 text-xs text-ink-soft">暂无启用中的线路</div>}
                 {routes.map((r) => {
                   const Icon =
                     r.shipping_method === "sea"
@@ -535,12 +520,7 @@ function ProductEdit() {
                       key={r.code}
                       className={`flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed p-3 text-xs ${on ? "border-brand bg-brand/5" : "border-border bg-muted opacity-60"}`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        onChange={() => toggleRoute(r.code)}
-                        className="shrink-0"
-                      />
+                      <input type="checkbox" checked={on} onChange={() => toggleRoute(r.code)} className="shrink-0" />
                       <Icon className="h-3.5 w-3.5 shrink-0 text-ink-soft" />
                       <span className="truncate">{r.name_zh}</span>
                     </label>
@@ -559,9 +539,7 @@ function ProductEdit() {
                   <Plus className="h-3 w-3" /> 新规格
                 </button>
               </div>
-              {variants.length === 0 && (
-                <div className="text-xs text-ink-soft">暂无规格，前台不显示"规格选择"</div>
-              )}
+              {variants.length === 0 && <div className="text-xs text-ink-soft">暂无规格，前台不显示"规格选择"</div>}
               <div className="flex flex-col gap-2">
                 {variants.map((v, i) => {
                   const open = !!expandedVariant[i];
@@ -573,18 +551,14 @@ function ProductEdit() {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <input
                           value={v.attrs?.color ?? ""}
-                          onChange={(e) =>
-                            updateVariant(i, { attrs: { ...v.attrs, color: e.target.value } })
-                          }
+                          onChange={(e) => updateVariant(i, { attrs: { ...v.attrs, color: e.target.value } })}
                           placeholder="颜色"
                           className="w-14 bg-transparent outline-none"
                         />
                         <span className="text-ink-soft">/</span>
                         <input
                           value={v.attrs?.size ?? ""}
-                          onChange={(e) =>
-                            updateVariant(i, { attrs: { ...v.attrs, size: e.target.value } })
-                          }
+                          onChange={(e) => updateVariant(i, { attrs: { ...v.attrs, size: e.target.value } })}
                           placeholder="尺寸"
                           className="w-14 bg-transparent outline-none"
                         />
@@ -592,9 +566,7 @@ function ProductEdit() {
                         <input
                           type="number"
                           value={String(v.price_cny ?? "")}
-                          onChange={(e) =>
-                            updateVariant(i, { price_cny: Number(e.target.value) || 0 })
-                          }
+                          onChange={(e) => updateVariant(i, { price_cny: Number(e.target.value) || 0 })}
                           placeholder="价"
                           className="w-14 bg-transparent outline-none"
                         />
@@ -693,8 +665,7 @@ function ProductEdit() {
               </div>
               {variants.length > 0 && (
                 <p className="mt-2 text-[10.5px] text-ink-soft">
-                  SKU
-                  可手动改；库存请到「库存流水」页面调整。重量/包装留空的规格，下单时按商品默认值计费。
+                  SKU 可手动改；库存请到「库存流水」页面调整。重量/包装留空的规格，下单时按商品默认值计费。
                 </p>
               )}
             </div>
@@ -720,9 +691,7 @@ function ProductEdit() {
         <Card title="运费与包装规格" hint="对应前台「运费试算」">
           {form.allow_personal && (
             <div>
-              <div className="mb-2 text-[11px] uppercase tracking-wider text-ink-soft">
-                个人采购运费公式
-              </div>
+              <div className="mb-2 text-[11px] uppercase tracking-wider text-ink-soft">个人采购运费公式</div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <Label>计费方式</Label>
@@ -793,8 +762,7 @@ function ProductEdit() {
                   const enabled = mode === "personal" ? form.allow_personal : form.allow_business;
                   const candidates = routes.filter(
                     (r) =>
-                      r.shipping_method === method &&
-                      (r.cargo_type ?? "general") === (form.cargo_type ?? "general"),
+                      r.shipping_method === method && (r.cargo_type ?? "general") === (form.cargo_type ?? "general"),
                   );
                   return (
                     <div key={field}>
@@ -1156,9 +1124,7 @@ function ProductEdit() {
               <Plus className="h-3 w-3" /> 添加一行
             </button>
           </div>
-          {form.trust_points.length === 0 && (
-            <div className="text-xs text-ink-soft">暂无内容，前台不显示该列表</div>
-          )}
+          {form.trust_points.length === 0 && <div className="text-xs text-ink-soft">暂无内容，前台不显示该列表</div>}
           <div className="space-y-2">
             {form.trust_points.map((p: any, i: number) => (
               <div key={i} className="flex items-center gap-2">
@@ -1175,10 +1141,7 @@ function ProductEdit() {
                   placeholder="EN"
                   className={editableCls + " flex-1"}
                 />
-                <button
-                  onClick={() => removeTrust(i)}
-                  className="text-rose-500 hover:text-rose-600"
-                >
+                <button onClick={() => removeTrust(i)} className="text-rose-500 hover:text-rose-600">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -1211,9 +1174,7 @@ function ProductEdit() {
               文本块
             </button>
           </div>
-          {form.detail_blocks.length === 0 && (
-            <div className="text-xs text-ink-soft">暂无详情内容</div>
-          )}
+          {form.detail_blocks.length === 0 && <div className="text-xs text-ink-soft">暂无详情内容</div>}
           <div className="space-y-3">
             {form.detail_blocks.map((b: any, i: number) => (
               <div key={i} className="rounded-xl border border-border bg-muted p-3">
@@ -1221,10 +1182,7 @@ function ProductEdit() {
                   <span>
                     #{i + 1} · {b.type}
                   </span>
-                  <button
-                    onClick={() => removeBlock(i)}
-                    className="text-rose-500 hover:text-rose-600"
-                  >
+                  <button onClick={() => removeBlock(i)} className="text-rose-500 hover:text-rose-600">
                     <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
@@ -1267,18 +1225,13 @@ function ProductEdit() {
               <Plus className="h-3 w-3" /> 添加问题
             </button>
           </div>
-          {form.faq_items.length === 0 && (
-            <div className="text-xs text-ink-soft">暂无常见问题，前台不显示该模块</div>
-          )}
+          {form.faq_items.length === 0 && <div className="text-xs text-ink-soft">暂无常见问题，前台不显示该模块</div>}
           <div className="space-y-2">
             {form.faq_items.map((f: any, i: number) => (
               <div key={i} className="rounded-xl border border-border bg-muted p-3">
                 <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-wider text-ink-soft">
                   <span>#{i + 1}</span>
-                  <button
-                    onClick={() => removeFaq(i)}
-                    className="text-rose-500 hover:text-rose-600"
-                  >
+                  <button onClick={() => removeFaq(i)} className="text-rose-500 hover:text-rose-600">
                     <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
@@ -1313,9 +1266,7 @@ function ProductEdit() {
           </div>
         </Card>
 
-        <p className="mt-6 text-center text-[11px] text-ink-soft">
-          相关推荐按同分类自动生成，无需在这里设置
-        </p>
+        <p className="mt-6 text-center text-[11px] text-ink-soft">相关推荐按同分类自动生成，无需在这里设置</p>
       </div>
     </div>
   );
@@ -1334,9 +1285,7 @@ function UtilField({ label, children }: { label: string; children: any }) {
 }
 
 function Label({ children }: { children: any }) {
-  return (
-    <div className="mb-1 text-[10.5px] uppercase tracking-wider text-ink-soft">{children}</div>
-  );
+  return <div className="mb-1 text-[10.5px] uppercase tracking-wider text-ink-soft">{children}</div>;
 }
 
 // Small numeric field for the per-variant weight/packaging rows. Empty input = null
@@ -1402,13 +1351,7 @@ function CoverDropzone({ value, onChange }: { value: string; onChange: (v: strin
       }}
       className={`relative aspect-square overflow-hidden rounded-3xl border-2 border-dashed transition ${drag ? "border-brand bg-brand/10" : "border-brand/40 bg-gradient-to-br from-accent via-surface to-accent"}`}
     >
-      <input
-        ref={ref}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => handle(e.target.files?.[0])}
-      />
+      <input ref={ref} type="file" accept="image/*" className="hidden" onChange={(e) => handle(e.target.files?.[0])} />
       {value ? (
         <img src={value} alt="" className="h-full w-full object-cover" />
       ) : (
@@ -1423,11 +1366,7 @@ function CoverDropzone({ value, onChange }: { value: string; onChange: (v: strin
           disabled={busy}
           className="inline-flex items-center gap-1.5 rounded-full bg-surface px-4 py-2 text-xs font-semibold shadow-elevated disabled:opacity-50"
         >
-          {busy ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Upload className="h-3.5 w-3.5" />
-          )}
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
           {value ? "更换封面图" : "上传封面图"}
         </button>
         <span className="text-[10.5px] text-white/80">拖拽图片到此处，或点击上传</span>
@@ -1480,18 +1419,9 @@ function ThumbGrid({
   };
   return (
     <div className="mt-3 grid grid-cols-5 gap-2">
-      <input
-        ref={ref}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => handle(e.target.files?.[0])}
-      />
+      <input ref={ref} type="file" accept="image/*" className="hidden" onChange={(e) => handle(e.target.files?.[0])} />
       {images.map((url, i) => (
-        <div
-          key={i}
-          className="group relative aspect-square overflow-hidden rounded-lg border-2 border-border"
-        >
+        <div key={i} className="group relative aspect-square overflow-hidden rounded-lg border-2 border-border">
           <img src={url} alt="" className="h-full w-full object-cover" />
           <button
             type="button"
@@ -1603,31 +1533,20 @@ function HsCodeField({ form, setForm }: { form: any; setForm: (f: any) => void }
       <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
         <div className="rounded-lg border border-border bg-muted p-2">
           <div className="text-ink-soft">MFN</div>
-          <div className="font-semibold">
-            {(Number(form.customs_mfn_rate ?? 0) * 100).toFixed(1)}%
-          </div>
+          <div className="font-semibold">{(Number(form.customs_mfn_rate ?? 0) * 100).toFixed(1)}%</div>
         </div>
         <div className="rounded-lg border border-border bg-muted p-2">
           <div className="text-ink-soft">GST</div>
-          <div className="font-semibold">
-            {(Number(form.customs_gst_rate ?? 0) * 100).toFixed(1)}%
-          </div>
+          <div className="font-semibold">{(Number(form.customs_gst_rate ?? 0) * 100).toFixed(1)}%</div>
         </div>
         <div className="rounded-lg border border-border bg-muted p-2">
           <div className="text-ink-soft">反倾销</div>
-          <div className="font-semibold">
-            {(Number(form.customs_antidumping_rate ?? 0) * 100).toFixed(1)}%
-          </div>
+          <div className="font-semibold">{(Number(form.customs_antidumping_rate ?? 0) * 100).toFixed(1)}%</div>
         </div>
       </div>
       <p className="mt-1 text-[11px] text-ink-soft">
         合计 {totalRate.toFixed(1)}%。税率来自 HS 编码库，编码本身的税率填错了请去{" "}
-        <a
-          href="/admin/hs-codes"
-          target="_blank"
-          rel="noreferrer"
-          className="text-brand hover:underline"
-        >
+        <a href="/admin/hs-codes" target="_blank" rel="noreferrer" className="text-brand hover:underline">
           HS 编码库
         </a>{" "}
         改，用到该编码的商品都会一起更新。

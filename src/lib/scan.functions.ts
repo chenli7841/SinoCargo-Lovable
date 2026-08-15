@@ -16,9 +16,7 @@ function detectKind(code: string): "carton" | "pallet" | "waybill" {
 // ====== Unified scan-add: add waybill / carton / pallet code to a batch or pallet container ======
 export const scanAddToContainer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
-    (d: { container: "batch" | "pallet" | "carton"; containerId: string; code: string }) => d,
-  )
+  .inputValidator((d: { container: "batch" | "pallet" | "carton"; containerId: string; code: string }) => d)
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -59,8 +57,7 @@ export const scanAddToContainer = createServerFn({ method: "POST" })
           }
         }
         if (!w) throw new Error(`运单 ${code} 不存在`);
-        if (w.assigned_batch_id === data.containerId)
-          return { ok: true, kind, added: 0, info: `${code} 已在本批次` };
+        if (w.assigned_batch_id === data.containerId) return { ok: true, kind, added: 0, info: `${code} 已在本批次` };
         await supabaseAdmin
           .from("waybills")
           .update({ assigned_batch_id: data.containerId, batch_no: b.batch_no })
@@ -85,13 +82,7 @@ export const scanAddToContainer = createServerFn({ method: "POST" })
             note: `运单 ${w.waybill_no} 扫码加入批次 ${b.batch_no}`,
           },
         ]);
-        await autoSnapshotWaybillFees(
-          supabaseAdmin,
-          w.id,
-          context.userId,
-          operatorName,
-          `扫码入批次 ${b.batch_no}`,
-        );
+        await autoSnapshotWaybillFees(supabaseAdmin, w.id, context.userId, operatorName, `扫码入批次 ${b.batch_no}`);
         return { ok: true, kind, added: 1, info: `运单 ${w.waybill_no} 已加入` };
       }
       if (kind === "carton") {
@@ -102,10 +93,7 @@ export const scanAddToContainer = createServerFn({ method: "POST" })
           .maybeSingle();
         if (!c) throw new Error(`箱号 ${code} 不存在`);
         await supabaseAdmin.from("cartons").update({ batch_id: data.containerId }).eq("id", c.id);
-        const { data: wbs } = await supabaseAdmin
-          .from("waybills")
-          .select("id")
-          .eq("carton_id", c.id);
+        const { data: wbs } = await supabaseAdmin.from("waybills").select("id").eq("carton_id", c.id);
         if (wbs?.length) {
           await supabaseAdmin
             .from("waybills")
@@ -315,8 +303,7 @@ export const scanAddToContainer = createServerFn({ method: "POST" })
       }
     }
     if (!w) throw new Error(`运单 ${code} 不存在`);
-    if (w.carton_id === data.containerId)
-      return { ok: true, kind, added: 0, info: `${code} 已在本箱` };
+    if (w.carton_id === data.containerId) return { ok: true, kind, added: 0, info: `${code} 已在本箱` };
     const cartonParity = await childParityFor(supabaseAdmin, "carton", data.containerId);
     const wbParity = await childParityFor(supabaseAdmin, "waybill", w.id);
     assertParityMatch(cartonParity, wbParity, `运单 ${w.waybill_no}`);
@@ -449,9 +436,7 @@ export const intakeScanSearch = createServerFn({ method: "POST" })
     // 1) Waybill exact (own number) → return as waybill match (auto-receive on UI)
     const { data: wbExact } = await supabaseAdmin
       .from("waybills")
-      .select(
-        "id, waybill_no, status, order_id, forwarding_id, user_id, weight_kg, shipping_method",
-      )
+      .select("id, waybill_no, status, order_id, forwarding_id, user_id, weight_kg, shipping_method")
       .eq("waybill_no", code)
       .maybeSingle();
     if (wbExact) {
@@ -466,20 +451,13 @@ export const intakeScanSearch = createServerFn({ method: "POST" })
         if (h.kind === "waybill") {
           const { data: wb } = await supabaseAdmin
             .from("waybills")
-            .select(
-              "id, waybill_no, status, order_id, forwarding_id, user_id, weight_kg, shipping_method",
-            )
+            .select("id, waybill_no, status, order_id, forwarding_id, user_id, weight_kg, shipping_method")
             .eq("id", h.id)
             .maybeSingle();
-          if (wb)
-            return { match: "waybill" as const, waybill: await enrichWaybill(wb), candidates: [] };
+          if (wb) return { match: "waybill" as const, waybill: await enrichWaybill(wb), candidates: [] };
         }
         if (h.kind === "order") {
-          const { data: o } = await supabaseAdmin
-            .from("orders")
-            .select(ordCols)
-            .eq("id", h.id)
-            .maybeSingle();
+          const { data: o } = await supabaseAdmin.from("orders").select(ordCols).eq("id", h.id).maybeSingle();
           if (o)
             return {
               match: "exact" as const,
@@ -495,11 +473,7 @@ export const intakeScanSearch = createServerFn({ method: "POST" })
             };
         }
         if (h.kind === "forwarding") {
-          const { data: f } = await supabaseAdmin
-            .from("forwarding_orders")
-            .select(foCols)
-            .eq("id", h.id)
-            .maybeSingle();
+          const { data: f } = await supabaseAdmin.from("forwarding_orders").select(foCols).eq("id", h.id).maybeSingle();
           if (f)
             return {
               match: "exact" as const,
@@ -522,21 +496,14 @@ export const intakeScanSearch = createServerFn({ method: "POST" })
     // Enrich with existing waybills so UI prefills box_count = existing count
     const enrichExisting = async (kind: "order" | "forwarding", id: string) => {
       const fk = kind === "order" ? "order_id" : "forwarding_id";
-      const { data: wbs } = await supabaseAdmin
-        .from("waybills")
-        .select("id, waybill_no, status")
-        .eq(fk, id);
+      const { data: wbs } = await supabaseAdmin.from("waybills").select("id, waybill_no, status").eq(fk, id);
       return { existing_waybills: wbs ?? [], existing_waybill_count: wbs?.length ?? 0 };
     };
 
     // 3) Domestic tracking exact → 走集运流程 (手动输入箱数)
     const [ordExact, foExact] = await Promise.all([
       supabaseAdmin.from("orders").select(ordCols).eq("domestic_tracking_no", code).limit(5),
-      supabaseAdmin
-        .from("forwarding_orders")
-        .select(foCols)
-        .eq("domestic_tracking_no", code)
-        .limit(5),
+      supabaseAdmin.from("forwarding_orders").select(foCols).eq("domestic_tracking_no", code).limit(5),
     ]);
     const exactOrders = (ordExact.data ?? []) as any[];
     const exactFos = (foExact.data ?? []) as any[];
@@ -572,16 +539,8 @@ export const intakeScanSearch = createServerFn({ method: "POST" })
 
     // 4) Fuzzy fallback on domestic tracking → 同样走集运流程
     const [o, f] = await Promise.all([
-      supabaseAdmin
-        .from("orders")
-        .select(ordCols)
-        .ilike("domestic_tracking_no", `%${code}%`)
-        .limit(5),
-      supabaseAdmin
-        .from("forwarding_orders")
-        .select(foCols)
-        .ilike("domestic_tracking_no", `%${code}%`)
-        .limit(5),
+      supabaseAdmin.from("orders").select(ordCols).ilike("domestic_tracking_no", `%${code}%`).limit(5),
+      supabaseAdmin.from("forwarding_orders").select(foCols).ilike("domestic_tracking_no", `%${code}%`).limit(5),
     ]);
     const pool: any[] = [
       ...((o.data ?? []) as any[]).map((x: any) => ({
@@ -629,25 +588,16 @@ export const intakeScanReceiveOrder = createServerFn({ method: "POST" })
       .from("waybills")
       .select("id, waybill_no, status, order_id, forwarding_id, shipping_method")
       .eq("order_id", data.orderId);
-    if (!wbs?.length)
-      throw new Error(`订单 ${(order as any).order_no} 暂无运单，无法直接收件。请先生成运单。`);
+    if (!wbs?.length) throw new Error(`订单 ${(order as any).order_no} 暂无运单，无法直接收件。请先生成运单。`);
 
-    const warehouseName: string | null =
-      (order as any).warehouse ?? (order as any).pickup_warehouse ?? null;
+    const warehouseName: string | null = (order as any).warehouse ?? (order as any).pickup_warehouse ?? null;
     const operatorName = await getOperatorName(supabaseAdmin, context.userId);
     const isStorage = (order as any).shipping_method === "storage";
     const newStatus = isStorage ? "storage" : "received";
     const ids = (wbs as any[]).map((w) => w.id);
     await supabaseAdmin.from("waybills").update({ status: newStatus }).in("id", ids);
     for (const w of wbs as any[]) {
-      await writeReceivedEvent(
-        supabaseAdmin,
-        w,
-        warehouseName,
-        operatorName,
-        context.userId,
-        isStorage,
-      );
+      await writeReceivedEvent(supabaseAdmin, w, warehouseName, operatorName, context.userId, isStorage);
     }
     await supabaseAdmin.from("admin_action_logs").insert({
       entity_type: "order",
@@ -746,11 +696,7 @@ async function writeReceivedEvent(
 }
 
 async function getOperatorName(supabaseAdmin: any, userId: string): Promise<string> {
-  const { data } = await supabaseAdmin
-    .from("profiles")
-    .select("full_name, email")
-    .eq("id", userId)
-    .maybeSingle();
+  const { data } = await supabaseAdmin.from("profiles").select("full_name, email").eq("id", userId).maybeSingle();
   return (data as any)?.full_name || (data as any)?.email || userId.slice(0, 8);
 }
 
@@ -786,14 +732,7 @@ export const intakeScanReceiveWaybill = createServerFn({ method: "POST" })
       .from("waybills")
       .update({ status: newStatus })
       .eq("id", (wb as any).id);
-    await writeReceivedEvent(
-      supabaseAdmin,
-      wb as any,
-      warehouseName,
-      operatorName,
-      context.userId,
-      isStorage,
-    );
+    await writeReceivedEvent(supabaseAdmin, wb as any, warehouseName, operatorName, context.userId, isStorage);
     return { ok: true, waybill: wb };
   });
 
@@ -801,12 +740,7 @@ export const intakeScanReceiveWaybill = createServerFn({ method: "POST" })
 export const intakeScanCommit = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (d: {
-      parentKind: "order" | "forwarding";
-      parentId: string;
-      boxCount: number;
-      weightPerBox?: number;
-    }) => d,
+    (d: { parentKind: "order" | "forwarding"; parentId: string; boxCount: number; weightPerBox?: number }) => d,
   )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
@@ -814,11 +748,7 @@ export const intakeScanCommit = createServerFn({ method: "POST" })
     const n = Math.max(1, Math.min(200, Math.floor(data.boxCount || 1)));
     const table = data.parentKind === "order" ? "orders" : "forwarding_orders";
     const fk = data.parentKind === "order" ? "order_id" : "forwarding_id";
-    const { data: parent } = await supabaseAdmin
-      .from(table)
-      .select("*")
-      .eq("id", data.parentId)
-      .maybeSingle();
+    const { data: parent } = await supabaseAdmin.from(table).select("*").eq("id", data.parentId).maybeSingle();
     if (!parent) throw new Error("Parent not found");
 
     const isStorage = parent.shipping_method === "storage";
@@ -829,21 +759,13 @@ export const intakeScanCommit = createServerFn({ method: "POST" })
       .select("id, waybill_no, status, order_id, forwarding_id, shipping_method")
       .eq(fk, data.parentId);
     if (existing && existing.length > 0) {
-      const warehouseName: string | null =
-        (parent as any).warehouse ?? (parent as any).pickup_warehouse ?? null;
+      const warehouseName: string | null = (parent as any).warehouse ?? (parent as any).pickup_warehouse ?? null;
       const operatorName = await getOperatorName(supabaseAdmin, context.userId);
       const newStatus = isStorage ? "storage" : "received";
       const ids = (existing as any[]).map((w) => w.id);
       await supabaseAdmin.from("waybills").update({ status: newStatus }).in("id", ids);
       for (const w of existing as any[]) {
-        await writeReceivedEvent(
-          supabaseAdmin,
-          w,
-          warehouseName,
-          operatorName,
-          context.userId,
-          isStorage,
-        );
+        await writeReceivedEvent(supabaseAdmin, w, warehouseName, operatorName, context.userId, isStorage);
       }
       await supabaseAdmin.from("admin_action_logs").insert({
         entity_type: data.parentKind,
@@ -949,8 +871,7 @@ export const intakeScanCommit = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
 
     // Tracking events: '运单已生成' + '仓库已收件' (+ '仓储中' when storage route) — all written immediately.
-    const warehouseName: string | null =
-      (parent as any).warehouse ?? (parent as any).pickup_warehouse ?? null;
+    const warehouseName: string | null = (parent as any).warehouse ?? (parent as any).pickup_warehouse ?? null;
     const operatorName = await getOperatorName(supabaseAdmin, context.userId);
     const wh = warehouseName || "集运仓";
     const now = new Date();
@@ -1023,9 +944,7 @@ export const intakeScanCommit = createServerFn({ method: "POST" })
 
     // mark parent status + intake_at
     const newParentStatus =
-      (parent as any).status === "pending" || (parent as any).status === "draft"
-        ? "received"
-        : (parent as any).status;
+      (parent as any).status === "pending" || (parent as any).status === "draft" ? "received" : (parent as any).status;
     if (data.parentKind === "forwarding") {
       await supabaseAdmin
         .from("forwarding_orders")
@@ -1037,10 +956,7 @@ export const intakeScanCommit = createServerFn({ method: "POST" })
         })
         .eq("id", data.parentId);
     } else {
-      await supabaseAdmin
-        .from("orders")
-        .update({ box_count: n, status: newParentStatus })
-        .eq("id", data.parentId);
+      await supabaseAdmin.from("orders").update({ box_count: n, status: newParentStatus }).eq("id", data.parentId);
     }
 
     // mark any detained entry as released
@@ -1116,28 +1032,19 @@ export const listDetained = createServerFn({ method: "POST" })
     const { data: rows, error, count } = await q.range((page - 1) * pageSize, page * pageSize - 1);
     if (error) throw new Error(error.message);
     const userIds = Array.from(
-      new Set(
-        (rows ?? [])
-          .flatMap((r: any) => [r.created_by, r.released_by])
-          .filter((v): v is string => !!v),
-      ),
+      new Set((rows ?? []).flatMap((r: any) => [r.created_by, r.released_by]).filter((v): v is string => !!v)),
     );
     const profs = userIds.length
-      ? ((await supabaseAdmin.from("profiles").select("id, full_name, email").in("id", userIds))
-          .data ?? [])
+      ? ((await supabaseAdmin.from("profiles").select("id, full_name, email").in("id", userIds)).data ?? [])
       : [];
     const pMap = new Map((profs as any[]).map((p) => [p.id, p]));
     const items = (rows ?? []).map((r: any) => ({
       ...r,
       created_by_name: r.created_by
-        ? pMap.get(r.created_by)?.full_name ||
-          pMap.get(r.created_by)?.email ||
-          r.created_by.slice(0, 8)
+        ? pMap.get(r.created_by)?.full_name || pMap.get(r.created_by)?.email || r.created_by.slice(0, 8)
         : null,
       released_by_name: r.released_by
-        ? pMap.get(r.released_by)?.full_name ||
-          pMap.get(r.released_by)?.email ||
-          r.released_by.slice(0, 8)
+        ? pMap.get(r.released_by)?.full_name || pMap.get(r.released_by)?.email || r.released_by.slice(0, 8)
         : null,
     }));
     return { items, total: count ?? 0, page, pageSize };
@@ -1162,10 +1069,7 @@ export const getWaybillsLabelData = createServerFn({ method: "POST" })
     const userIds = Array.from(new Set(wbs.map((w) => w.user_id).filter((v): v is string => !!v)));
     const [orders, fos, users] = await Promise.all([
       orderIds.length
-        ? supabaseAdmin
-            .from("orders")
-            .select("id, order_no, customer_code, user_id")
-            .in("id", orderIds)
+        ? supabaseAdmin.from("orders").select("id, order_no, customer_code, user_id").in("id", orderIds)
         : Promise.resolve({ data: [] as any[] }),
       foIds.length
         ? supabaseAdmin
@@ -1174,10 +1078,7 @@ export const getWaybillsLabelData = createServerFn({ method: "POST" })
             .in("id", foIds)
         : Promise.resolve({ data: [] as any[] }),
       userIds.length
-        ? supabaseAdmin
-            .from("profiles")
-            .select("id, full_name, phone, customer_code")
-            .in("id", userIds)
+        ? supabaseAdmin.from("profiles").select("id, full_name, phone, customer_code").in("id", userIds)
         : Promise.resolve({ data: [] as any[] }),
     ]);
     const oMap = new Map((orders.data ?? []).map((o: any) => [o.id, o]));
@@ -1195,11 +1096,7 @@ export const getWaybillsLabelData = createServerFn({ method: "POST" })
     }
 
     const items = wbs.map((w) => {
-      const parent: any = w.order_id
-        ? oMap.get(w.order_id)
-        : w.forwarding_id
-          ? fMap.get(w.forwarding_id)
-          : null;
+      const parent: any = w.order_id ? oMap.get(w.order_id) : w.forwarding_id ? fMap.get(w.forwarding_id) : null;
       const u = w.user_id ? uMap.get(w.user_id) : null;
       const a = w.user_id ? aMap.get(w.user_id) : null;
       return {
@@ -1314,18 +1211,10 @@ export async function computeWaybillFeesCad(admin: any, wb: any) {
     H = Number(wb.height_cm ?? 0);
   const divisor = Number(rule.volumetric_divisor) || 6000;
   const volW = divisor > 0 ? (L * W * H) / divisor : 0;
-  const chargeable =
-    rule.weight_mode === "actual"
-      ? w
-      : rule.weight_mode === "volumetric"
-        ? volW
-        : Math.max(w, volW);
+  const chargeable = rule.weight_mode === "actual" ? w : rule.weight_mode === "volumetric" ? volW : Math.max(w, volW);
   const unit_cad = Number(rule.unit_price_cad ?? 0) || Number(rule.unit_price_cny ?? 0) * fx;
   const min_level = String(rule.min_charge_level ?? "waybill");
-  const min_cad =
-    min_level === "batch"
-      ? 0
-      : Number(rule.min_charge_cad ?? 0) || Number(rule.min_charge_cny ?? 0) * fx;
+  const min_cad = min_level === "batch" ? 0 : Number(rule.min_charge_cad ?? 0) || Number(rule.min_charge_cny ?? 0) * fx;
   const clearance_cad = Number(rule.clearance_fee_cad ?? 0) || Number(rule.extra_fee_cny ?? 0) * fx;
   let freight_cad = +(chargeable * unit_cad).toFixed(2);
   if (freight_cad < min_cad) freight_cad = +min_cad.toFixed(2);
@@ -1340,8 +1229,7 @@ export async function computeWaybillFeesCad(admin: any, wb: any) {
     duty_cad = +(declared_cad * (Number(customs.rate_pct ?? 0) / 100)).toFixed(2);
   }
   const ins_rate = Number(rule.insurance_rate_pct ?? 0);
-  const insurance_cad =
-    declared_cad && ins_rate > 0 ? +(declared_cad * (ins_rate / 100)).toFixed(2) : 0;
+  const insurance_cad = declared_cad && ins_rate > 0 ? +(declared_cad * (ins_rate / 100)).toFixed(2) : 0;
   return {
     freight_cad,
     duty_cad,
@@ -1431,11 +1319,7 @@ async function childParityFor(admin: any, kind: "waybill" | "carton" | "pallet",
     return data ?? null;
   }
   // waybill: pull from parent order/forwarding
-  const { data: wb } = await admin
-    .from("waybills")
-    .select("order_id, forwarding_id")
-    .eq("id", id)
-    .maybeSingle();
+  const { data: wb } = await admin.from("waybills").select("order_id, forwarding_id").eq("id", id).maybeSingle();
   if (!wb) return null;
   if (wb.order_id) {
     const { data: o } = await admin
@@ -1476,13 +1360,7 @@ function assertParityMatch(container: any, child: any, childLabel: string) {
     const cv = (container as any)[k];
     const wv = (child as any)[k];
     // Only fail when BOTH sides are set and they differ. If either side is empty, allow (adoption).
-    const norm = (v: any) =>
-      String(v ?? "")
-        .trim()
-        .toUpperCase();
-    const cn = norm(cv),
-      wn = norm(wv);
-    if (cn && wn && cn !== wn) mismatches.push(`${label}(${wn} ≠ 容器 ${cn})`);
+    if (cv && wv && String(cv) !== String(wv)) mismatches.push(`${label}(${String(wv)} ≠ 容器 ${String(cv)})`);
   }
   if (mismatches.length) throw new Error(`${childLabel} 与容器不匹配: ${mismatches.join(", ")}`);
 }
@@ -1747,13 +1625,7 @@ export const measureSaveDims = createServerFn({ method: "POST" })
         tv += l * wd * h;
       }
       if (!complete || tw <= 0 || tv <= 0) continue;
-      const snap = await computeFreight(
-        supabaseAdmin,
-        fo.route_id,
-        tw,
-        tv,
-        fo.declared_value_cad ?? null,
-      );
+      const snap = await computeFreight(supabaseAdmin, fo.route_id, tw, tv, fo.declared_value_cad ?? null);
       if (!snap) continue;
       await supabaseAdmin
         .from("forwarding_orders")
@@ -1792,9 +1664,7 @@ export const measureSaveDims = createServerFn({ method: "POST" })
       if (!ord?.route_id) continue;
       const { data: wbs } = await supabaseAdmin
         .from("waybills")
-        .select(
-          "freight_cad, duty_cad, insurance_cad, clearance_cad, weight_kg, length_cm, width_cm, height_cm",
-        )
+        .select("freight_cad, duty_cad, insurance_cad, clearance_cad, weight_kg, length_cm, width_cm, height_cm")
         .eq("order_id", oid);
       let f = 0,
         du = 0,
@@ -1883,12 +1753,7 @@ type PalletParity = {
   destination_code?: string | null;
 };
 
-async function insertPallet(
-  supabaseAdmin: any,
-  userId: string,
-  p: PalletDraft,
-  parity: PalletParity,
-) {
+async function insertPallet(supabaseAdmin: any, userId: string, p: PalletDraft, parity: PalletParity) {
   const { computePalletSelfFreight, recomputeForwardingTotal } = await import("./orders.functions");
   const noteParts: string[] = [];
   if (parity.customer_code) noteParts.push(`客户 ${parity.customer_code}`);
@@ -1924,10 +1789,7 @@ async function insertPallet(
   if (error) throw new Error(error.message);
   const affectedForwardings = new Set<string>();
   if (p.waybillIds.length) {
-    const { data: wbInfo } = await supabaseAdmin
-      .from("waybills")
-      .select("forwarding_id")
-      .in("id", p.waybillIds);
+    const { data: wbInfo } = await supabaseAdmin.from("waybills").select("forwarding_id").in("id", p.waybillIds);
     (wbInfo ?? []).forEach((w: any) => {
       if (w.forwarding_id) affectedForwardings.add(w.forwarding_id);
     });
@@ -2028,13 +1890,7 @@ export const measureCreatePalletAssign = createServerFn({ method: "POST" })
       operator_name: operatorName,
       note: `量尺称重: 新建托盘 ${pal.pallet_no}，加入 ${data.waybillIds.length} 个运单`,
     });
-    await cascadePalletWaybillLogs(
-      supabaseAdmin,
-      pal,
-      data.waybillIds,
-      context.userId,
-      operatorName,
-    );
+    await cascadePalletWaybillLogs(supabaseAdmin, pal, data.waybillIds, context.userId, operatorName);
     return { ok: true, pallet: pal };
   });
 
@@ -2082,13 +1938,7 @@ export const measureCreatePalletsBatch = createServerFn({ method: "POST" })
         operator_name: operatorName,
         note: `量尺称重(批量): 新建托盘 ${pal.pallet_no}，加入 ${p.waybillIds.length} 个运单`,
       });
-      await cascadePalletWaybillLogs(
-        supabaseAdmin,
-        pal,
-        p.waybillIds,
-        context.userId,
-        operatorName,
-      );
+      await cascadePalletWaybillLogs(supabaseAdmin, pal, p.waybillIds, context.userId, operatorName);
     }
     if (!created.length) throw new Error("没有可创建的托盘 (运单分配为空)");
     return { ok: true, pallets: created };

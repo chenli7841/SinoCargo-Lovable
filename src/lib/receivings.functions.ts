@@ -242,9 +242,7 @@ export const getReceivingDetail = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: recv, error } = await supabaseAdmin
       .from("receivings")
-      .select(
-        "*, batches:batch_id(id, batch_no, planned_ship_date, shipping_method, status, destination_code)",
-      )
+      .select("*, batches:batch_id(id, batch_no, planned_ship_date, shipping_method, status, destination_code)")
       .eq("id", data.receivingId)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -264,10 +262,7 @@ export const getReceivingDetail = createServerFn({ method: "GET" })
           .from("waybills")
           .select("id, waybill_no, status, customer_code, carton_id, pallet_id")
           .eq("assigned_batch_id", recv.batch_id),
-        supabaseAdmin
-          .from("cartons")
-          .select("id, carton_no, pallet_id")
-          .eq("batch_id", recv.batch_id),
+        supabaseAdmin.from("cartons").select("id, carton_no, pallet_id").eq("batch_id", recv.batch_id),
         supabaseAdmin.from("pallets").select("id, pallet_no").eq("batch_id", recv.batch_id),
       ]);
       expected = { waybills: wbs ?? [], cartons: cs ?? [], pallets: ps ?? [] };
@@ -303,9 +298,7 @@ export const getReceivingDetail = createServerFn({ method: "GET" })
     const secondary = {
       inner_waybills: innerWaybills,
       inner_cartons: innerCartons,
-      pending_count:
-        innerWaybills.filter((x) => !x.scanned).length +
-        innerCartons.filter((x) => !x.scanned).length,
+      pending_count: innerWaybills.filter((x) => !x.scanned).length + innerCartons.filter((x) => !x.scanned).length,
       total_count: innerWaybills.length + innerCartons.length,
     };
 
@@ -408,18 +401,13 @@ export const confirmReceiving = createServerFn({ method: "POST" })
 export const updateReceiving = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (d: {
-      receivingId: string;
-      patch: { warehouse_code?: string | null; notes?: string | null; status?: string };
-    }) => d,
+    (d: { receivingId: string; patch: { warehouse_code?: string | null; notes?: string | null; status?: string } }) =>
+      d,
   )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("receivings")
-      .update(data.patch)
-      .eq("id", data.receivingId);
+    const { error } = await supabaseAdmin.from("receivings").update(data.patch).eq("id", data.receivingId);
     if (error) throw new Error(error.message);
     await recordAdminLog(supabaseAdmin, {
       entity_type: "receiving",

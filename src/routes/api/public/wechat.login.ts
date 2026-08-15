@@ -41,8 +41,7 @@ export const Route = createFileRoute("/api/public/wechat/login")({
         // Must match the 授权回调域 registered on open.weixin.qq.com, otherwise
         // WeChat responds with "redirect_uri 参数错误".
         const authorizedOrigin =
-          process.env.WECHAT_REDIRECT_ORIGIN?.replace(/\/$/, "") ||
-          "https://shopper.epluscanada.com";
+          process.env.WECHAT_REDIRECT_ORIGIN?.replace(/\/$/, "") || "https://shopper.epluscanada.com";
         void url;
         const redirectUri = `${authorizedOrigin}/api/public/wechat/callback`;
         const target =

@@ -13,10 +13,7 @@ export const listCategories = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin
-      .from("product_categories")
-      .select("*")
-      .order("sort_order");
+    const { data, error } = await supabaseAdmin.from("product_categories").select("*").order("sort_order");
     if (error) throw new Error(error.message);
     return { items: data ?? [] };
   });
@@ -49,11 +46,7 @@ export const deleteCategory = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("product_categories")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("product_categories").select("*").eq("id", data.id).maybeSingle();
     const { error } = await supabaseAdmin.from("product_categories").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     await recordAdminLog(supabaseAdmin, {
@@ -104,16 +97,8 @@ export const getProduct = createServerFn({ method: "POST" })
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [{ data: product }, { data: variants }] = await Promise.all([
-      supabaseAdmin
-        .from("products")
-        .select("*, category:product_categories(id,name)")
-        .eq("id", data.id)
-        .maybeSingle(),
-      supabaseAdmin
-        .from("product_variants")
-        .select("*")
-        .eq("product_id", data.id)
-        .order("created_at"),
+      supabaseAdmin.from("products").select("*, category:product_categories(id,name)").eq("id", data.id).maybeSingle(),
+      supabaseAdmin.from("product_variants").select("*").eq("product_id", data.id).order("created_at"),
     ]);
     if (!product) throw new Error("Not found");
     const variantIds = (variants ?? []).map((v: any) => v.id);
@@ -134,8 +119,7 @@ export const saveProduct = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { id, variants, category, total_stock, sold_count, created_at, updated_at, ...rest } =
-      data;
+    const { id, variants, category, total_stock, sold_count, created_at, updated_at, ...rest } = data;
     // strip joined / computed fields that are not real columns on products
     void category;
     void total_stock;
@@ -143,26 +127,18 @@ export const saveProduct = createServerFn({ method: "POST" })
     void created_at;
     void updated_at;
     if (rest.is_featured) {
-      let countQ = supabaseAdmin
-        .from("products")
-        .select("id", { count: "exact", head: true })
-        .eq("is_featured", true);
+      let countQ = supabaseAdmin.from("products").select("id", { count: "exact", head: true }).eq("is_featured", true);
       if (id) countQ = countQ.neq("id", id);
       const { count, error: countErr } = await countQ;
       if (countErr) throw new Error(countErr.message);
-      if ((count ?? 0) >= 12)
-        throw new Error("本周精选最多只能选择 12 个商品，请先取消其他商品的精选");
+      if ((count ?? 0) >= 12) throw new Error("本周精选最多只能选择 12 个商品，请先取消其他商品的精选");
     }
     let pid = id;
     if (id) {
       const { error } = await supabaseAdmin.from("products").update(rest).eq("id", id);
       if (error) throw new Error(error.message);
     } else {
-      const { data: inserted, error } = await supabaseAdmin
-        .from("products")
-        .insert(rest)
-        .select("id")
-        .single();
+      const { data: inserted, error } = await supabaseAdmin.from("products").insert(rest).select("id").single();
       if (error) throw new Error(error.message);
       pid = inserted!.id;
     }
@@ -200,10 +176,7 @@ export const setProductStatus = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("products")
-      .update({ status: data.status })
-      .in("id", data.ids);
+    const { error } = await supabaseAdmin.from("products").update({ status: data.status }).in("id", data.ids);
     if (error) throw new Error(error.message);
     await Promise.all(
       data.ids.map((pid) =>
@@ -224,13 +197,7 @@ export const setProductStatus = createServerFn({ method: "POST" })
 export const adjustStock = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (d: {
-      variant_id: string;
-      warehouse_id: string;
-      qty_delta: number;
-      reason: string;
-      note?: string;
-    }) => d,
+    (d: { variant_id: string; warehouse_id: string; qty_delta: number; reason: string; note?: string }) => d,
   )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
@@ -259,9 +226,7 @@ export const adjustStock = createServerFn({ method: "POST" })
 
 export const listInventoryMovements = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
-    (d: { page?: number; pageSize?: number; variant_id?: string; warehouse_id?: string } = {}) => d,
-  )
+  .inputValidator((d: { page?: number; pageSize?: number; variant_id?: string; warehouse_id?: string } = {}) => d)
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -269,10 +234,9 @@ export const listInventoryMovements = createServerFn({ method: "POST" })
     const pageSize = Math.min(100, data.pageSize ?? 30);
     let q = supabaseAdmin
       .from("inventory_movements")
-      .select(
-        "*, variant:product_variants(sku, product:products(name)), warehouse:warehouses(code, name_zh)",
-        { count: "exact" },
-      )
+      .select("*, variant:product_variants(sku, product:products(name)), warehouse:warehouses(code, name_zh)", {
+        count: "exact",
+      })
       .order("created_at", { ascending: false });
     if (data.variant_id) q = q.eq("variant_id", data.variant_id);
     if (data.warehouse_id) q = q.eq("warehouse_id", data.warehouse_id);
@@ -323,12 +287,8 @@ export const listShopOrders = createServerFn({ method: "POST" })
     const orderIds = (rows ?? []).map((r: any) => r.id);
     const wbCountMap: Record<string, number> = {};
     if (orderIds.length) {
-      const { data: wbs } = await supabaseAdmin
-        .from("waybills")
-        .select("order_id")
-        .in("order_id", orderIds);
-      for (const w of (wbs ?? []) as any[])
-        if (w.order_id) wbCountMap[w.order_id] = (wbCountMap[w.order_id] ?? 0) + 1;
+      const { data: wbs } = await supabaseAdmin.from("waybills").select("order_id").in("order_id", orderIds);
+      for (const w of (wbs ?? []) as any[]) if (w.order_id) wbCountMap[w.order_id] = (wbCountMap[w.order_id] ?? 0) + 1;
     }
     const items = (rows ?? []).map((r: any) => ({
       ...r,
@@ -347,11 +307,7 @@ export const getShopOrder = createServerFn({ method: "POST" })
     const [orderR, itemsR, refundsR, waybillsR] = await Promise.all([
       supabaseAdmin.from("orders").select("*").eq("id", data.id).maybeSingle(),
       supabaseAdmin.from("order_items").select("*").eq("order_id", data.id),
-      supabaseAdmin
-        .from("shop_refunds")
-        .select("*")
-        .eq("order_id", data.id)
-        .order("created_at", { ascending: false }),
+      supabaseAdmin.from("shop_refunds").select("*").eq("order_id", data.id).order("created_at", { ascending: false }),
       supabaseAdmin
         .from("waybills")
         .select("id, waybill_no, status, payment_status, assigned_batch_id, batch_no")
@@ -427,10 +383,7 @@ export const listCoupons = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin
-      .from("coupons")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data, error } = await supabaseAdmin.from("coupons").select("*").order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
     return { items: data ?? [] };
   });
@@ -463,11 +416,7 @@ export const deleteCoupon = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("coupons")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("coupons").select("*").eq("id", data.id).maybeSingle();
     await supabaseAdmin.from("coupons").delete().eq("id", data.id);
     await recordAdminLog(supabaseAdmin, {
       entity_type: "shop_coupon",
@@ -518,11 +467,7 @@ export const deleteBanner = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("cms_banners")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("cms_banners").select("*").eq("id", data.id).maybeSingle();
     await supabaseAdmin.from("cms_banners").delete().eq("id", data.id);
     await recordAdminLog(supabaseAdmin, {
       entity_type: "shop_banner",
@@ -555,8 +500,7 @@ export const saveArticle = createServerFn({ method: "POST" })
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { id, ...rest } = data;
-    if (rest.status === "published" && !rest.published_at)
-      rest.published_at = new Date().toISOString();
+    if (rest.status === "published" && !rest.published_at) rest.published_at = new Date().toISOString();
     const op = id
       ? supabaseAdmin.from("cms_articles").update(rest).eq("id", id)
       : supabaseAdmin
@@ -582,11 +526,7 @@ export const deleteArticle = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("cms_articles")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("cms_articles").select("*").eq("id", data.id).maybeSingle();
     await supabaseAdmin.from("cms_articles").delete().eq("id", data.id);
     await recordAdminLog(supabaseAdmin, {
       entity_type: "shop_article",
@@ -610,53 +550,33 @@ export const getShopDashboard = createServerFn({ method: "GET" })
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
 
     const shopOrders = (q: any) => q.eq("source", "shop");
-    const [todayOrdersR, todaySalesR, monthSalesR, pendingShipR, lowStockR, productsR] =
-      await Promise.all([
-        shopOrders(
-          supabaseAdmin
-            .from("orders")
-            .select("id", { count: "exact", head: true })
-            .gte("created_at", todayISO),
-        ),
-        shopOrders(
-          supabaseAdmin
-            .from("orders")
-            .select("total_cny")
-            .gte("paid_at", todayISO)
-            .in("status", ["paid", "shipped", "delivered"] as any),
-        ),
-        shopOrders(
-          supabaseAdmin
-            .from("orders")
-            .select("total_cny")
-            .gte("paid_at", monthStart)
-            .in("status", ["paid", "shipped", "delivered"] as any),
-        ),
-        shopOrders(
-          supabaseAdmin
-            .from("orders")
-            .select("id", { count: "exact", head: true })
-            .eq("status", "paid"),
-        ),
+    const [todayOrdersR, todaySalesR, monthSalesR, pendingShipR, lowStockR, productsR] = await Promise.all([
+      shopOrders(supabaseAdmin.from("orders").select("id", { count: "exact", head: true }).gte("created_at", todayISO)),
+      shopOrders(
         supabaseAdmin
-          .from("product_variants")
-          .select("id, sku, stock, product:products(name)")
-          .lt("stock", 10)
-          .order("stock")
-          .limit(10),
+          .from("orders")
+          .select("total_cny")
+          .gte("paid_at", todayISO)
+          .in("status", ["paid", "shipped", "delivered"] as any),
+      ),
+      shopOrders(
         supabaseAdmin
-          .from("products")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "active"),
-      ]);
-    const todaySales = (todaySalesR.data ?? []).reduce(
-      (s: number, r: any) => s + Number(r.total_cny || 0),
-      0,
-    );
-    const monthSales = (monthSalesR.data ?? []).reduce(
-      (s: number, r: any) => s + Number(r.total_cny || 0),
-      0,
-    );
+          .from("orders")
+          .select("total_cny")
+          .gte("paid_at", monthStart)
+          .in("status", ["paid", "shipped", "delivered"] as any),
+      ),
+      shopOrders(supabaseAdmin.from("orders").select("id", { count: "exact", head: true }).eq("status", "paid")),
+      supabaseAdmin
+        .from("product_variants")
+        .select("id, sku, stock, product:products(name)")
+        .lt("stock", 10)
+        .order("stock")
+        .limit(10),
+      supabaseAdmin.from("products").select("id", { count: "exact", head: true }).eq("status", "active"),
+    ]);
+    const todaySales = (todaySalesR.data ?? []).reduce((s: number, r: any) => s + Number(r.total_cny || 0), 0);
+    const monthSales = (monthSalesR.data ?? []).reduce((s: number, r: any) => s + Number(r.total_cny || 0), 0);
 
     return {
       kpi: {

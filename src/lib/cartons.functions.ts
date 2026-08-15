@@ -8,11 +8,7 @@ async function assertStaff(supabase: any, userId: string) {
 }
 
 async function getOperatorName(admin: any, userId: string): Promise<string> {
-  const { data } = await admin
-    .from("profiles")
-    .select("full_name, email")
-    .eq("id", userId)
-    .maybeSingle();
+  const { data } = await admin.from("profiles").select("full_name, email").eq("id", userId).maybeSingle();
   return data?.full_name || data?.email || userId;
 }
 
@@ -94,11 +90,7 @@ async function logAssign(
     // Cascade to parent order/forwarding when child is a waybill
     if (opts.childKind === "waybill") {
       if (r.order_id) {
-        const { data: o } = await admin
-          .from("orders")
-          .select("order_no")
-          .eq("id", r.order_id)
-          .maybeSingle();
+        const { data: o } = await admin.from("orders").select("order_no").eq("id", r.order_id).maybeSingle();
         inserts.push({
           entity_type: "order",
           entity_id: r.order_id,
@@ -132,23 +124,10 @@ async function logAssign(
   if (inserts.length) await admin.from("admin_action_logs").insert(inserts);
 }
 
-async function aggregatePayment(
-  admin: any,
-  kind: "carton" | "pallet" | "batch",
-  id: string,
-): Promise<string> {
+async function aggregatePayment(admin: any, kind: "carton" | "pallet" | "batch", id: string): Promise<string> {
   const fn =
-    kind === "carton"
-      ? "carton_payment_status"
-      : kind === "pallet"
-        ? "pallet_payment_status"
-        : "batch_payment_status";
-  const params =
-    kind === "carton"
-      ? { _carton_id: id }
-      : kind === "pallet"
-        ? { _pallet_id: id }
-        : { _batch_id: id };
+    kind === "carton" ? "carton_payment_status" : kind === "pallet" ? "pallet_payment_status" : "batch_payment_status";
+  const params = kind === "carton" ? { _carton_id: id } : kind === "pallet" ? { _pallet_id: id } : { _batch_id: id };
   const { data } = await admin.rpc(fn, params);
   return (data as string) ?? "empty";
 }
@@ -184,31 +163,18 @@ async function computeSelfFreightCad(
   const volCm3 = Math.max(0, volumeM3 || 0) * 1_000_000;
   const divisor = Number(rule.volumetric_divisor) || 6000;
   const volW = volCm3 / divisor;
-  const chargeable =
-    rule.weight_mode === "actual"
-      ? w
-      : rule.weight_mode === "volumetric"
-        ? volW
-        : Math.max(w, volW);
+  const chargeable = rule.weight_mode === "actual" ? w : rule.weight_mode === "volumetric" ? volW : Math.max(w, volW);
   const fx = await getFxCadPerCny(admin);
   const unit_cad = Number(rule.unit_price_cad ?? 0) || Number(rule.unit_price_cny ?? 0) * fx;
   const min_level = String(rule.min_charge_level ?? "waybill");
-  const min_cad =
-    min_level === "batch"
-      ? 0
-      : Number(rule.min_charge_cad ?? 0) || Number(rule.min_charge_cny ?? 0) * fx;
+  const min_cad = min_level === "batch" ? 0 : Number(rule.min_charge_cad ?? 0) || Number(rule.min_charge_cny ?? 0) * fx;
   let freight = chargeable * unit_cad;
   if (freight < min_cad) freight = min_cad;
   return +freight.toFixed(2);
 }
 
 // When updating self dims/weight on a carton/pallet, derive volume & freight (CAD) automatically.
-async function applySelfDerivations(
-  admin: any,
-  table: "cartons" | "pallets",
-  id: string,
-  patch: any,
-) {
+async function applySelfDerivations(admin: any, table: "cartons" | "pallets", id: string, patch: any) {
   const dimKeys = ["self_length_cm", "self_width_cm", "self_height_cm", "self_weight_kg"];
   const touched = dimKeys.some((k) => k in patch);
   if (!touched) return patch;
@@ -234,11 +200,7 @@ async function sumSurcharges(
   id: string,
 ): Promise<number> {
   const col = `${scope}_id`;
-  const { data } = await admin
-    .from("surcharges")
-    .select("amount_cny")
-    .eq("scope", scope)
-    .eq(col, id);
+  const { data } = await admin.from("surcharges").select("amount_cny").eq("scope", scope).eq(col, id);
   const fx = await getFxCadPerCny(admin);
   return (data ?? []).reduce((s: number, r: any) => {
     const cad = Number(r.amount_cad ?? 0);
@@ -249,11 +211,7 @@ async function sumSurcharges(
 
 async function sumSurchargesForWaybills(admin: any, wbIds: string[]): Promise<number> {
   if (!wbIds.length) return 0;
-  const { data } = await admin
-    .from("surcharges")
-    .select("amount_cny")
-    .eq("scope", "waybill")
-    .in("waybill_id", wbIds);
+  const { data } = await admin.from("surcharges").select("amount_cny").eq("scope", "waybill").in("waybill_id", wbIds);
   const fx = await getFxCadPerCny(admin);
   return (data ?? []).reduce((s: number, r: any) => {
     const cad = Number(r.amount_cad ?? 0);
@@ -262,12 +220,7 @@ async function sumSurchargesForWaybills(admin: any, wbIds: string[]): Promise<nu
   }, 0);
 }
 
-async function computeChargeable(
-  admin: any,
-  routeId: string | null | undefined,
-  weightKg: number,
-  volumeM3: number,
-) {
+async function computeChargeable(admin: any, routeId: string | null | undefined, weightKg: number, volumeM3: number) {
   let divisor = 6000;
   let mode: string = "greater";
   if (routeId) {
@@ -320,22 +273,8 @@ function composeCad(
   hasCustomer: boolean,
   lastMileCad: number,
 ) {
-  const with_customer_total_cad = +(
-    selfCad +
-    ccCad +
-    ciCad +
-    surSelfCad +
-    surChildCad +
-    lastMileCad
-  ).toFixed(2);
-  const without_customer_total_cad = +(
-    cfCad +
-    ccCad +
-    ciCad +
-    clrCad +
-    surChildCad +
-    lastMileCad
-  ).toFixed(2);
+  const with_customer_total_cad = +(selfCad + ccCad + ciCad + surSelfCad + surChildCad + lastMileCad).toFixed(2);
+  const without_customer_total_cad = +(cfCad + ccCad + ciCad + clrCad + surChildCad + lastMileCad).toFixed(2);
   return {
     // legacy CNY 字段保留为 0 (系统已切换到 CAD)
     self_freight_cny: 0,
@@ -422,20 +361,9 @@ async function feeTotalsForCarton(admin: any, row: any) {
       Number(row.self_weight_kg ?? 0),
       Number(row.self_volume_m3 ?? 0),
     );
-    if (selfFreightCad > 0)
-      await admin.from("cartons").update({ self_freight_cad: selfFreightCad }).eq("id", row.id);
+    if (selfFreightCad > 0) await admin.from("cartons").update({ self_freight_cad: selfFreightCad }).eq("id", row.id);
   }
-  const composed = composeCad(
-    selfFreightCad,
-    cf,
-    cc,
-    ci,
-    clr,
-    selfSurcharge,
-    childSurcharge,
-    hasCustomer,
-    lastMileCad,
-  );
+  const composed = composeCad(selfFreightCad, cf, cc, ci, clr, selfSurcharge, childSurcharge, hasCustomer, lastMileCad);
   const fx = await getFxCadPerCny(admin);
   return {
     ...composed,
@@ -548,8 +476,7 @@ async function feeTotalsForPallet(admin: any, row: any) {
       Number(row.self_weight_kg ?? 0),
       Number(row.self_volume_m3 ?? 0),
     );
-    if (selfFreightCad > 0)
-      await admin.from("pallets").update({ self_freight_cad: selfFreightCad }).eq("id", row.id);
+    if (selfFreightCad > 0) await admin.from("pallets").update({ self_freight_cad: selfFreightCad }).eq("id", row.id);
   }
   // 托盘 A/B 总费用（用户明确规则）：
   //   A = 自身运费 + Σ下属运费(采用方案) + Σ关税 + Σ保险 + 附加费(自身+下属) + 末端派送费
@@ -563,9 +490,7 @@ async function feeTotalsForPallet(admin: any, row: any) {
     childSurcharge +
     lastMileCad
   ).toFixed(2);
-  const without_customer_total_cad = +(cfB + cc + ci + clr + childSurcharge + lastMileCad).toFixed(
-    2,
-  );
+  const without_customer_total_cad = +(cfB + cc + ci + clr + childSurcharge + lastMileCad).toFixed(2);
   const composed = composeCad(
     selfFreightCad,
     cfB,
@@ -666,16 +591,10 @@ export const listCartons = createServerFn({ method: "POST" })
     let batchIdsFromSearch: string[] | null = null;
     if (data.search?.trim()) {
       const s = data.search.trim();
-      const { data: bs } = await supabaseAdmin
-        .from("batches")
-        .select("id")
-        .ilike("batch_no", `%${s}%`);
+      const { data: bs } = await supabaseAdmin.from("batches").select("id").ilike("batch_no", `%${s}%`);
       batchIdsFromSearch = (bs ?? []).map((b: any) => b.id);
     }
-    let q = supabaseAdmin
-      .from("cartons")
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false });
+    let q = supabaseAdmin.from("cartons").select("*", { count: "exact" }).order("created_at", { ascending: false });
     if (data.search?.trim()) {
       const s = data.search.trim();
       const parts = [
@@ -684,8 +603,7 @@ export const listCartons = createServerFn({ method: "POST" })
         `route_code.ilike.%${s}%`,
         `destination_code.ilike.%${s}%`,
       ];
-      if (batchIdsFromSearch && batchIdsFromSearch.length)
-        parts.push(`batch_id.in.(${batchIdsFromSearch.join(",")})`);
+      if (batchIdsFromSearch && batchIdsFromSearch.length) parts.push(`batch_id.in.(${batchIdsFromSearch.join(",")})`);
       q = q.or(parts.join(","));
     }
     if (data.status && data.status !== "all") q = q.eq("status", data.status);
@@ -698,9 +616,7 @@ export const listCartons = createServerFn({ method: "POST" })
     const { data: rows, error, count } = await q.range((page - 1) * pageSize, page * pageSize - 1);
     if (error) throw new Error(error.message);
     const ids = (rows ?? []).map((r: any) => r.id);
-    const palletIds = Array.from(
-      new Set((rows ?? []).map((r: any) => r.pallet_id).filter(Boolean)),
-    );
+    const palletIds = Array.from(new Set((rows ?? []).map((r: any) => r.pallet_id).filter(Boolean)));
     const batchIds = Array.from(new Set((rows ?? []).map((r: any) => r.batch_id).filter(Boolean)));
     const [pallets, batches, payments, fees] = await Promise.all([
       palletIds.length
@@ -738,10 +654,7 @@ export const getCartonDetail = createServerFn({ method: "POST" })
           "id, waybill_no, status, payment_status, weight_kg, length_cm, width_cm, height_cm, freight_cad, duty_cad, insurance_cad, clearance_cad, order_id, forwarding_id",
         )
         .eq("carton_id", data.id),
-      supabaseAdmin
-        .from("orders")
-        .select("id, order_no, customer_code, total_cny")
-        .eq("carton_id", data.id),
+      supabaseAdmin.from("orders").select("id, order_no, customer_code, total_cny").eq("carton_id", data.id),
       supabaseAdmin
         .from("forwarding_orders")
         .select("id, request_no, tracking_no, customer_code, fee_cny")
@@ -792,10 +705,7 @@ export const getCartonDetail = createServerFn({ method: "POST" })
         .eq("scope", "waybill")
         .in("waybill_id", wbIds);
       for (const s of (ss ?? []) as any[])
-        surchargeMap.set(
-          s.waybill_id,
-          (surchargeMap.get(s.waybill_id) ?? 0) + Number(s.amount_cny ?? 0),
-        );
+        surchargeMap.set(s.waybill_id, (surchargeMap.get(s.waybill_id) ?? 0) + Number(s.amount_cny ?? 0));
     }
     const fx = (fees as any).fx_rate ?? 1;
     const waybillsEnriched = wbList.map((x) => {
@@ -842,10 +752,7 @@ export const createCarton = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const nz = (v: any) => {
-      const t = typeof v === "string" ? v.trim() : v;
-      return t === "" || t === undefined ? null : t;
-    };
+    const nz = (v: any) => (v === "" || v === undefined ? null : v);
     const { data: ins, error } = await supabaseAdmin
       .from("cartons")
       .insert({
@@ -881,11 +788,7 @@ export const createCarton = createServerFn({ method: "POST" })
 async function assertContainerEditable(admin: any, table: "cartons" | "pallets", row: any) {
   if (!row?.batch_id) return;
   if (row.unlocked) return;
-  const { data: b } = await admin
-    .from("batches")
-    .select("status")
-    .eq("id", row.batch_id)
-    .maybeSingle();
+  const { data: b } = await admin.from("batches").select("status").eq("id", row.batch_id).maybeSingle();
   const status = (b as any)?.status;
   if (status && status !== "draft") {
     throw new Error(`所属批次为 ${status}（非草稿），请先在详情页 "人工解锁" 后再编辑`);
@@ -898,11 +801,7 @@ export const updateCarton = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("cartons")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("cartons").select("*").eq("id", data.id).maybeSingle();
     await assertContainerEditable(supabaseAdmin, "cartons", before);
     const patch = await applySelfDerivations(supabaseAdmin, "cartons", data.id, data.patch ?? {});
     const { error } = await supabaseAdmin.from("cartons").update(patch).eq("id", data.id);
@@ -957,11 +856,7 @@ export const deleteCarton = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("cartons")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("cartons").select("*").eq("id", data.id).maybeSingle();
     const { error } = await supabaseAdmin.from("cartons").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     const operator_name = await getOperatorName(supabaseAdmin, context.userId);
@@ -997,8 +892,6 @@ function addressKey(a: any): string | null {
 // carton's, when the carton already has those set. The address check only kicks in
 // once the carton has a customer_code — a carton with no customer bound yet (a
 // deliberately mixed carton) accepts anything, per the existing customer_code gate.
-// Comparisons are trim+uppercase normalized so whitespace/case differences alone
-// don't trigger a false mismatch.
 function mismatchReason(
   carton: any,
   ctx: {
@@ -1010,22 +903,18 @@ function mismatchReason(
   },
   no: string,
 ) {
-  const n = (v: any) =>
-    String(v ?? "")
-      .trim()
-      .toUpperCase();
-  const ne = (a: any, b: any) => !!n(a) && !!n(b) && n(a) !== n(b);
-  if (ne(carton.route_code, ctx.route_code))
+  if (carton.route_code && ctx.route_code && carton.route_code !== ctx.route_code)
     return `${no}: 线路不匹配（箱号要求 ${carton.route_code}，单为 ${ctx.route_code}）`;
-  if (ne(carton.customer_code, ctx.customer_code))
+  if (carton.customer_code && ctx.customer_code && carton.customer_code !== ctx.customer_code)
     return `${no}: 客户号不匹配（箱号要求 ${carton.customer_code}）`;
-  if (ne(carton.pickup_warehouse, ctx.pickup_warehouse)) return `${no}: 取货点不匹配`;
-  if (ne(carton.destination_code, ctx.destination_code)) return `${no}: 目的地不匹配`;
+  if (carton.pickup_warehouse && ctx.pickup_warehouse && carton.pickup_warehouse !== ctx.pickup_warehouse)
+    return `${no}: 取货点不匹配`;
+  if (carton.destination_code && ctx.destination_code && carton.destination_code !== ctx.destination_code)
+    return `${no}: 目的地不匹配`;
   if (carton.customer_code) {
     const cartonKey = addressKey(carton.address_snapshot);
     const itemKey = addressKey(ctx.address);
-    if (cartonKey && itemKey && cartonKey !== itemKey)
-      return `${no}: 收货地址与箱号内其他运单不一致，无法加入同一箱`;
+    if (cartonKey && itemKey && cartonKey !== itemKey) return `${no}: 收货地址与箱号内其他运单不一致，无法加入同一箱`;
   }
   return null;
 }
@@ -1046,11 +935,7 @@ export const assignToCarton = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     let carton: any = null;
     if (data.cartonId) {
-      const { data: c } = await supabaseAdmin
-        .from("cartons")
-        .select("*")
-        .eq("id", data.cartonId)
-        .maybeSingle();
+      const { data: c } = await supabaseAdmin.from("cartons").select("*").eq("id", data.cartonId).maybeSingle();
       carton = c;
     }
     // Gathered up front so we can both validate against the carton AND (when the
@@ -1084,9 +969,7 @@ export const assignToCarton = createServerFn({ method: "POST" })
       if (data.orderIds?.length) {
         const { data: rows } = await supabaseAdmin
           .from("orders")
-          .select(
-            "id, order_no, route_code, customer_code, user_id, address_snapshot, destination_code",
-          )
+          .select("id, order_no, route_code, customer_code, user_id, address_snapshot, destination_code")
           .in("id", data.orderIds);
         os = rows ?? [];
       }
@@ -1094,9 +977,7 @@ export const assignToCarton = createServerFn({ method: "POST" })
       if (data.forwardingIds?.length) {
         const { data: rows } = await supabaseAdmin
           .from("forwarding_orders")
-          .select(
-            "id, request_no, route_code, customer_code, user_id, address_id, destination_code, warehouse",
-          )
+          .select("id, request_no, route_code, customer_code, user_id, address_id, destination_code, warehouse")
           .in("id", data.forwardingIds);
         fs = rows ?? [];
         for (const f of fs) if (f.address_id) addrIds.push(f.address_id);
@@ -1110,12 +991,7 @@ export const assignToCarton = createServerFn({ method: "POST" })
         for (const a of addrs ?? []) addrMap.set(a.id, a);
       }
 
-      const noteLock = (
-        customer_code: string | null,
-        customer_user_id: string | null,
-        address: any,
-        no: string,
-      ) => {
+      const noteLock = (customer_code: string | null, customer_user_id: string | null, address: any, no: string) => {
         if (carton.customer_code) return; // carton already bound — nothing to lock in
         if (!customer_code || !address) return; // can't lock onto an item with no resolvable customer/address
         if (!lockCandidate) {
@@ -1131,8 +1007,7 @@ export const assignToCarton = createServerFn({ method: "POST" })
 
       for (const w of wbs) {
         const parent: any = (w as any).orders ?? (w as any).forwarding_orders ?? {};
-        const address =
-          parent.address_snapshot ?? (parent.address_id ? addrMap.get(parent.address_id) : null);
+        const address = parent.address_snapshot ?? (parent.address_id ? addrMap.get(parent.address_id) : null);
         const reason = mismatchReason(
           carton,
           {
@@ -1200,10 +1075,7 @@ export const assignToCarton = createServerFn({ method: "POST" })
       });
     }
     if (data.orderIds?.length) {
-      const { error } = await supabaseAdmin
-        .from("orders")
-        .update({ carton_id: data.cartonId })
-        .in("id", data.orderIds);
+      const { error } = await supabaseAdmin.from("orders").update({ carton_id: data.cartonId }).in("id", data.orderIds);
       if (error) throw new Error(error.message);
       await logAssign(supabaseAdmin, { ...logCtx, childKind: "order", childIds: data.orderIds });
     }
@@ -1258,16 +1130,10 @@ export const listPallets = createServerFn({ method: "POST" })
     let batchIdsFromSearch: string[] | null = null;
     if (data.search?.trim()) {
       const s = data.search.trim();
-      const { data: bs } = await supabaseAdmin
-        .from("batches")
-        .select("id")
-        .ilike("batch_no", `%${s}%`);
+      const { data: bs } = await supabaseAdmin.from("batches").select("id").ilike("batch_no", `%${s}%`);
       batchIdsFromSearch = (bs ?? []).map((b: any) => b.id);
     }
-    let q = supabaseAdmin
-      .from("pallets")
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false });
+    let q = supabaseAdmin.from("pallets").select("*", { count: "exact" }).order("created_at", { ascending: false });
     if (data.search?.trim()) {
       const s = data.search.trim();
       const parts = [
@@ -1276,8 +1142,7 @@ export const listPallets = createServerFn({ method: "POST" })
         `route_code.ilike.%${s}%`,
         `destination_code.ilike.%${s}%`,
       ];
-      if (batchIdsFromSearch && batchIdsFromSearch.length)
-        parts.push(`batch_id.in.(${batchIdsFromSearch.join(",")})`);
+      if (batchIdsFromSearch && batchIdsFromSearch.length) parts.push(`batch_id.in.(${batchIdsFromSearch.join(",")})`);
       q = q.or(parts.join(","));
     }
     if (data.status && data.status !== "all") q = q.eq("status", data.status);
@@ -1366,10 +1231,7 @@ export const getPalletDetail = createServerFn({ method: "POST" })
         .eq("scope", "waybill")
         .in("waybill_id", wbIds);
       for (const s of (ss ?? []) as any[])
-        surchargeMap.set(
-          s.waybill_id,
-          (surchargeMap.get(s.waybill_id) ?? 0) + Number(s.amount_cny ?? 0),
-        );
+        surchargeMap.set(s.waybill_id, (surchargeMap.get(s.waybill_id) ?? 0) + Number(s.amount_cny ?? 0));
     }
     const fx = (fees as any).fx_rate ?? 1;
     const waybillsEnriched = wbList.map((x) => {
@@ -1382,12 +1244,8 @@ export const getPalletDetail = createServerFn({ method: "POST" })
     });
     // 计算每个下属箱号的费用（供 CartonCompactList 使用）
     const cartonRows = (c.data ?? []) as any[];
-    const cartonFees = await Promise.all(
-      cartonRows.map((cr) => feeTotalsForCarton(supabaseAdmin, cr)),
-    );
-    const cartonPayments = await Promise.all(
-      cartonRows.map((cr) => aggregatePayment(supabaseAdmin, "carton", cr.id)),
-    );
+    const cartonFees = await Promise.all(cartonRows.map((cr) => feeTotalsForCarton(supabaseAdmin, cr)));
+    const cartonPayments = await Promise.all(cartonRows.map((cr) => aggregatePayment(supabaseAdmin, "carton", cr.id)));
     const cartonsEnriched = cartonRows.map((cr, i) => ({
       ...cr,
       payment_status: cartonPayments[i],
@@ -1428,10 +1286,7 @@ export const createPallet = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const nz = (v: any) => {
-      const t = typeof v === "string" ? v.trim() : v;
-      return t === "" || t === undefined ? null : t;
-    };
+    const nz = (v: any) => (v === "" || v === undefined ? null : v);
     const { data: ins, error } = await supabaseAdmin
       .from("pallets")
       .insert({
@@ -1469,11 +1324,7 @@ export const updatePallet = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("pallets")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("pallets").select("*").eq("id", data.id).maybeSingle();
     await assertContainerEditable(supabaseAdmin, "pallets", before);
     const patch = await applySelfDerivations(supabaseAdmin, "pallets", data.id, data.patch ?? {});
     const { error } = await supabaseAdmin.from("pallets").update(patch).eq("id", data.id);
@@ -1499,11 +1350,7 @@ export const deletePallet = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("pallets")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("pallets").select("*").eq("id", data.id).maybeSingle();
     const { error } = await supabaseAdmin.from("pallets").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     const operator_name = await getOperatorName(supabaseAdmin, context.userId);
@@ -1526,35 +1373,19 @@ export const splitPallet = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("pallets")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("pallets").select("*").eq("id", data.id).maybeSingle();
     if (!before) throw new Error("托盘不存在");
     const batchId = (before as any).batch_id ?? null;
     // 保留 batch_id：将子箱号/直挂运单从托盘下解绑，但保持其所属批次
-    const { data: cs } = await supabaseAdmin
-      .from("cartons")
-      .select("id, carton_no")
-      .eq("pallet_id", data.id);
-    const { data: wbs } = await supabaseAdmin
-      .from("waybills")
-      .select("id, waybill_no")
-      .eq("pallet_id", data.id);
+    const { data: cs } = await supabaseAdmin.from("cartons").select("id, carton_no").eq("pallet_id", data.id);
+    const { data: wbs } = await supabaseAdmin.from("waybills").select("id, waybill_no").eq("pallet_id", data.id);
     const cartonIds = (cs ?? []).map((c: any) => c.id);
     const wbIds = (wbs ?? []).map((w: any) => w.id);
     if (cartonIds.length) {
-      await supabaseAdmin
-        .from("cartons")
-        .update({ pallet_id: null, batch_id: batchId })
-        .in("id", cartonIds);
+      await supabaseAdmin.from("cartons").update({ pallet_id: null, batch_id: batchId }).in("id", cartonIds);
     }
     if (wbIds.length) {
-      await supabaseAdmin
-        .from("waybills")
-        .update({ pallet_id: null, assigned_batch_id: batchId })
-        .in("id", wbIds);
+      await supabaseAdmin.from("waybills").update({ pallet_id: null, assigned_batch_id: batchId }).in("id", wbIds);
     }
     const { error } = await supabaseAdmin.from("pallets").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -1575,17 +1406,11 @@ export const splitPallet = createServerFn({ method: "POST" })
 // Pallet-side counterpart of mismatchReason above — pallets don't enforce
 // route/pickup/destination matching (that's carton-only, pre-existing), only the
 // same "locked address once a customer is bound" rule the user asked for.
-function palletAddressMismatch(
-  pallet: any,
-  address: any,
-  customer_code: string | null,
-  no: string,
-) {
+function palletAddressMismatch(pallet: any, address: any, customer_code: string | null, no: string) {
   if (!pallet.customer_code) return null; // pallet not bound to a customer yet — anything goes
   const palletKey = addressKey(pallet.address_snapshot);
   const itemKey = addressKey(address);
-  if (palletKey && itemKey && palletKey !== itemKey)
-    return `${no}: 收货地址与托盘内其他货物不一致，无法加入同一托盘`;
+  if (palletKey && itemKey && palletKey !== itemKey) return `${no}: 收货地址与托盘内其他货物不一致，无法加入同一托盘`;
   if (pallet.customer_code && customer_code && pallet.customer_code !== customer_code)
     return `${no}: 客户号不匹配（托盘要求 ${pallet.customer_code}）`;
   return null;
@@ -1608,11 +1433,7 @@ export const assignToPallet = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     let pallet: any = null;
     if (data.palletId) {
-      const { data: p } = await supabaseAdmin
-        .from("pallets")
-        .select("*")
-        .eq("id", data.palletId)
-        .maybeSingle();
+      const { data: p } = await supabaseAdmin.from("pallets").select("*").eq("id", data.palletId).maybeSingle();
       pallet = p;
     }
     let lockCandidate: {
@@ -1674,12 +1495,7 @@ export const assignToPallet = createServerFn({ method: "POST" })
         for (const a of addrs ?? []) addrMap.set(a.id, a);
       }
 
-      const noteLock = (
-        customer_code: string | null,
-        customer_user_id: string | null,
-        address: any,
-        no: string,
-      ) => {
+      const noteLock = (customer_code: string | null, customer_user_id: string | null, address: any, no: string) => {
         if (pallet.customer_code) return;
         if (!customer_code || !address) return;
         if (!lockCandidate) {
@@ -1694,35 +1510,19 @@ export const assignToPallet = createServerFn({ method: "POST" })
       };
 
       for (const c of cs) {
-        const reason = palletAddressMismatch(
-          pallet,
-          c.address_snapshot,
-          c.customer_code,
-          c.carton_no,
-        );
+        const reason = palletAddressMismatch(pallet, c.address_snapshot, c.customer_code, c.carton_no);
         if (reason) throw new Error(reason);
-        noteLock(
-          c.customer_code ?? null,
-          c.customer_user_id ?? null,
-          c.address_snapshot,
-          c.carton_no,
-        );
+        noteLock(c.customer_code ?? null, c.customer_user_id ?? null, c.address_snapshot, c.carton_no);
       }
       for (const w of wbs) {
         const parent: any = (w as any).orders ?? (w as any).forwarding_orders ?? {};
-        const address =
-          parent.address_snapshot ?? (parent.address_id ? addrMap.get(parent.address_id) : null);
+        const address = parent.address_snapshot ?? (parent.address_id ? addrMap.get(parent.address_id) : null);
         const reason = palletAddressMismatch(pallet, address, parent.customer_code, w.waybill_no);
         if (reason) throw new Error(reason);
         noteLock(parent.customer_code ?? null, parent.user_id ?? null, address, w.waybill_no);
       }
       for (const o of os) {
-        const reason = palletAddressMismatch(
-          pallet,
-          o.address_snapshot,
-          o.customer_code,
-          o.order_no,
-        );
+        const reason = palletAddressMismatch(pallet, o.address_snapshot, o.customer_code, o.order_no);
         if (reason) throw new Error(reason);
         noteLock(o.customer_code ?? null, o.user_id ?? null, o.address_snapshot, o.order_no);
       }
@@ -1763,10 +1563,7 @@ export const assignToPallet = createServerFn({ method: "POST" })
       });
     }
     if (data.orderIds?.length) {
-      const { error } = await supabaseAdmin
-        .from("orders")
-        .update({ pallet_id: data.palletId })
-        .in("id", data.orderIds);
+      const { error } = await supabaseAdmin.from("orders").update({ pallet_id: data.palletId }).in("id", data.orderIds);
       if (error) throw new Error(error.message);
       await logAssign(supabaseAdmin, { ...logCtx, childKind: "order", childIds: data.orderIds });
     }
@@ -1803,27 +1600,16 @@ export const getContainerLabelData = createServerFn({ method: "POST" })
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     if (data.kind === "carton") {
-      const { data: c } = await supabaseAdmin
-        .from("cartons")
-        .select("*")
-        .eq("id", data.id)
-        .maybeSingle();
+      const { data: c } = await supabaseAdmin.from("cartons").select("*").eq("id", data.id).maybeSingle();
       if (!c) throw new Error("Carton not found");
       const [{ count: wbCount }, payment, pallet, batch] = await Promise.all([
-        supabaseAdmin
-          .from("waybills")
-          .select("*", { count: "exact", head: true })
-          .eq("carton_id", data.id),
+        supabaseAdmin.from("waybills").select("*", { count: "exact", head: true }).eq("carton_id", data.id),
         aggregatePayment(supabaseAdmin, "carton", data.id),
         c.pallet_id
           ? supabaseAdmin.from("pallets").select("pallet_no").eq("id", c.pallet_id).maybeSingle()
           : Promise.resolve({ data: null }),
         c.batch_id
-          ? supabaseAdmin
-              .from("batches")
-              .select("batch_no, shipping_method")
-              .eq("id", c.batch_id)
-              .maybeSingle()
+          ? supabaseAdmin.from("batches").select("batch_no, shipping_method").eq("id", c.batch_id).maybeSingle()
           : Promise.resolve({ data: null }),
       ]);
       return {
@@ -1848,28 +1634,14 @@ export const getContainerLabelData = createServerFn({ method: "POST" })
       };
     }
     if (data.kind === "pallet") {
-      const { data: p } = await supabaseAdmin
-        .from("pallets")
-        .select("*")
-        .eq("id", data.id)
-        .maybeSingle();
+      const { data: p } = await supabaseAdmin.from("pallets").select("*").eq("id", data.id).maybeSingle();
       if (!p) throw new Error("Pallet not found");
       const [{ count: cnCount }, { count: wbCount }, payment, batch] = await Promise.all([
-        supabaseAdmin
-          .from("cartons")
-          .select("*", { count: "exact", head: true })
-          .eq("pallet_id", data.id),
-        supabaseAdmin
-          .from("waybills")
-          .select("*", { count: "exact", head: true })
-          .eq("pallet_id", data.id),
+        supabaseAdmin.from("cartons").select("*", { count: "exact", head: true }).eq("pallet_id", data.id),
+        supabaseAdmin.from("waybills").select("*", { count: "exact", head: true }).eq("pallet_id", data.id),
         aggregatePayment(supabaseAdmin, "pallet", data.id),
         p.batch_id
-          ? supabaseAdmin
-              .from("batches")
-              .select("batch_no, shipping_method")
-              .eq("id", p.batch_id)
-              .maybeSingle()
+          ? supabaseAdmin.from("batches").select("batch_no, shipping_method").eq("id", p.batch_id).maybeSingle()
           : Promise.resolve({ data: null }),
       ]);
       return {
@@ -1891,29 +1663,14 @@ export const getContainerLabelData = createServerFn({ method: "POST" })
       };
     }
     // batch
-    const { data: b } = await supabaseAdmin
-      .from("batches")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: b } = await supabaseAdmin.from("batches").select("*").eq("id", data.id).maybeSingle();
     if (!b) throw new Error("Batch not found");
-    const [{ count: wbCount }, { count: cnCount }, { count: plCount }, payment] = await Promise.all(
-      [
-        supabaseAdmin
-          .from("waybills")
-          .select("*", { count: "exact", head: true })
-          .eq("assigned_batch_id", data.id),
-        supabaseAdmin
-          .from("cartons")
-          .select("*", { count: "exact", head: true })
-          .eq("batch_id", data.id),
-        supabaseAdmin
-          .from("pallets")
-          .select("*", { count: "exact", head: true })
-          .eq("batch_id", data.id),
-        aggregatePayment(supabaseAdmin, "batch", data.id),
-      ],
-    );
+    const [{ count: wbCount }, { count: cnCount }, { count: plCount }, payment] = await Promise.all([
+      supabaseAdmin.from("waybills").select("*", { count: "exact", head: true }).eq("assigned_batch_id", data.id),
+      supabaseAdmin.from("cartons").select("*", { count: "exact", head: true }).eq("batch_id", data.id),
+      supabaseAdmin.from("pallets").select("*", { count: "exact", head: true }).eq("batch_id", data.id),
+      aggregatePayment(supabaseAdmin, "batch", data.id),
+    ]);
     return {
       entityType: "batch" as const,
       entityNo: b.batch_no,

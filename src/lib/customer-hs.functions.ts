@@ -77,10 +77,7 @@ export const upsertCustomerHsItem = createServerFn({ method: "POST" })
     // admin operation.
     const isAdminAction = context.userId !== data.user_id;
     if (data.id) {
-      const { error } = await supabaseAdmin
-        .from("customer_hs_items")
-        .update(payload)
-        .eq("id", data.id);
+      const { error } = await supabaseAdmin.from("customer_hs_items").update(payload).eq("id", data.id);
       if (error) throw new Error(error.message);
       if (isAdminAction) {
         await recordAdminLog(supabaseAdmin, {
@@ -94,11 +91,7 @@ export const upsertCustomerHsItem = createServerFn({ method: "POST" })
       }
       return { ok: true, id: data.id };
     }
-    const { data: row, error } = await supabaseAdmin
-      .from("customer_hs_items")
-      .insert(payload)
-      .select("id")
-      .single();
+    const { data: row, error } = await supabaseAdmin.from("customer_hs_items").insert(payload).select("id").single();
     if (error) throw new Error(error.message);
     if (isAdminAction) {
       await recordAdminLog(supabaseAdmin, {
@@ -164,10 +157,7 @@ export const bulkImportCustomerHsItems = createServerFn({ method: "POST" })
       }))
       .filter((r) => r.description);
     if (data.replace) {
-      const { error: delErr } = await supabaseAdmin
-        .from("customer_hs_items")
-        .delete()
-        .eq("user_id", data.user_id);
+      const { error: delErr } = await supabaseAdmin.from("customer_hs_items").delete().eq("user_id", data.user_id);
       if (delErr) throw new Error(delErr.message);
     }
     if (rows.length === 0) return { ok: true, inserted: 0 };

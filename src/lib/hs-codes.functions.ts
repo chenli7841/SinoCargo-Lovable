@@ -13,11 +13,7 @@ export const listHsCodes = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    let q = supabaseAdmin
-      .from("hs_codes")
-      .select("*")
-      .order("hs_code", { ascending: true })
-      .limit(1000);
+    let q = supabaseAdmin.from("hs_codes").select("*").order("hs_code", { ascending: true }).limit(1000);
     if (data.search?.trim()) {
       const s = data.search.trim();
       // 支持 HS 编码 / 中英文品名 / 别名（aliases 数组）模糊匹配
@@ -77,11 +73,7 @@ export const upsertHsCode = createServerFn({ method: "POST" })
       const { error } = await supabaseAdmin.from("hs_codes").update(payload).eq("id", data.id);
       if (error) throw new Error(error.message);
     } else {
-      const { data: ins, error } = await supabaseAdmin
-        .from("hs_codes")
-        .insert(payload)
-        .select("id")
-        .single();
+      const { data: ins, error } = await supabaseAdmin.from("hs_codes").insert(payload).select("id").single();
       if (error) throw new Error(error.message);
       id = ins!.id;
     }
@@ -101,11 +93,7 @@ export const deleteHsCode = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("hs_codes")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("hs_codes").select("*").eq("id", data.id).maybeSingle();
     const { error } = await supabaseAdmin.from("hs_codes").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     await recordAdminLog(supabaseAdmin, {

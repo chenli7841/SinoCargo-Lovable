@@ -30,9 +30,7 @@ interface RouteInfo {
 
 // Empty/undefined availableRouteCodes means the product isn't restricted — any active route works.
 function allowedCodes(i: CartLine, allCodes: string[]): string[] {
-  return i.availableRouteCodes && i.availableRouteCodes.length > 0
-    ? i.availableRouteCodes
-    : allCodes;
+  return i.availableRouteCodes && i.availableRouteCodes.length > 0 ? i.availableRouteCodes : allCodes;
 }
 
 function CartPage() {
@@ -76,8 +74,7 @@ function CartPage() {
       }, null) ?? []
     );
   }, [selectedItems, routes, allCodes]);
-  const hasRouteConflict =
-    routes !== null && selectedItems.length > 1 && (commonRoutes?.length ?? 0) === 0;
+  const hasRouteConflict = routes !== null && selectedItems.length > 1 && (commonRoutes?.length ?? 0) === 0;
 
   const allSel = items.length > 0 && selectedItems.length === items.length;
 
@@ -85,12 +82,8 @@ function CartPage() {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20 text-center">
         <ShoppingBag className="mx-auto h-14 w-14 text-ink-soft" />
-        <h1 className="mt-6 font-display text-3xl font-bold">
-          {tr("购物车是空的", "Your cart is empty")}
-        </h1>
-        <p className="mt-2 text-ink-soft">
-          {tr("快去挑几件好物吧", "Discover something you'll love")}
-        </p>
+        <h1 className="mt-6 font-display text-3xl font-bold">{tr("购物车是空的", "Your cart is empty")}</h1>
+        <p className="mt-2 text-ink-soft">{tr("快去挑几件好物吧", "Discover something you'll love")}</p>
         <Link
           to="/products"
           className="mt-6 inline-flex items-center gap-2 rounded-full bg-cta-gradient px-6 py-3 text-sm font-semibold text-cta-foreground shadow-elevated"
@@ -111,9 +104,7 @@ function CartPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:py-14">
       <div className="mb-6 flex items-end justify-between">
-        <h1 className="font-display text-3xl font-bold sm:text-4xl">
-          {tr("购物车", "Shopping cart")}
-        </h1>
+        <h1 className="font-display text-3xl font-bold sm:text-4xl">{tr("购物车", "Shopping cart")}</h1>
         <button
           onClick={() => setAllSelected(!allSel)}
           className="inline-flex items-center gap-2 text-sm text-ink-soft hover:text-foreground"
@@ -135,15 +126,8 @@ function CartPage() {
                 key={cartLineKey(i)}
                 className={`flex gap-3 rounded-2xl border bg-surface p-4 transition ${conflicting ? "border-destructive/50" : sel ? "border-brand/40" : "border-border"}`}
               >
-                <button
-                  onClick={() => toggleSelect(i.slug, i.variantId)}
-                  className="shrink-0 self-center"
-                >
-                  {sel ? (
-                    <CheckSquare className="h-5 w-5 text-brand" />
-                  ) : (
-                    <Square className="h-5 w-5 text-ink-soft" />
-                  )}
+                <button onClick={() => toggleSelect(i.slug, i.variantId)} className="shrink-0 self-center">
+                  {sel ? <CheckSquare className="h-5 w-5 text-brand" /> : <Square className="h-5 w-5 text-ink-soft" />}
                 </button>
                 <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-accent to-surface text-4xl">
                   {/^https?:\/\//.test(i.image) ? (
@@ -170,10 +154,7 @@ function CartPage() {
                     </button>
                   </div>
                   <div className="mt-1 text-xs text-ink-soft">
-                    {i.weightKg}kg ·{" "}
-                    {i.purchaseType === "business"
-                      ? tr("商业", "Business")
-                      : tr("个人", "Personal")}
+                    {i.weightKg}kg · {i.purchaseType === "business" ? tr("商业", "Business") : tr("个人", "Personal")}
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-1">
                     <RouteIcon className="h-3 w-3 text-ink-soft" />
@@ -187,16 +168,13 @@ function CartPage() {
                         </span>
                       ))
                     ) : (
-                      <span className="text-[10px] text-ink-soft">
-                        {tr("不限线路", "Any route")}
-                      </span>
+                      <span className="text-[10px] text-ink-soft">{tr("不限线路", "Any route")}</span>
                     )}
                   </div>
                   <div className="mt-auto flex items-end justify-between pt-2">
                     <div className="inline-flex items-center rounded-full border border-border">
                       {(() => {
-                        const step =
-                          i.purchaseType === "business" ? Math.max(i.packQty ?? 1, 1) : 1;
+                        const step = i.purchaseType === "business" ? Math.max(i.packQty ?? 1, 1) : 1;
                         return (
                           <>
                             <button
@@ -205,9 +183,7 @@ function CartPage() {
                             >
                               <Minus className="h-3 w-3" />
                             </button>
-                            <span className="w-10 text-center text-sm font-medium">
-                              {i.quantity}
-                            </span>
+                            <span className="w-10 text-center text-sm font-medium">{i.quantity}</span>
                             <button
                               onClick={() => update(i.slug, i.quantity + step, i.variantId)}
                               className="grid h-8 w-8 place-items-center text-ink-soft hover:text-foreground"
@@ -231,16 +207,9 @@ function CartPage() {
         <aside className="h-fit rounded-2xl border border-border bg-surface p-6 lg:sticky lg:top-24">
           <h2 className="mb-4 font-display text-lg font-bold">{tr("订单摘要", "Order summary")}</h2>
           <dl className="space-y-2 text-sm">
-            <Row
-              label={tr("已选商品", "Selected")}
-              value={`${selectedItems.length} / ${items.length}`}
-            />
+            <Row label={tr("已选商品", "Selected")} value={`${selectedItems.length} / ${items.length}`} />
             <Row label={tr("小计", "Subtotal")} value={formatPrice(selectedSubtotalCNY)} />
-            <Row
-              label={tr("预计总重量", "Est. weight")}
-              value={`${selectedWeightKg.toFixed(2)} kg`}
-              muted
-            />
+            <Row label={tr("预计总重量", "Est. weight")} value={`${selectedWeightKg.toFixed(2)} kg`} muted />
           </dl>
           <p className="mt-1.5 text-[11px] text-ink-soft">
             {tr(

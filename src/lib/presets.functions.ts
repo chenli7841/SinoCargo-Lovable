@@ -13,11 +13,7 @@ async function assertManager(supabase: any, userId: string) {
 // ===== Cargo types =====
 export const listCargoTypes = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin
-    .from("cargo_types")
-    .select("*")
-    .order("sort_order")
-    .order("code");
+  const { data, error } = await supabaseAdmin.from("cargo_types").select("*").order("sort_order").order("code");
   if (error) throw new Error(error.message);
   return { items: data ?? [] };
 });
@@ -25,14 +21,7 @@ export const listCargoTypes = createServerFn({ method: "GET" }).handler(async ()
 export const upsertCargoType = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (d: {
-      id?: string;
-      code: string;
-      name_zh: string;
-      name_en?: string;
-      sort_order?: number;
-      active?: boolean;
-    }) => d,
+    (d: { id?: string; code: string; name_zh: string; name_en?: string; sort_order?: number; active?: boolean }) => d,
   )
   .handler(async ({ data, context }) => {
     await assertManager(context.supabase, context.userId);
@@ -49,11 +38,7 @@ export const upsertCargoType = createServerFn({ method: "POST" })
       const { error } = await supabaseAdmin.from("cargo_types").update(payload).eq("id", data.id);
       if (error) throw new Error(error.message);
     } else {
-      const { data: ins, error } = await supabaseAdmin
-        .from("cargo_types")
-        .insert(payload)
-        .select("id")
-        .single();
+      const { data: ins, error } = await supabaseAdmin.from("cargo_types").insert(payload).select("id").single();
       if (error) throw new Error(error.message);
       id = ins!.id;
     }
@@ -73,11 +58,7 @@ export const deleteCargoType = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertManager(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("cargo_types")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("cargo_types").select("*").eq("id", data.id).maybeSingle();
     const { error } = await supabaseAdmin.from("cargo_types").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     await recordAdminLog(supabaseAdmin, {
@@ -93,11 +74,7 @@ export const deleteCargoType = createServerFn({ method: "POST" })
 // ===== Destinations =====
 export const listDestinations = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data, error } = await supabaseAdmin
-    .from("destinations")
-    .select("*")
-    .order("sort_order")
-    .order("code");
+  const { data, error } = await supabaseAdmin.from("destinations").select("*").order("sort_order").order("code");
   if (error) throw new Error(error.message);
   return { items: data ?? [] };
 });
@@ -131,11 +108,7 @@ export const upsertDestination = createServerFn({ method: "POST" })
       const { error } = await supabaseAdmin.from("destinations").update(payload).eq("id", data.id);
       if (error) throw new Error(error.message);
     } else {
-      const { data: ins, error } = await supabaseAdmin
-        .from("destinations")
-        .insert(payload)
-        .select("id")
-        .single();
+      const { data: ins, error } = await supabaseAdmin.from("destinations").insert(payload).select("id").single();
       if (error) throw new Error(error.message);
       id = ins!.id;
     }
@@ -155,11 +128,7 @@ export const deleteDestination = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertManager(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: before } = await supabaseAdmin
-      .from("destinations")
-      .select("*")
-      .eq("id", data.id)
-      .maybeSingle();
+    const { data: before } = await supabaseAdmin.from("destinations").select("*").eq("id", data.id).maybeSingle();
     const { error } = await supabaseAdmin.from("destinations").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     await recordAdminLog(supabaseAdmin, {

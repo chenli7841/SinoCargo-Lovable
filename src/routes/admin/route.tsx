@@ -274,11 +274,7 @@ function AdminLayout() {
       <aside className="hidden w-60 shrink-0 flex-col border-r border-white/5 bg-[#0A0F1A] md:flex">
         <div className="flex h-14 items-center gap-2 border-b border-white/5 px-4">
           {company.logo_url ? (
-            <img
-              src={company.logo_url}
-              alt={company.name}
-              className="h-7 w-7 shrink-0 rounded-md object-cover"
-            />
+            <img src={company.logo_url} alt={company.name} className="h-7 w-7 shrink-0 rounded-md object-cover" />
           ) : (
             <div className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-gradient-to-br from-brand to-cta font-display text-xs font-bold text-white">
               {(company.name || "SC").slice(0, 2).toUpperCase()}
@@ -363,7 +359,8 @@ function AdminLayout() {
             </Link>
             <button
               onClick={async () => {
-                await signOut("/admin-login");
+                await signOut();
+                navigate({ to: "/admin-login" });
               }}
               className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2.5 py-1.5 text-xs text-slate-200 hover:bg-white/5"
             >

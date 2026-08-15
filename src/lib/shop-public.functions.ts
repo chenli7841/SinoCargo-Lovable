@@ -110,9 +110,7 @@ export const listPublicCategories = createServerFn({ method: "GET" }).handler(as
 });
 
 export const listPublicProducts = createServerFn({ method: "POST" })
-  .inputValidator(
-    (d: { category?: string; q?: string; limit?: number; featuredOnly?: boolean } = {}) => d,
-  )
+  .inputValidator((d: { category?: string; q?: string; limit?: number; featuredOnly?: boolean } = {}) => d)
   .handler(async ({ data }) => {
     const sb = pubClient();
     const limit = Math.min(200, data.limit ?? 100);
@@ -140,8 +138,7 @@ export const listPublicProducts = createServerFn({ method: "POST" })
           .order("created_at", { ascending: false })
           .limit(limit);
       let { data: fallbackRows, error: fbErr } = await buildFallback(SELECT_COLS);
-      if (isMissingNewColumn(fbErr))
-        ({ data: fallbackRows, error: fbErr } = await buildFallback(BASE_COLS));
+      if (isMissingNewColumn(fbErr)) ({ data: fallbackRows, error: fbErr } = await buildFallback(BASE_COLS));
       if (fbErr) throw new Error(fbErr.message);
       items = withNewColDefaultsList(fallbackRows) as any as PublicProduct[];
     }

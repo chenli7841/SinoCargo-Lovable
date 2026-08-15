@@ -21,9 +21,7 @@ export type OttStartResult =
  */
 export const startOttTopup = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(
-    (d: { amountCad: number; channel: "wechat" | "alipay"; device: "mobile" | "desktop" }) => d,
-  )
+  .inputValidator((d: { amountCad: number; channel: "wechat" | "alipay"; device: "mobile" | "desktop" }) => d)
   .handler(async ({ data, context }): Promise<OttStartResult> => {
     if (!(data.amountCad >= 2)) throw new Error("最低充值 CA$2");
     const { ottPost, toCents, ottConfig } = await import("@/lib/ottpay.server");
@@ -56,8 +54,7 @@ export const startOttTopup = createServerFn({ method: "POST" })
     const nativeWeChat = data.channel === "wechat" && inWeChat;
     const nativeAlipay = data.channel === "alipay" && inAlipay;
     // 渠道与当前 App 不匹配（如在微信里选支付宝）：只能出二维码让用户换端扫码
-    const crossApp =
-      (data.channel === "wechat" && inAlipay) || (data.channel === "alipay" && inWeChat);
+    const crossApp = (data.channel === "wechat" && inAlipay) || (data.channel === "alipay" && inWeChat);
 
     /** 从 wap 链接里提取内嵌的二维码地址（PC / 跨端场景用） */
     const extractQr = (link: string) => {
@@ -259,11 +256,7 @@ export const syncOttTopup = createServerFn({ method: "POST" })
       let hostedNext: string | null = null;
       if (HOSTED_PAID_STATES.has(st)) hostedNext = "completed";
       else if (HOSTED_FAILED_STATES.has(st)) hostedNext = "failed";
-      if (hostedNext)
-        await supabaseAdmin
-          .from("wallet_transactions")
-          .update({ status: hostedNext })
-          .eq("id", tx.id);
+      if (hostedNext) await supabaseAdmin.from("wallet_transactions").update({ status: hostedNext }).eq("id", tx.id);
       return { status: hostedNext ?? "pending" };
     }
 
@@ -276,7 +269,6 @@ export const syncOttTopup = createServerFn({ method: "POST" })
     if (["success", "captured", "authorised", "authorized"].includes(s)) next = "completed";
     else if (["failure", "orderclosed"].includes(s)) next = "failed";
 
-    if (next)
-      await supabaseAdmin.from("wallet_transactions").update({ status: next }).eq("id", tx.id);
+    if (next) await supabaseAdmin.from("wallet_transactions").update({ status: next }).eq("id", tx.id);
     return { status: next ?? "pending" };
   });

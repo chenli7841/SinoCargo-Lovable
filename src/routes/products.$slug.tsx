@@ -43,9 +43,7 @@ export const Route = createFileRoute("/products/$slug")({
       context.queryClient.ensureQueryData(routesQO),
     ]),
   head: ({ params, loaderData }) => {
-    const p = Array.isArray(loaderData)
-      ? (loaderData[0] as any)?.product
-      : (loaderData as any)?.product;
+    const p = Array.isArray(loaderData) ? (loaderData[0] as any)?.product : (loaderData as any)?.product;
     const url = `https://china-to-canada-shopper.lovable.app/products/${params.slug}`;
     const title = p ? `${p.name} — SinoCargo` : "Product — SinoCargo";
     const desc = (p?.subtitle ?? p?.description ?? "").toString().slice(0, 155);
@@ -86,9 +84,7 @@ export const Route = createFileRoute("/products/$slug")({
                   priceCurrency: "CNY",
                   price: Number(p.price_cny ?? 0),
                   availability:
-                    (p.total_stock ?? 0) > 0
-                      ? "https://schema.org/InStock"
-                      : "https://schema.org/OutOfStock",
+                    (p.total_stock ?? 0) > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
                   url,
                 },
               }),
@@ -105,9 +101,7 @@ export const Route = createFileRoute("/products/$slug")({
       </Link>
     </div>
   ),
-  errorComponent: ({ error }) => (
-    <div className="p-10 text-center text-destructive">{error.message}</div>
-  ),
+  errorComponent: ({ error }) => <div className="p-10 text-center text-destructive">{error.message}</div>,
   component: ProductDetail,
 });
 
@@ -124,22 +118,16 @@ function ProductDetail() {
 
   const allowPersonal = dp.allow_personal ?? dp.purchase_type === "personal";
   const allowBusiness = dp.allow_business ?? dp.purchase_type === "business";
-  const [mode, setMode] = useState<"personal" | "business">(
-    allowPersonal ? "personal" : "business",
-  );
+  const [mode, setMode] = useState<"personal" | "business">(allowPersonal ? "personal" : "business");
 
   const { lang, formatPrice, t, currency, cnyToCad } = useApp();
 
   // English falls back to the Chinese copy when a translation hasn't been filled in yet
   // (same convention as adaptProduct's name/description fallback).
-  const originLocation =
-    lang === "en" ? dp.origin_location_en || dp.origin_location : dp.origin_location;
-  const packagingNote =
-    lang === "en" ? dp.packaging_note_en || dp.packaging_note : dp.packaging_note;
-  const leadTimeNote =
-    lang === "en" ? dp.lead_time_note_en || dp.lead_time_note : dp.lead_time_note;
-  const originPortNote =
-    lang === "en" ? dp.origin_port_note_en || dp.origin_port_note : dp.origin_port_note;
+  const originLocation = lang === "en" ? dp.origin_location_en || dp.origin_location : dp.origin_location;
+  const packagingNote = lang === "en" ? dp.packaging_note_en || dp.packaging_note : dp.packaging_note;
+  const leadTimeNote = lang === "en" ? dp.lead_time_note_en || dp.lead_time_note : dp.lead_time_note;
+  const originPortNote = lang === "en" ? dp.origin_port_note_en || dp.origin_port_note : dp.origin_port_note;
   const hasPackagingInfo = packagingNote || leadTimeNote || originPortNote;
   const faqItems = (Array.isArray(dp.faq_items) ? dp.faq_items : [])
     .filter((f: any) => f?.q && f?.a)
@@ -163,21 +151,15 @@ function ProductDetail() {
   const selVariant = variants.find((v: any) => v.id === selVariantId) ?? null;
   const effectivePriceCNY = selVariant?.price_cny ?? product.priceCNY;
 
-  const gallery = [dp.cover_url, ...(Array.isArray(dp.images) ? dp.images : [])].filter(
-    Boolean,
-  ) as string[];
+  const gallery = [dp.cover_url, ...(Array.isArray(dp.images) ? dp.images : [])].filter(Boolean) as string[];
   const [activeImg, setActiveImg] = useState(0);
   const currentImg = gallery[activeImg];
 
   const totalCustomsRate =
-    Number(dp.customs_mfn_rate ?? 0) +
-    Number(dp.customs_gst_rate ?? 0) +
-    Number(dp.customs_antidumping_rate ?? 0);
+    Number(dp.customs_mfn_rate ?? 0) + Number(dp.customs_gst_rate ?? 0) + Number(dp.customs_antidumping_rate ?? 0);
 
   const otherPrice =
-    currency === "CNY"
-      ? `≈ CA$${cnyToCad(effectivePriceCNY).toFixed(2)}`
-      : `≈ ¥${effectivePriceCNY.toFixed(0)}`;
+    currency === "CNY" ? `≈ CA$${cnyToCad(effectivePriceCNY).toFixed(2)}` : `≈ ¥${effectivePriceCNY.toFixed(0)}`;
 
   const handleAdd = () => {
     if (qty < minQty) return;
@@ -185,9 +167,7 @@ function ProductDetail() {
       ? {
           id: selVariant.id,
           sku: selVariant.sku,
-          label:
-            [selVariant.attrs?.color, selVariant.attrs?.size].filter(Boolean).join(" / ") ||
-            selVariant.sku,
+          label: [selVariant.attrs?.color, selVariant.attrs?.size].filter(Boolean).join(" / ") || selVariant.sku,
           priceCNY: selVariant.price_cny,
           weightKg: selVariant.weight_kg,
           lengthCm: selVariant.length_cm,
@@ -255,15 +235,9 @@ function ProductDetail() {
         <div>
           <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-accent via-surface to-accent">
             {currentImg ? (
-              <img
-                src={currentImg}
-                alt={product.name[lang]}
-                className="aspect-square h-full w-full object-cover"
-              />
+              <img src={currentImg} alt={product.name[lang]} className="aspect-square h-full w-full object-cover" />
             ) : (
-              <div className="grid aspect-square place-items-center text-[12rem]">
-                {product.image}
-              </div>
+              <div className="grid aspect-square place-items-center text-[12rem]">{product.image}</div>
             )}
           </div>
           {gallery.length > 1 && (
@@ -333,9 +307,7 @@ function ProductDetail() {
               </span>
               <span className="text-sm text-ink-soft">{otherPrice}</span>
               {dp.compare_price_cad != null && Number(dp.compare_price_cad) > 0 && (
-                <span className="text-sm text-ink-soft line-through">
-                  CA${Number(dp.compare_price_cad).toFixed(2)}
-                </span>
+                <span className="text-sm text-ink-soft line-through">CA${Number(dp.compare_price_cad).toFixed(2)}</span>
               )}
             </div>
             <div className="mt-2 text-xs text-ink-soft">
@@ -358,9 +330,7 @@ function ProductDetail() {
           <div className="mt-6 grid grid-cols-2 gap-3">
             {allowedRoutes.length === 0 ? (
               <div className="col-span-2 rounded-xl border border-dashed border-border bg-surface p-4 text-xs text-ink-soft">
-                {lang === "zh"
-                  ? "该商品暂未配置运输线路"
-                  : "No shipping route configured for this product"}
+                {lang === "zh" ? "该商品暂未配置运输线路" : "No shipping route configured for this product"}
               </div>
             ) : (
               allowedRoutes.map((r: any) => {
@@ -370,18 +340,13 @@ function ProductDetail() {
                     : r.shipping_method === "express" || r.shipping_method === "truck"
                       ? Truck
                       : Plane;
-                const eta = [r.transit_days_min, r.transit_days_max]
-                  .filter((n) => n != null)
-                  .join("-");
+                const eta = [r.transit_days_min, r.transit_days_max].filter((n) => n != null).join("-");
                 return (
                   <div key={r.code} className="rounded-xl border border-border bg-surface p-4">
                     <div className="flex items-center gap-2 text-xs text-ink-soft">
-                      <Icon className="h-3.5 w-3.5" />{" "}
-                      {lang === "zh" ? r.name_zh : (r.name_en ?? r.name_zh)}
+                      <Icon className="h-3.5 w-3.5" /> {lang === "zh" ? r.name_zh : (r.name_en ?? r.name_zh)}
                     </div>
-                    <div className="mt-1 font-semibold">
-                      {eta ? `${eta} ${lang === "zh" ? "天" : "days"}` : "—"}
-                    </div>
+                    <div className="mt-1 font-semibold">{eta ? `${eta} ${lang === "zh" ? "天" : "days"}` : "—"}</div>
                   </div>
                 );
               })
@@ -390,13 +355,10 @@ function ProductDetail() {
 
           {variants.length > 0 && (
             <div className="mt-6 rounded-2xl border border-border bg-surface p-5">
-              <div className="mb-3 text-sm font-display font-bold">
-                {lang === "zh" ? "规格选择" : "Choose variant"}
-              </div>
+              <div className="mb-3 text-sm font-display font-bold">{lang === "zh" ? "规格选择" : "Choose variant"}</div>
               <div className="flex flex-wrap gap-2">
                 {variants.map((v: any) => {
-                  const label =
-                    [v.attrs?.color, v.attrs?.size].filter(Boolean).join(" / ") || v.sku;
+                  const label = [v.attrs?.color, v.attrs?.size].filter(Boolean).join(" / ") || v.sku;
                   const active = v.id === selVariantId;
                   const out = (v.stock ?? 0) <= 0;
                   return (
@@ -408,9 +370,7 @@ function ProductDetail() {
                     >
                       {label}
                       {v.price_cny != null && Number(v.price_cny) !== Number(product.priceCNY) && (
-                        <span className="ml-1 text-[10px] text-ink-soft">
-                          · {formatPrice(Number(v.price_cny))}
-                        </span>
+                        <span className="ml-1 text-[10px] text-ink-soft">· {formatPrice(Number(v.price_cny))}</span>
                       )}
                     </button>
                   );
@@ -418,8 +378,8 @@ function ProductDetail() {
               </div>
               {selVariant && (
                 <div className="mt-2 text-[11px] text-ink-soft">
-                  SKU: <span className="font-mono">{selVariant.sku}</span> ·{" "}
-                  {lang === "zh" ? "库存" : "Stock"} {selVariant.stock}
+                  SKU: <span className="font-mono">{selVariant.sku}</span> · {lang === "zh" ? "库存" : "Stock"}{" "}
+                  {selVariant.stock}
                 </div>
               )}
             </div>
@@ -468,12 +428,7 @@ function ProductDetail() {
               </div>
               <div className="mb-3 grid gap-2 sm:grid-cols-2">
                 {allowedRoutes.slice(0, 4).map((r: any) => {
-                  const Icon =
-                    r.shipping_method === "sea"
-                      ? Ship
-                      : r.shipping_method === "express"
-                        ? Truck
-                        : Plane;
+                  const Icon = r.shipping_method === "sea" ? Ship : r.shipping_method === "express" ? Truck : Plane;
                   const eta = [r.transit_days_min, r.transit_days_max].filter(Boolean).join("-");
                   return (
                     <button
@@ -511,10 +466,7 @@ function ProductDetail() {
                   />
                   <QRow k={lang === "zh" ? "运费" : "Freight"} v={formatPrice(quote.freight_cny)} />
                   <QRow k={lang === "zh" ? "关税" : "Duty"} v={formatPrice(quote.customs_cny)} />
-                  <QRow
-                    k={lang === "zh" ? "保险" : "Insurance"}
-                    v={formatPrice(quote.insurance_cny)}
-                  />
+                  <QRow k={lang === "zh" ? "保险" : "Insurance"} v={formatPrice(quote.insurance_cny)} />
                   <div className="col-span-2 sm:col-span-4 mt-2 flex items-center justify-between border-t border-border pt-2">
                     <span className="text-ink-soft">
                       {lang === "zh"
@@ -548,9 +500,7 @@ function ProductDetail() {
                 <MapPin className="h-4 w-4" />
               </span>
               <div>
-                <div className="text-sm font-semibold">
-                  {lang === "zh" ? "货源地" : "Sourced from"}
-                </div>
+                <div className="text-sm font-semibold">{lang === "zh" ? "货源地" : "Sourced from"}</div>
                 <div className="text-xs text-ink-soft">{originLocation}</div>
               </div>
             </div>
@@ -558,21 +508,14 @@ function ProductDetail() {
 
           {/* Specs */}
           <div className="mt-6 rounded-2xl border border-border bg-surface p-5 text-sm">
-            <div className="mb-3 font-display font-bold">
-              {lang === "zh" ? "商品规格" : "Specifications"}
-            </div>
+            <div className="mb-3 font-display font-bold">{lang === "zh" ? "商品规格" : "Specifications"}</div>
             <dl className="grid grid-cols-2 gap-y-2 text-xs">
               {dp.brand && <SpecRow k={lang === "zh" ? "品牌" : "Brand"} v={dp.brand} />}
               {/* manufacturer hidden from frontend per business rule */}
               {dp.hs_code && <SpecRow k="HS Code" v={dp.hs_code} />}
-              {dp.pack_qty && (
-                <SpecRow k={lang === "zh" ? "每包装件数" : "Pcs/Pack"} v={String(dp.pack_qty)} />
-              )}
+              {dp.pack_qty && <SpecRow k={lang === "zh" ? "每包装件数" : "Pcs/Pack"} v={String(dp.pack_qty)} />}
               {dp.pack_weight_kg && (
-                <SpecRow
-                  k={lang === "zh" ? "包装重量" : "Pack weight"}
-                  v={`${dp.pack_weight_kg} kg`}
-                />
+                <SpecRow k={lang === "zh" ? "包装重量" : "Pack weight"} v={`${dp.pack_weight_kg} kg`} />
               )}
               {dp.pack_length_cm && (
                 <SpecRow
@@ -581,10 +524,7 @@ function ProductDetail() {
                 />
               )}
               {dp.pack_volume_m3 && (
-                <SpecRow
-                  k={lang === "zh" ? "包装体积" : "Pack volume"}
-                  v={`${dp.pack_volume_m3} m³`}
-                />
+                <SpecRow k={lang === "zh" ? "包装体积" : "Pack volume"} v={`${dp.pack_volume_m3} m³`} />
               )}
             </dl>
           </div>
@@ -592,20 +532,14 @@ function ProductDetail() {
           {/* Packaging & shipping — only the fields set in admin show up */}
           {hasPackagingInfo && (
             <div className="mt-6 rounded-2xl border border-border bg-surface p-5">
-              <div className="mb-3 font-display font-bold">
-                {lang === "zh" ? "包装与发货" : "Packaging & shipping"}
-              </div>
+              <div className="mb-3 font-display font-bold">{lang === "zh" ? "包装与发货" : "Packaging & shipping"}</div>
               <div className="grid gap-4 sm:grid-cols-3">
                 {packagingNote && (
                   <div className="flex gap-2.5">
                     <PackageCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
                     <div>
-                      <div className="text-xs font-semibold">
-                        {lang === "zh" ? "包装规格" : "Packaging"}
-                      </div>
-                      <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">
-                        {packagingNote}
-                      </p>
+                      <div className="text-xs font-semibold">{lang === "zh" ? "包装规格" : "Packaging"}</div>
+                      <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">{packagingNote}</p>
                     </div>
                   </div>
                 )}
@@ -613,9 +547,7 @@ function ProductDetail() {
                   <div className="flex gap-2.5">
                     <Clock className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
                     <div>
-                      <div className="text-xs font-semibold">
-                        {lang === "zh" ? "生产周期" : "Lead time"}
-                      </div>
+                      <div className="text-xs font-semibold">{lang === "zh" ? "生产周期" : "Lead time"}</div>
                       <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">{leadTimeNote}</p>
                     </div>
                   </div>
@@ -624,12 +556,8 @@ function ProductDetail() {
                   <div className="flex gap-2.5">
                     <Anchor className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
                     <div>
-                      <div className="text-xs font-semibold">
-                        {lang === "zh" ? "起运地" : "Origin port"}
-                      </div>
-                      <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">
-                        {originPortNote}
-                      </p>
+                      <div className="text-xs font-semibold">{lang === "zh" ? "起运地" : "Origin port"}</div>
+                      <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">{originPortNote}</p>
                     </div>
                   </div>
                 )}
@@ -653,35 +581,18 @@ function ProductDetail() {
       {/* Detail blocks */}
       {Array.isArray(dp.detail_blocks) && dp.detail_blocks.length > 0 && (
         <section className="mt-16">
-          <h2 className="mb-6 font-display text-2xl font-bold">
-            {lang === "zh" ? "商品详情" : "Product Details"}
-          </h2>
+          <h2 className="mb-6 font-display text-2xl font-bold">{lang === "zh" ? "商品详情" : "Product Details"}</h2>
           <div className="space-y-4">
             {dp.detail_blocks.map((b: any, i: number) => {
               if (b.type === "image" && b.url)
-                return (
-                  <img
-                    key={i}
-                    src={b.url}
-                    alt=""
-                    className="w-full rounded-2xl border border-border"
-                  />
-                );
+                return <img key={i} src={b.url} alt="" className="w-full rounded-2xl border border-border" />;
               if (b.type === "video" && b.url)
                 return (
-                  <video
-                    key={i}
-                    src={b.url}
-                    controls
-                    className="w-full rounded-2xl border border-border bg-black"
-                  />
+                  <video key={i} src={b.url} controls className="w-full rounded-2xl border border-border bg-black" />
                 );
               if (b.type === "text" && b.content)
                 return (
-                  <p
-                    key={i}
-                    className="whitespace-pre-wrap text-base leading-relaxed text-foreground"
-                  >
+                  <p key={i} className="whitespace-pre-wrap text-base leading-relaxed text-foreground">
                     {lang === "en" ? b.content_en || b.content : b.content}
                   </p>
                 );
@@ -694,9 +605,7 @@ function ProductDetail() {
       {/* FAQ */}
       {faqItems.length > 0 && (
         <section className="mt-16">
-          <h2 className="mb-6 font-display text-2xl font-bold">
-            {lang === "zh" ? "常见问题" : "FAQ"}
-          </h2>
+          <h2 className="mb-6 font-display text-2xl font-bold">{lang === "zh" ? "常见问题" : "FAQ"}</h2>
           <div className="divide-y divide-border rounded-2xl border border-border bg-surface px-5">
             {faqItems.map((f: any, i: number) => (
               <details key={i} className="group py-4" open={i === 0}>
@@ -716,9 +625,7 @@ function ProductDetail() {
       {/* Related products — same category, picked automatically */}
       {related.length > 0 && (
         <section className="mt-16">
-          <h2 className="mb-6 font-display text-2xl font-bold">
-            {lang === "zh" ? "相关推荐" : "You may also like"}
-          </h2>
+          <h2 className="mb-6 font-display text-2xl font-bold">{lang === "zh" ? "相关推荐" : "You may also like"}</h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             {related.map((r: any) => (
               <Link

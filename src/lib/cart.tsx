@@ -110,8 +110,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const key = cartLineKey({ slug: p.slug, variantId: variant?.id });
     setItems((prev) => {
       const ex = prev.find((i) => cartLineKey(i) === key);
-      if (ex)
-        return prev.map((i) => (cartLineKey(i) === key ? { ...i, quantity: i.quantity + qty } : i));
+      if (ex) return prev.map((i) => (cartLineKey(i) === key ? { ...i, quantity: i.quantity + qty } : i));
       return [
         ...prev,
         {
@@ -143,9 +142,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       // Wholesale items can never drop below their minimum order quantity — clamp
       // instead of removing, even if the user keeps pressing "-" at the floor.
       const floor = Math.max(line.moq ?? 1, 1);
-      setItems((prev) =>
-        prev.map((i) => (cartLineKey(i) === key ? { ...i, quantity: Math.max(qty, floor) } : i)),
-      );
+      setItems((prev) => prev.map((i) => (cartLineKey(i) === key ? { ...i, quantity: Math.max(qty, floor) } : i)));
       return;
     }
     if (qty <= 0) return remove(slug, variantId);
@@ -182,17 +179,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const key = cartLineKey({ slug, variantId });
     setSelected((s) => ({ ...s, [key]: !(s[key] !== false) }));
   };
-  const setAllSelected = (v: boolean) =>
-    setSelected(Object.fromEntries(items.map((i) => [cartLineKey(i), v])));
+  const setAllSelected = (v: boolean) => setSelected(Object.fromEntries(items.map((i) => [cartLineKey(i), v])));
 
   const count = items.reduce((n, i) => n + i.quantity, 0);
   const subtotalCNY = items.reduce((s, i) => s + i.priceCNY * i.quantity, 0);
   const totalWeightKg = items.reduce((w, i) => w + lineWeightKg(i), 0);
 
-  const selectedItems = useMemo(
-    () => items.filter((i) => isSelected(i.slug, i.variantId)),
-    [items, selected],
-  );
+  const selectedItems = useMemo(() => items.filter((i) => isSelected(i.slug, i.variantId)), [items, selected]);
   const selectedCount = selectedItems.reduce((n, i) => n + i.quantity, 0);
   const selectedSubtotalCNY = selectedItems.reduce((s, i) => s + i.priceCNY * i.quantity, 0);
   const selectedWeightKg = selectedItems.reduce((w, i) => w + lineWeightKg(i), 0);

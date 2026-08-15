@@ -166,10 +166,7 @@ function renderContainer(d: LabelData): string {
     const left: [string, any][] = [
       ["重量（实重）", m.weight_kg != null ? `${m.weight_kg} kg` : "—"],
       ["体积", m.volume_m3 != null ? `${m.volume_m3} m³` : "—"],
-      [
-        "件数",
-        `${counts.waybills ?? 0} 单 · ${counts.cartons ?? 0} 箱 · ${counts.pallets ?? 0} 托`,
-      ],
+      ["件数", `${counts.waybills ?? 0} 单 · ${counts.cartons ?? 0} 箱 · ${counts.pallets ?? 0} 托`],
     ];
     const right: [string, any][] = [
       ["运输方式", m.shipping_method ?? "—"],

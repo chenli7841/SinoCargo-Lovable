@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   findCustomerByCode,
   getCustomerOverview,
@@ -19,8 +19,6 @@ import {
   previewCustomerStorageFee,
   payCustomerStorageFee,
   createCustomerForwarding,
-  getCustomerAccountInfo,
-  resetCustomerPassword,
 } from "@/lib/admin-customer-view.functions";
 import { deductWalletForBatch } from "@/lib/orders.functions";
 import { ROLE_LABEL, ROLE_COLOR } from "@/lib/admin-roles";
@@ -51,17 +49,11 @@ import {
   ArrowRight,
   AlertTriangle,
   Send,
-  Lock,
-  KeyRound,
-  MessageCircle,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/customer-view")({
   head: () => ({
-    meta: [
-      { title: "客户视图 — SinoCargo Admin" },
-      { name: "robots", content: "noindex,nofollow" },
-    ],
+    meta: [{ title: "客户视图 — SinoCargo Admin" }, { name: "robots", content: "noindex,nofollow" }],
   }),
   component: CustomerViewPage,
 });
@@ -152,9 +144,7 @@ function CustomerViewPage() {
                 {(profile.full_name ?? profile.email ?? "?").trim().slice(0, 1).toUpperCase()}
               </div>
               <div className="min-w-[200px] flex-1">
-                <h2 className="font-display text-xl font-bold">
-                  {profile.full_name ?? "未命名用户"}
-                </h2>
+                <h2 className="font-display text-xl font-bold">{profile.full_name ?? "未命名用户"}</h2>
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-400">
                   <span className="inline-flex items-center gap-1">
                     <Hash className="h-3.5 w-3.5" />
@@ -301,14 +291,9 @@ function OverviewTab({ userId }: { userId: string }) {
         ) : (
           <ul className="divide-y divide-white/5 rounded-md border border-white/5 bg-white/[0.02]">
             {d.unpaid_invoices.map((inv: any) => (
-              <li
-                key={inv.invoice_no}
-                className="flex items-center justify-between gap-2 px-3 py-2 text-xs"
-              >
+              <li key={inv.invoice_no} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
                 <span className="font-mono text-slate-300">{inv.invoice_no}</span>
-                <span className="text-slate-500">
-                  {inv.status === "overdue" ? "已逾期" : "未付"}
-                </span>
+                <span className="text-slate-500">{inv.status === "overdue" ? "已逾期" : "未付"}</span>
                 <span className="font-bold text-rose-300">¥{inv.due_cny.toFixed(2)}</span>
               </li>
             ))}
@@ -394,35 +379,21 @@ function MyOrdersTab({ userId }: { userId: string }) {
             </thead>
             <tbody>
               {items.map((r: any) => {
-                const pay = PAY_LABEL[r.payment_status] ?? [
-                  r.payment_status ?? "—",
-                  "bg-white/5 text-slate-400",
-                ];
+                const pay = PAY_LABEL[r.payment_status] ?? [r.payment_status ?? "—", "bg-white/5 text-slate-400"];
                 return (
-                  <tr
-                    key={`${r.kind}-${r.id}`}
-                    className="border-t border-white/5 hover:bg-white/[0.02]"
-                  >
+                  <tr key={`${r.kind}-${r.id}`} className="border-t border-white/5 hover:bg-white/[0.02]">
                     <td className="px-3 py-2">
                       <span
                         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${r.kind === "order" ? "bg-brand/15 text-brand" : "bg-cyan-500/15 text-cyan-300"}`}
                       >
-                        {r.kind === "order" ? (
-                          <Package className="h-3 w-3" />
-                        ) : (
-                          <Truck className="h-3 w-3" />
-                        )}
+                        {r.kind === "order" ? <Package className="h-3 w-3" /> : <Truck className="h-3 w-3" />}
                         {r.kind === "order" ? "商城" : "集运"}
                       </span>
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-200">{r.no ?? "—"}</td>
                     <td className="px-3 py-2 text-slate-300">{r.status ?? "—"}</td>
                     <td className="px-3 py-2">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${pay[1]}`}
-                      >
-                        {pay[0]}
-                      </span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${pay[1]}`}>{pay[0]}</span>
                     </td>
                     <td className="px-3 py-2 text-right text-slate-300">
                       {r.amount_cny != null ? `¥${Number(r.amount_cny).toFixed(2)}` : "—"}
@@ -430,17 +401,11 @@ function MyOrdersTab({ userId }: { userId: string }) {
                     <td className="px-3 py-2 text-slate-400">{r.shipping_method ?? "—"}</td>
                     <td className="px-3 py-2 font-mono text-slate-400">{r.tracking_no ?? "—"}</td>
                     <td className="px-3 py-2 text-slate-500">
-                      {r.created_at
-                        ? new Date(r.created_at).toLocaleString("zh-CN", { hour12: false })
-                        : "—"}
+                      {r.created_at ? new Date(r.created_at).toLocaleString("zh-CN", { hour12: false }) : "—"}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <Link
-                        to={
-                          r.kind === "order"
-                            ? "/admin/orders/$orderId"
-                            : "/admin/forwardings/$forwardingId"
-                        }
+                        to={r.kind === "order" ? "/admin/orders/$orderId" : "/admin/forwardings/$forwardingId"}
                         params={r.kind === "order" ? { orderId: r.id } : { forwardingId: r.id }}
                         className="inline-flex items-center gap-1 rounded px-2 py-1 text-brand hover:bg-brand/10"
                       >
@@ -617,9 +582,7 @@ function InventoryTab({ userId }: { userId: string }) {
         setMsg({
           kind: "err",
           text:
-            r?.reason === "insufficient"
-              ? `钱包余额不足：需要 CA$${r.need_cad}，当前 CA$${r.balance_cad}`
-              : "付款失败",
+            r?.reason === "insufficient" ? `钱包余额不足：需要 CA$${r.need_cad}，当前 CA$${r.balance_cad}` : "付款失败",
         });
       } else {
         setMsg({ kind: "ok", text: `仓储费付款成功 CA$${r.paid_cad}，账单 ${r.invoice_no}` });
@@ -661,9 +624,7 @@ function InventoryTab({ userId }: { userId: string }) {
             待付仓储费
           </div>
           <div className="mt-1.5 flex items-center gap-3">
-            <span className="font-display text-lg font-bold text-slate-100">
-              CA${(fee?.total_cad ?? 0).toFixed(2)}
-            </span>
+            <span className="font-display text-lg font-bold text-slate-100">CA${(fee?.total_cad ?? 0).toFixed(2)}</span>
             {(fee?.total_cad ?? 0) > 0 && (
               <button
                 onClick={payStorageFee}
@@ -695,10 +656,7 @@ function InventoryTab({ userId }: { userId: string }) {
               </div>
               <div className="mt-2 flex flex-wrap gap-1">
                 {g.boxes.map((b) => (
-                  <span
-                    key={b.id}
-                    className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-slate-300"
-                  >
+                  <span key={b.id} className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-slate-300">
                     {b.waybillNo}
                   </span>
                 ))}
@@ -771,9 +729,7 @@ function InventoryTab({ userId }: { userId: string }) {
                   ))}
                 </select>
                 {shipWarehouseId && availableRoutes.length === 0 && (
-                  <span className="mt-1 block text-[11px] text-amber-400">
-                    该仓库暂无可用集运线路
-                  </span>
+                  <span className="mt-1 block text-[11px] text-amber-400">该仓库暂无可用集运线路</span>
                 )}
               </label>
             </div>
@@ -856,28 +812,17 @@ function BatchesTab({ userId }: { userId: string }) {
         batches.map((b: any) => {
           const [zh, cls] = BATCH_STATUS_LABEL[b.status] ?? [b.status, "bg-white/5 text-slate-400"];
           return (
-            <div
-              key={b.batch_id}
-              className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.03]"
-            >
+            <div key={b.batch_id} className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.03]">
               <header
                 className={`flex flex-wrap items-center gap-3 border-b border-white/5 px-5 py-3 ${b.is_paid ? "bg-emerald-500/5" : "bg-white/[0.02]"}`}
               >
                 <span className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 text-brand">
-                  {b.shipping_method === "air" ? (
-                    <Plane className="h-4 w-4" />
-                  ) : (
-                    <Ship className="h-4 w-4" />
-                  )}
+                  {b.shipping_method === "air" ? <Plane className="h-4 w-4" /> : <Ship className="h-4 w-4" />}
                 </span>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-display text-sm font-bold text-slate-100">
-                      {b.batch_no}
-                    </span>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
-                      {zh}
-                    </span>
+                    <span className="font-display text-sm font-bold text-slate-100">{b.batch_no}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${cls}`}>{zh}</span>
                     {b.is_paid ? (
                       <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
                         已结清
@@ -889,25 +834,19 @@ function BatchesTab({ userId }: { userId: string }) {
                     )}
                   </div>
                   <div className="mt-0.5 text-[11px] text-slate-400">
-                    {b.items.length} 项{" "}
-                    {b.eta ? `· 预计到达 ${new Date(b.eta).toLocaleDateString("zh-CN")}` : ""}
+                    {b.items.length} 项 {b.eta ? `· 预计到达 ${new Date(b.eta).toLocaleDateString("zh-CN")}` : ""}
                   </div>
                 </div>
                 <div className="ml-auto text-right">
                   <div className="text-[10px] uppercase tracking-wider text-slate-500">
                     {b.is_paid ? "批次合计" : "批次待付"}
                   </div>
-                  <div className="font-display text-lg font-bold text-brand">
-                    CA${b.subtotal_cad.toFixed(2)}
-                  </div>
+                  <div className="font-display text-lg font-bold text-brand">CA${b.subtotal_cad.toFixed(2)}</div>
                 </div>
               </header>
               <ul className="divide-y divide-white/5">
                 {b.items.map((it: any) => (
-                  <li
-                    key={`${it.kind}-${it.id}`}
-                    className="flex flex-wrap items-center gap-3 px-5 py-2.5 text-xs"
-                  >
+                  <li key={`${it.kind}-${it.id}`} className="flex flex-wrap items-center gap-3 px-5 py-2.5 text-xs">
                     <span
                       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${it.kind === "order" ? "bg-brand/15 text-brand" : "bg-cyan-500/15 text-cyan-300"}`}
                     >
@@ -921,11 +860,7 @@ function BatchesTab({ userId }: { userId: string }) {
                       {it.payment_status === "paid" ? "已付款" : "待付款"}
                     </span>
                     <Link
-                      to={
-                        it.kind === "order"
-                          ? "/admin/orders/$orderId"
-                          : "/admin/forwardings/$forwardingId"
-                      }
+                      to={it.kind === "order" ? "/admin/orders/$orderId" : "/admin/forwardings/$forwardingId"}
                       params={it.kind === "order" ? { orderId: it.id } : { forwardingId: it.id }}
                       className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-brand hover:bg-brand/10"
                     >
@@ -1000,180 +935,63 @@ function ProfileTab({ userId, initial }: { userId: string; initial: any }) {
   };
 
   return (
-    <div className="space-y-4">
-      <section className="rounded-2xl border border-white/5 bg-white/[0.03] p-5">
-        <h3 className="font-display text-base font-bold">基本资料</h3>
-        <p className="mt-1 text-xs text-slate-400">
-          邮箱、登录密码、微信绑定属于账户安全设置，下方单独一块只读展示，密码可一键重置。
-        </p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <AField label="邮箱">
-            <input disabled value={initial.email ?? ""} className={inputCls + " opacity-60"} />
-          </AField>
-          <AField label="登录名">
-            <input
-              value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value.replace(/\s+/g, "") })}
-              className={inputCls}
-            />
-          </AField>
-          <AField label="姓名">
-            <input
-              value={form.full_name}
-              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-              className={inputCls}
-            />
-          </AField>
-          <AField label="手机号">
-            <input
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              className={inputCls}
-            />
-          </AField>
-          <AField label="偏好语言">
-            <select
-              value={form.preferred_lang}
-              onChange={(e) => setForm({ ...form, preferred_lang: e.target.value })}
-              className={inputCls}
-            >
-              <option value="zh">中文</option>
-              <option value="en">English</option>
-            </select>
-          </AField>
-        </div>
-        {msg && (
-          <div
-            className={`mt-3 rounded-md border px-3 py-1.5 text-xs ${msg.kind === "ok" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-rose-500/30 bg-rose-500/10 text-rose-300"}`}
+    <section className="rounded-2xl border border-white/5 bg-white/[0.03] p-5">
+      <h3 className="font-display text-base font-bold">基本资料</h3>
+      <p className="mt-1 text-xs text-slate-400">
+        邮箱 / 密码 / 微信绑定属于客户账号安全设置，代客视图不提供修改 — 如需变更请客户本人在「我的账户」操作。
+      </p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <AField label="邮箱">
+          <input disabled value={initial.email ?? ""} className={inputCls + " opacity-60"} />
+        </AField>
+        <AField label="登录名">
+          <input
+            value={form.username}
+            onChange={(e) => setForm({ ...form, username: e.target.value.replace(/\s+/g, "") })}
+            className={inputCls}
+          />
+        </AField>
+        <AField label="姓名">
+          <input
+            value={form.full_name}
+            onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+            className={inputCls}
+          />
+        </AField>
+        <AField label="手机号">
+          <input
+            value={form.phone}
+            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            className={inputCls}
+          />
+        </AField>
+        <AField label="偏好语言">
+          <select
+            value={form.preferred_lang}
+            onChange={(e) => setForm({ ...form, preferred_lang: e.target.value })}
+            className={inputCls}
           >
-            {msg.text}
-          </div>
-        )}
-        <button
-          onClick={onSave}
-          disabled={busy}
-          className="mt-4 inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-50"
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+          </select>
+        </AField>
+      </div>
+      {msg && (
+        <div
+          className={`mt-3 rounded-md border px-3 py-1.5 text-xs ${msg.kind === "ok" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-rose-500/30 bg-rose-500/10 text-rose-300"}`}
         >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          保存修改
-        </button>
-      </section>
-
-      <AccountSecuritySection userId={userId} />
-    </div>
-  );
-}
-
-// Read-only account info (login name/email/WeChat binding) + one-click
-// password reset to a default. Separate from the editable fields above —
-// email/password/WeChat binding are account-security settings, distinct from
-// the business profile fields (name/phone/language) staff routinely update.
-function AccountSecuritySection({ userId }: { userId: string }) {
-  const load = useServerFn(getCustomerAccountInfo);
-  const reset = useServerFn(resetCustomerPassword);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-
-  const q = useQuery({
-    queryKey: ["admin-cv-account", userId],
-    queryFn: () => load({ data: { userId } }),
-  });
-
-  if (q.isLoading) {
-    return (
-      <div className="grid h-32 place-items-center rounded-2xl border border-white/5 bg-white/[0.03]">
-        <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
-      </div>
-    );
-  }
-  const d: any = q.data ?? {};
-  const wechatBound = !!d.wechat_openid;
-
-  const Row = ({
-    icon,
-    label,
-    value,
-  }: {
-    icon: React.ReactNode;
-    label: string;
-    value: React.ReactNode;
-  }) => (
-    <div className="flex items-center justify-between gap-4 border-b border-white/5 px-4 py-3 last:border-0">
-      <div className="flex items-center gap-2 text-sm text-slate-400">
-        {icon}
-        {label}
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="text-sm font-medium text-slate-200">{value}</div>
-        <Lock className="h-3.5 w-3.5 text-slate-600" />
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-white/5 bg-white/[0.03]">
-        <div className="flex items-center gap-2 border-b border-white/5 px-4 py-3 text-sm font-semibold">
-          <UserIcon className="h-4 w-4 text-brand" />
-          账户安全（只读）
+          {msg.text}
         </div>
-        <Row icon={<Hash className="h-4 w-4" />} label="客户号" value={d.customer_code || "—"} />
-        <Row icon={<UserIcon className="h-4 w-4" />} label="登录名" value={d.username || "—"} />
-        <Row icon={<Mail className="h-4 w-4" />} label="登录邮箱" value={d.email || "—"} />
-        <Row
-          icon={<MessageCircle className="h-4 w-4" />}
-          label="微信绑定"
-          value={
-            wechatBound ? (
-              <span className="text-emerald-400">
-                已绑定{d.wechat_nickname ? `（${d.wechat_nickname}）` : ""}
-              </span>
-            ) : (
-              <span className="text-slate-500">未绑定</span>
-            )
-          }
-        />
-        <Row icon={<Phone className="h-4 w-4" />} label="手机号" value={d.phone || "—"} />
-      </div>
-
-      <div className="rounded-2xl border border-white/5 bg-white/[0.03]">
-        <div className="flex items-center gap-2 border-b border-white/5 px-4 py-3 text-sm font-semibold">
-          <KeyRound className="h-4 w-4 text-brand" />
-          登录密码
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-          <div>
-            <div className="font-mono text-lg tracking-widest text-slate-300">••••••••</div>
-            <p className="mt-1 text-xs text-slate-500">
-              密码已加密存储，无法查看。可一键重置为默认密码 123456。
-            </p>
-          </div>
-          <button
-            disabled={busy}
-            onClick={async () => {
-              if (!confirm("确认将该客户的登录密码重置为 123456？")) return;
-              setBusy(true);
-              setMsg(null);
-              try {
-                await reset({ data: { userId } });
-                setMsg("已重置为 123456");
-              } catch (e: any) {
-                setMsg(e?.message ?? "重置失败");
-              } finally {
-                setBusy(false);
-              }
-            }}
-            className="inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-50"
-          >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-            重置为 123456
-          </button>
-        </div>
-        {msg && (
-          <div className="border-t border-white/5 px-4 py-2 text-xs text-slate-300">{msg}</div>
-        )}
-      </div>
-    </div>
+      )}
+      <button
+        onClick={onSave}
+        disabled={busy}
+        className="mt-4 inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-50"
+      >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        保存修改
+      </button>
+    </section>
   );
 }
 
@@ -1315,10 +1133,7 @@ function AddressesTab({ userId }: { userId: string }) {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {list.map((a: any) => (
-            <div
-              key={a.id}
-              className="relative rounded-2xl border border-white/5 bg-white/[0.03] p-4 text-sm"
-            >
+            <div key={a.id} className="relative rounded-2xl border border-white/5 bg-white/[0.03] p-4 text-sm">
               <div className="flex items-center gap-2 font-semibold text-slate-100">
                 {a.recipient}
                 {a.is_default && (
@@ -1400,17 +1215,14 @@ function ItemsTab({ userId }: { userId: string }) {
       <div className="flex items-center justify-between">
         <h3 className="font-display text-base font-bold">我的物品 / SKU 库（{list.length}）</h3>
         <button
-          onClick={() =>
-            setEditing({ name: "", hs_code: "", sku: "", declared_value_cad: 0, inner_qty: null })
-          }
+          onClick={() => setEditing({ name: "", hs_code: "", sku: "", declared_value_cad: 0, inner_qty: null })}
           className="inline-flex items-center gap-1 rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"
         >
           <Plus className="h-3.5 w-3.5" /> 新增物品
         </button>
       </div>
       <p className="text-xs text-slate-500">
-        这里维护的是集运申请「内件清单」里 SKU 模糊搜索会匹配到的资料（品名 / HSCODE / 单价 /
-        内件数）。
+        这里维护的是集运申请「内件清单」里 SKU 模糊搜索会匹配到的资料（品名 / HSCODE / 单价 / 内件数）。
       </p>
 
       {editing && (
@@ -1442,9 +1254,7 @@ function ItemsTab({ userId }: { userId: string }) {
                 type="number"
                 className={inputCls}
                 value={editing.declared_value_cad ?? 0}
-                onChange={(e) =>
-                  setEditing({ ...editing, declared_value_cad: Number(e.target.value) || 0 })
-                }
+                onChange={(e) => setEditing({ ...editing, declared_value_cad: Number(e.target.value) || 0 })}
               />
             </AField>
             <AField label="内件数">
@@ -1531,7 +1341,6 @@ function ItemsTab({ userId }: { userId: string }) {
 }
 
 // ===================== Shared bits =====================
-const optionCls = "bg-[#0b1220] text-slate-100";
 const inputCls =
   "h-9 w-full rounded-md border border-white/10 bg-white/5 px-3 text-sm text-slate-100 outline-none focus:border-brand";
 

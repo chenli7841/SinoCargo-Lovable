@@ -2,21 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 
 // OTT Pay callback for Elavon Converge Hosted Payment (credit card).
 // Payload: { rsp_code, rsp_msg, merchant_id, data (AES-128-ECB base64), md5 }
-// where decrypted data = { finish_time, order_id, amount, tip, merchant_id,
-// bizpay_order_id, convenience_fee? } — no status field. See handler comment
-// below for why this callback is only a trigger, not the source of truth.
 export const Route = createFileRoute("/api/public/hooks/ottpay-card")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const {
-          decryptHosted,
-          hostedConfig,
-          hostedPost,
-          txnTime,
-          HOSTED_PAID_STATES,
-          HOSTED_FAILED_STATES,
-        } = await import("@/lib/ottpay-hosted.server");
+        const { decryptHosted, HOSTED_PAID_STATES, HOSTED_FAILED_STATES } = await import("@/lib/ottpay-hosted.server");
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
         let payload: any;
@@ -47,40 +37,32 @@ export const Route = createFileRoute("/api/public/hooks/ottpay-card")({
         if (!tx) return new Response("SUCCESS");
         if (tx.status === "completed") return new Response("SUCCESS"); // idempotent
 
-        // Per OTT Pay's Elavon Hosted Payment API doc, the callback's own
-        // decrypted payload carries no status field (only finish_time/order_id/
-        // amount/tip/merchant_id/bizpay_order_id/convenience_fee) — and the
-        // outer rsp_code/rsp_msg are plain, unsigned fields with nothing
-        // covering them, so they can't be trusted as the actual paid/failed
-        // decision (a client who's captured one genuine encrypted callback for
-        // their own order could otherwise replay it with rsp_code swapped to
-        // "SUCCESS" and self-credit without paying). Treat the callback purely
-        // as a "go check now" trigger, and get the real answer from the same
-        // authenticated STATUS_QUERY call syncOttTopup() already polls with —
-        // that response does carry order_status, using our own signKey.
-        const cfg = hostedConfig();
-        let q: any;
-        try {
-          q = await hostedPost("STATUS_QUERY", "1.0", {
-            orderId: reference,
-            merchant_id: cfg.merchantId,
-            bizType: "converge_hosted",
-            txnTime: txnTime(),
-            channelType: "ELAVONECOM",
-          });
-        } catch (e: any) {
-          console.error("[ottpay-card] status query failed", reference, e?.message);
-          return new Response("SUCCESS"); // leave pending — syncOttTopup() will retry
-        }
-        const st = String(q.order_status ?? q.orderStatus ?? "").toLowerCase();
+        // Money decision comes from the AES-encrypted (signKey-derived) payload,
+        // never from the outer plaintext rsp_code/rsp_msg — those aren't signed
+        // or encrypted (see the Payload comment above), so a client that has ever
+        // captured one genuine encrypted callback for their own reference could
+        // otherwise replay it with rsp_code swapped to "SUCCESS" and self-credit
+        // their wallet without actually paying. rsp_code is only used below as a
+        // non-authoritative hint for logging.
+        const st = String(info.order_status ?? info.orderStatus ?? "").toLowerCase();
         const paid = HOSTED_PAID_STATES.has(st);
         const failed = HOSTED_FAILED_STATES.has(st);
-        if (!paid && !failed) return new Response("SUCCESS"); // still processing
+        if (!paid && !failed) {
+          // Inconclusive decrypted status (includes "processing" and anything
+          // unrecognized) — don't guess. Leave the transaction pending; the
+          // client's post-redirect syncOttTopup() poll (STATUS_QUERY, also
+          // authenticated) is what actually resolves it.
+          console.warn("[ottpay-card] inconclusive status, leaving pending", reference, {
+            order_status: st,
+            rsp_code: payload.rsp_code,
+          });
+          return new Response("SUCCESS");
+        }
 
-        // amount is a required field on the callback payload — missing it on a
-        // "paid" result is suspicious enough to hold off rather than trust it.
         const cents = Number(info.amount ?? 0);
         if (paid && !cents) {
+          // Paid but the decrypted payload didn't include an amount to verify
+          // against — treat as suspicious rather than silently trusting it.
           console.error("[ottpay-card] paid callback missing amount, leaving pending", reference);
           return new Response("SUCCESS");
         }

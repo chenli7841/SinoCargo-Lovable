@@ -16,9 +16,7 @@ export async function uploadShopMedia(file: File): Promise<string> {
     contentType: file.type || undefined,
   });
   if (error) throw new Error(error.message);
-  const { data, error: signErr } = await (supabase as any).storage
-    .from(BUCKET)
-    .createSignedUrl(key, SIGNED_TTL);
+  const { data, error: signErr } = await (supabase as any).storage.from(BUCKET).createSignedUrl(key, SIGNED_TTL);
   if (signErr) throw new Error(signErr.message);
   return data.signedUrl as string;
 }
@@ -66,19 +64,8 @@ export function MediaUpload({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <input
-          ref={ref}
-          type="file"
-          accept={accept}
-          className="hidden"
-          onChange={(e) => handle(e.target.files?.[0])}
-        />
-        <button
-          type="button"
-          onClick={() => ref.current?.click()}
-          disabled={busy}
-          className={btnCls}
-        >
+        <input ref={ref} type="file" accept={accept} className="hidden" onChange={(e) => handle(e.target.files?.[0])} />
+        <button type="button" onClick={() => ref.current?.click()} disabled={busy} className={btnCls}>
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
           {label ?? "上传"}
         </button>
@@ -89,11 +76,7 @@ export function MediaUpload({
           className={urlCls}
         />
         {value && (
-          <button
-            type="button"
-            onClick={() => onChange("")}
-            className="text-rose-400 hover:text-rose-300"
-          >
+          <button type="button" onClick={() => onChange("")} className="text-rose-400 hover:text-rose-300">
             <X className="h-3.5 w-3.5" />
           </button>
         )}
@@ -106,11 +89,7 @@ export function MediaUpload({
           ) : isVid ? (
             <video src={value} controls className="max-h-40" />
           ) : (
-            <div
-              className={`p-2 text-[11px] break-all ${light ? "text-ink-soft" : "text-slate-400"}`}
-            >
-              {value}
-            </div>
+            <div className={`p-2 text-[11px] break-all ${light ? "text-ink-soft" : "text-slate-400"}`}>{value}</div>
           )}
         </div>
       )}
