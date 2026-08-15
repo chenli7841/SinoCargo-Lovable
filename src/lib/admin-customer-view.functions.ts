@@ -647,3 +647,139 @@ export const getCustomerBatches = createServerFn({ method: "POST" })
     }
     return { batches };
   });
+
+// ============ Fuzzy SKU/name/HS lookup over the customer's own item library ============
+// Mirrors the customer-facing forwarding form (src/routes/_authenticated/
+// forwarding.index.tsx): typing part of a SKU, product name or HS code pulls
+// the saved record so staff don't retype it. Searches both my_items (the
+// customer's own library) and customer_hs_items (their imported HS library),
+// and converts the stored CAD unit price into the CNY the admin form expects.
+// Not wired into the current admin forwarding form (which ships from existing
+// inventory, not free-text item entry) — kept for a future free-form item flow.
+export const searchCustomerItemLibrary = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string; term: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertCustomerViewAccess(context.supabase, context.userId);
+    const term = data.term.trim();
+    if (!term) return { items: [] as any[] };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const like = `%${term.replace(/[%,]/g, "")}%`;
+
+    const { data: fxRaw } = await supabaseAdmin.rpc("current_fx_cny_to_cad");
+    const fx = Number(fxRaw ?? 0.19) || 0.19;
+    const toCny = (cad: number | null | undefined) =>
+      cad == null ? 0 : Number((Number(cad) / fx).toFixed(2));
+
+    const [{ data: mine }, { data: hs }] = await Promise.all([
+      supabaseAdmin
+        .from("my_items")
+        .select("id,sku,name,hs_code,declared_value_cad,inner_qty")
+        .eq("user_id", data.userId)
+        .or(`sku.ilike.${like},name.ilike.${like},hs_code.ilike.${like}`)
+        .limit(8),
+      supabaseAdmin
+        .from("customer_hs_items")
+        .select("id,sku,description,hs_code,unit_price_cad,items_per_carton")
+        .eq("user_id", data.userId)
+        .or(`sku.ilike.${like},description.ilike.${like},hs_code.ilike.${like}`)
+        .limit(8),
+    ]);
+
+    const seen = new Set<string>();
+    const rows: {
+      id: string;
+      sku: string | null;
+      name: string;
+      hs_code: string | null;
+      unit_price_cny: number;
+      inner_qty: number | null;
+      source: "my_items" | "hs_lib";
+    }[] = [];
+    for (const r of (mine ?? []) as any[]) {
+      const key = `${(r.sku ?? "").toLowerCase()}|${(r.name ?? "").toLowerCase()}`;
+      seen.add(key);
+      rows.push({
+        id: r.id,
+        sku: r.sku,
+        name: r.name,
+        hs_code: r.hs_code,
+        unit_price_cny: toCny(r.declared_value_cad),
+        inner_qty: r.inner_qty ?? null,
+        source: "my_items",
+      });
+    }
+    for (const r of (hs ?? []) as any[]) {
+      const key = `${(r.sku ?? "").toLowerCase()}|${(r.description ?? "").toLowerCase()}`;
+      if (seen.has(key)) continue;
+      rows.push({
+        id: r.id,
+        sku: r.sku,
+        name: r.description,
+        hs_code: r.hs_code,
+        unit_price_cny: toCny(r.unit_price_cad),
+        inner_qty: r.items_per_carton != null ? Math.round(Number(r.items_per_carton)) : null,
+        source: "hs_lib",
+      });
+    }
+    return { items: rows.slice(0, 12) };
+  });
+
+// ============ Account security: read-only view + password reset ============
+export const getCustomerAccountInfo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertCustomerViewAccess(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: p, error } = await supabaseAdmin
+      .from("profiles")
+      .select(
+        "username, email, wechat_openid, wechat_nickname, customer_code, full_name, phone, created_at",
+      )
+      .eq("id", data.userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    let authEmail: string | null = null;
+    let providers: string[] = [];
+    try {
+      const { data: u } = await supabaseAdmin.auth.admin.getUserById(data.userId);
+      authEmail = u?.user?.email ?? null;
+      providers = ((u?.user?.identities ?? []) as any[]).map((i) => i.provider);
+    } catch {
+      /* ignore */
+    }
+    return {
+      username: (p as any)?.username ?? null,
+      email: authEmail ?? (p as any)?.email ?? null,
+      wechat_openid: (p as any)?.wechat_openid ?? null,
+      wechat_nickname: (p as any)?.wechat_nickname ?? null,
+      customer_code: (p as any)?.customer_code ?? null,
+      full_name: (p as any)?.full_name ?? null,
+      phone: (p as any)?.phone ?? null,
+      created_at: (p as any)?.created_at ?? null,
+      providers,
+    };
+  });
+
+export const resetCustomerPassword = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertCustomerViewAccess(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
+      password: "123456",
+    });
+    if (error) throw new Error(error.message);
+    const operator_name = await getOperatorName(supabaseAdmin, context.userId);
+    await recordLog(supabaseAdmin, {
+      entity_type: "customer_profile",
+      entity_id: data.userId,
+      action: "admin_reset_password",
+      operator_id: context.userId,
+      operator_name,
+      note: "重置为默认密码",
+    });
+    return { ok: true };
+  });

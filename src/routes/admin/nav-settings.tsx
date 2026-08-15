@@ -9,10 +9,7 @@ import { Loader2, Save, RotateCcw, ChevronUp, ChevronDown, ShieldCheck } from "l
 
 export const Route = createFileRoute("/admin/nav-settings")({
   head: () => ({
-    meta: [
-      { title: "菜单权限设置 — SinoCargo Admin" },
-      { name: "robots", content: "noindex,nofollow" },
-    ],
+    meta: [{ title: "菜单权限设置 — SinoCargo Admin" }, { name: "robots", content: "noindex,nofollow" }],
   }),
   component: NavSettingsPage,
 });
@@ -60,9 +57,7 @@ function NavSettingsPage() {
         it.id === id
           ? {
               ...it,
-              roles: it.roles.includes(role)
-                ? it.roles.filter((r) => r !== role)
-                : [...it.roles, role],
+              roles: it.roles.includes(role) ? it.roles.filter((r) => r !== role) : [...it.roles, role],
             }
           : it,
       ),
@@ -70,11 +65,7 @@ function NavSettingsPage() {
   };
 
   const renameGroup = (oldTitle: string, newTitle: string) => {
-    setItems((prev) =>
-      (prev ?? []).map((it) =>
-        it.group_title === oldTitle ? { ...it, group_title: newTitle } : it,
-      ),
-    );
+    setItems((prev) => (prev ?? []).map((it) => (it.group_title === oldTitle ? { ...it, group_title: newTitle } : it)));
   };
 
   const moveGroup = (title: string, dir: -1 | 1) => {
@@ -118,12 +109,8 @@ function NavSettingsPage() {
       newTitle = name.trim();
     }
     const existing = groups.find((g) => g.title === newTitle);
-    const targetGroupSort = existing
-      ? existing.sort
-      : Math.max(0, ...groups.map((g) => g.sort)) + 1;
-    const targetItemSort = existing
-      ? Math.max(0, ...existing.items.map((it) => it.item_sort_order)) + 1
-      : 0;
+    const targetGroupSort = existing ? existing.sort : Math.max(0, ...groups.map((g) => g.sort)) + 1;
+    const targetItemSort = existing ? Math.max(0, ...existing.items.map((it) => it.item_sort_order)) + 1 : 0;
     setItems((prev) =>
       (prev ?? []).map((it) =>
         it.id === itemId
@@ -198,8 +185,7 @@ function NavSettingsPage() {
             菜单权限设置
           </h1>
           <p className="mt-1 text-sm text-slate-400">
-            勾选每个栏目哪些角色登录后能看到；也可以改它所属的分类和排序（分类 /
-            栏目都能上下移动）。
+            勾选每个栏目哪些角色登录后能看到；也可以改它所属的分类和排序（分类 / 栏目都能上下移动）。
           </p>
         </div>
         <div className="flex gap-2">
@@ -231,10 +217,7 @@ function NavSettingsPage() {
 
       <div className="space-y-5">
         {groups.map((group, gi) => (
-          <section
-            key={group.title || "(未分类)"}
-            className="rounded-2xl border border-white/5 bg-white/[0.03] p-5"
-          >
+          <section key={group.title || "(未分类)"} className="rounded-2xl border border-white/5 bg-white/[0.03] p-5">
             <div className="mb-3 flex items-center gap-2">
               <input
                 value={group.title}

@@ -78,6 +78,14 @@ export function Header() {
             <option value="CAD">CAD $</option>
           </select>
 
+          <button
+            onClick={() => setLang(lang === "zh" ? "en" : "zh")}
+            aria-label="Language"
+            className="grid h-9 w-9 place-items-center rounded-md border border-border bg-surface text-[11px] font-bold text-ink-soft transition hover:text-foreground sm:hidden"
+          >
+            {lang === "zh" ? "EN" : "中"}
+          </button>
+
           <Link
             to="/cart"
             aria-label={t("nav.cart")}

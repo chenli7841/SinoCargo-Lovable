@@ -842,7 +842,10 @@ export const createCarton = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const nz = (v: any) => (v === "" || v === undefined ? null : v);
+    const nz = (v: any) => {
+      const t = typeof v === "string" ? v.trim() : v;
+      return t === "" || t === undefined ? null : t;
+    };
     const { data: ins, error } = await supabaseAdmin
       .from("cartons")
       .insert({
@@ -994,6 +997,8 @@ function addressKey(a: any): string | null {
 // carton's, when the carton already has those set. The address check only kicks in
 // once the carton has a customer_code — a carton with no customer bound yet (a
 // deliberately mixed carton) accepts anything, per the existing customer_code gate.
+// Comparisons are trim+uppercase normalized so whitespace/case differences alone
+// don't trigger a false mismatch.
 function mismatchReason(
   carton: any,
   ctx: {
@@ -1005,22 +1010,17 @@ function mismatchReason(
   },
   no: string,
 ) {
-  if (carton.route_code && ctx.route_code && carton.route_code !== ctx.route_code)
+  const n = (v: any) =>
+    String(v ?? "")
+      .trim()
+      .toUpperCase();
+  const ne = (a: any, b: any) => !!n(a) && !!n(b) && n(a) !== n(b);
+  if (ne(carton.route_code, ctx.route_code))
     return `${no}: 线路不匹配（箱号要求 ${carton.route_code}，单为 ${ctx.route_code}）`;
-  if (carton.customer_code && ctx.customer_code && carton.customer_code !== ctx.customer_code)
+  if (ne(carton.customer_code, ctx.customer_code))
     return `${no}: 客户号不匹配（箱号要求 ${carton.customer_code}）`;
-  if (
-    carton.pickup_warehouse &&
-    ctx.pickup_warehouse &&
-    carton.pickup_warehouse !== ctx.pickup_warehouse
-  )
-    return `${no}: 取货点不匹配`;
-  if (
-    carton.destination_code &&
-    ctx.destination_code &&
-    carton.destination_code !== ctx.destination_code
-  )
-    return `${no}: 目的地不匹配`;
+  if (ne(carton.pickup_warehouse, ctx.pickup_warehouse)) return `${no}: 取货点不匹配`;
+  if (ne(carton.destination_code, ctx.destination_code)) return `${no}: 目的地不匹配`;
   if (carton.customer_code) {
     const cartonKey = addressKey(carton.address_snapshot);
     const itemKey = addressKey(ctx.address);
@@ -1428,7 +1428,10 @@ export const createPallet = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const nz = (v: any) => (v === "" || v === undefined ? null : v);
+    const nz = (v: any) => {
+      const t = typeof v === "string" ? v.trim() : v;
+      return t === "" || t === undefined ? null : t;
+    };
     const { data: ins, error } = await supabaseAdmin
       .from("pallets")
       .insert({

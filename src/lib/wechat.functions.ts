@@ -22,12 +22,16 @@ export const startWechatBind = createServerFn({ method: "POST" })
       .delete()
       .lt("created_at", new Date(Date.now() - 15 * 60 * 1000).toISOString());
 
-    const { error } = await supabaseAdmin
-      .from("wechat_bind_states")
-      .insert({ state, user_id: context.userId });
+    const { error } = await supabaseAdmin.from("wechat_bind_states").insert({ state, user_id: context.userId });
     if (error) throw new Error(error.message);
 
-    const redirectUri = `${data.origin}/api/public/wechat/callback`;
+    // WeChat validates redirect_uri against the single 授权回调域 registered on
+    // open.weixin.qq.com. Preview/localhost origins are rejected with
+    // "redirect_uri 参数错误", so always use the registered public origin.
+    const authorizedOrigin =
+      process.env.WECHAT_REDIRECT_ORIGIN?.replace(/\/$/, "") || "https://shopper.epluscanada.com";
+    void data.origin;
+    const redirectUri = `${authorizedOrigin}/api/public/wechat/callback`;
     const url =
       `https://open.weixin.qq.com/connect/qrconnect?appid=${encodeURIComponent(appid)}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=snsapi_login` +

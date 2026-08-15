@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { getWaybillDetail, setWaybillStatus, addTrackingEvents, editTrackingEvent, deleteTrackingEvent, listTrackingPresets, type WaybillStatus } from "@/lib/orders.functions";
+import { getWaybillDetail, setWaybillStatus, addTrackingEvents, editTrackingEvent, deleteTrackingEvent, listTrackingPresets, updateWaybillDomesticTrackingNo, type WaybillStatus } from "@/lib/orders.functions";
 import { listHsCodes, bindNameToHs, setForwardingItemHs } from "@/lib/hs-codes.functions";
 import { getMyRoles } from "@/lib/admin.functions";
 import { WAYBILL_STATUS_LABEL, WAYBILL_STATUS_COLOR, METHOD_LABEL, StatusBadge, Card, fmtDate, fmtCAD, BackLink } from "@/lib/admin-shared";
@@ -24,6 +24,7 @@ function WaybillDetail() {
   const addEvent = useServerFn(addTrackingEvents);
   const editEvent = useServerFn(editTrackingEvent);
   const delEvent = useServerFn(deleteTrackingEvent);
+  const saveDomesticFn = useServerFn(updateWaybillDomesticTrackingNo);
 
   const detailQ = useQuery({ queryKey: ["admin-waybill", waybillId], queryFn: () => fetchDetail({ data: { waybillId } }) });
   const presetsQ = useQuery({ queryKey: ["tracking-presets"], queryFn: () => fetchPresets() });
@@ -37,11 +38,23 @@ function WaybillDetail() {
   const [evLoc, setEvLoc] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ status_zh: "", location_zh: "", event_time: "" });
+  const [dtEditing, setDtEditing] = useState(false);
+  const [dtValue, setDtValue] = useState("");
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
+
 
   if (detailQ.isLoading) return <div className="grid place-items-center p-20"><Loader2 className="h-6 w-6 animate-spin text-slate-500"/></div>;
   if (detailQ.isError) return <div className="p-6 text-rose-400">{(detailQ.error as Error).message}</div>;
   const { waybill: wb, events, logs } = detailQ.data!;
+
+  const onSaveDomestic = async () => {
+    setBusy(true); setErr(null);
+    try {
+      await saveDomesticFn({ data: { waybillId, domestic_tracking_no: dtValue } });
+      setDtEditing(false);
+      await qc.invalidateQueries({ queryKey: ["admin-waybill", waybillId] });
+    } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  };
 
   const onSetStatus = async () => {
     setBusy(true); setErr(null);
@@ -101,7 +114,33 @@ function WaybillDetail() {
         <Card title="基础信息">
           <div className="space-y-1 text-xs text-slate-300">
             <div>国际单号：{wb.intl_tracking_no ?? "—"}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span>国内单号：</span>
+              {dtEditing ? (
+                <>
+                  <input
+                    value={dtValue}
+                    onChange={(e) => setDtValue(e.target.value)}
+                    placeholder="国内快递单号"
+                    className="w-56 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-xs text-slate-200 outline-none focus:border-brand"
+                  />
+                  <button disabled={busy} onClick={onSaveDomestic} className="rounded-md bg-brand px-2 py-1 text-xs font-semibold text-white disabled:opacity-50">保存</button>
+                  <button disabled={busy} onClick={() => setDtEditing(false)} className="rounded-md border border-white/10 px-2 py-1 text-xs text-slate-300">取消</button>
+                </>
+              ) : (
+                <>
+                  <span className="font-mono text-slate-200">{(detailQ.data as any).domestic_tracking_no ?? "—"}</span>
+                  <button
+                    onClick={() => { setDtValue((detailQ.data as any).domestic_tracking_no ?? ""); setDtEditing(true); }}
+                    className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-white/5"
+                  >
+                    <Pencil className="h-3 w-3"/> 修改
+                  </button>
+                </>
+              )}
+            </div>
             <div>重量：{wb.weight_kg ?? "—"} kg</div>
+
             <div>尺寸：{wb.length_cm ?? "—"} × {wb.width_cm ?? "—"} × {wb.height_cm ?? "—"} cm</div>
             <div>箱号：{wb.box_no ?? "—"} · 板号：{wb.pallet_no ?? "—"}</div>
             <div>批次：{wb.batch_no ?? "—"}</div>

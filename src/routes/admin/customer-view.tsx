@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   findCustomerByCode,
   getCustomerOverview,
@@ -19,6 +19,8 @@ import {
   previewCustomerStorageFee,
   payCustomerStorageFee,
   createCustomerForwarding,
+  getCustomerAccountInfo,
+  resetCustomerPassword,
 } from "@/lib/admin-customer-view.functions";
 import { deductWalletForBatch } from "@/lib/orders.functions";
 import { ROLE_LABEL, ROLE_COLOR } from "@/lib/admin-roles";
@@ -49,6 +51,9 @@ import {
   ArrowRight,
   AlertTriangle,
   Send,
+  Lock,
+  KeyRound,
+  MessageCircle,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/customer-view")({
@@ -995,64 +1000,180 @@ function ProfileTab({ userId, initial }: { userId: string; initial: any }) {
   };
 
   return (
-    <section className="rounded-2xl border border-white/5 bg-white/[0.03] p-5">
-      <h3 className="font-display text-base font-bold">基本资料</h3>
-      <p className="mt-1 text-xs text-slate-400">
-        邮箱 / 密码 / 微信绑定属于客户账号安全设置，代客视图不提供修改 —
-        如需变更请客户本人在「我的账户」操作。
-      </p>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <AField label="邮箱">
-          <input disabled value={initial.email ?? ""} className={inputCls + " opacity-60"} />
-        </AField>
-        <AField label="登录名">
-          <input
-            value={form.username}
-            onChange={(e) => setForm({ ...form, username: e.target.value.replace(/\s+/g, "") })}
-            className={inputCls}
-          />
-        </AField>
-        <AField label="姓名">
-          <input
-            value={form.full_name}
-            onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-            className={inputCls}
-          />
-        </AField>
-        <AField label="手机号">
-          <input
-            value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            className={inputCls}
-          />
-        </AField>
-        <AField label="偏好语言">
-          <select
-            value={form.preferred_lang}
-            onChange={(e) => setForm({ ...form, preferred_lang: e.target.value })}
-            className={inputCls}
-          >
-            <option value="zh">中文</option>
-            <option value="en">English</option>
-          </select>
-        </AField>
-      </div>
-      {msg && (
-        <div
-          className={`mt-3 rounded-md border px-3 py-1.5 text-xs ${msg.kind === "ok" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-rose-500/30 bg-rose-500/10 text-rose-300"}`}
-        >
-          {msg.text}
+    <div className="space-y-4">
+      <section className="rounded-2xl border border-white/5 bg-white/[0.03] p-5">
+        <h3 className="font-display text-base font-bold">基本资料</h3>
+        <p className="mt-1 text-xs text-slate-400">
+          邮箱、登录密码、微信绑定属于账户安全设置，下方单独一块只读展示，密码可一键重置。
+        </p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <AField label="邮箱">
+            <input disabled value={initial.email ?? ""} className={inputCls + " opacity-60"} />
+          </AField>
+          <AField label="登录名">
+            <input
+              value={form.username}
+              onChange={(e) => setForm({ ...form, username: e.target.value.replace(/\s+/g, "") })}
+              className={inputCls}
+            />
+          </AField>
+          <AField label="姓名">
+            <input
+              value={form.full_name}
+              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+              className={inputCls}
+            />
+          </AField>
+          <AField label="手机号">
+            <input
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              className={inputCls}
+            />
+          </AField>
+          <AField label="偏好语言">
+            <select
+              value={form.preferred_lang}
+              onChange={(e) => setForm({ ...form, preferred_lang: e.target.value })}
+              className={inputCls}
+            >
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+            </select>
+          </AField>
         </div>
-      )}
-      <button
-        onClick={onSave}
-        disabled={busy}
-        className="mt-4 inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-50"
-      >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        保存修改
-      </button>
-    </section>
+        {msg && (
+          <div
+            className={`mt-3 rounded-md border px-3 py-1.5 text-xs ${msg.kind === "ok" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-rose-500/30 bg-rose-500/10 text-rose-300"}`}
+          >
+            {msg.text}
+          </div>
+        )}
+        <button
+          onClick={onSave}
+          disabled={busy}
+          className="mt-4 inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          保存修改
+        </button>
+      </section>
+
+      <AccountSecuritySection userId={userId} />
+    </div>
+  );
+}
+
+// Read-only account info (login name/email/WeChat binding) + one-click
+// password reset to a default. Separate from the editable fields above —
+// email/password/WeChat binding are account-security settings, distinct from
+// the business profile fields (name/phone/language) staff routinely update.
+function AccountSecuritySection({ userId }: { userId: string }) {
+  const load = useServerFn(getCustomerAccountInfo);
+  const reset = useServerFn(resetCustomerPassword);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const q = useQuery({
+    queryKey: ["admin-cv-account", userId],
+    queryFn: () => load({ data: { userId } }),
+  });
+
+  if (q.isLoading) {
+    return (
+      <div className="grid h-32 place-items-center rounded-2xl border border-white/5 bg-white/[0.03]">
+        <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
+      </div>
+    );
+  }
+  const d: any = q.data ?? {};
+  const wechatBound = !!d.wechat_openid;
+
+  const Row = ({
+    icon,
+    label,
+    value,
+  }: {
+    icon: React.ReactNode;
+    label: string;
+    value: React.ReactNode;
+  }) => (
+    <div className="flex items-center justify-between gap-4 border-b border-white/5 px-4 py-3 last:border-0">
+      <div className="flex items-center gap-2 text-sm text-slate-400">
+        {icon}
+        {label}
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="text-sm font-medium text-slate-200">{value}</div>
+        <Lock className="h-3.5 w-3.5 text-slate-600" />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-white/5 bg-white/[0.03]">
+        <div className="flex items-center gap-2 border-b border-white/5 px-4 py-3 text-sm font-semibold">
+          <UserIcon className="h-4 w-4 text-brand" />
+          账户安全（只读）
+        </div>
+        <Row icon={<Hash className="h-4 w-4" />} label="客户号" value={d.customer_code || "—"} />
+        <Row icon={<UserIcon className="h-4 w-4" />} label="登录名" value={d.username || "—"} />
+        <Row icon={<Mail className="h-4 w-4" />} label="登录邮箱" value={d.email || "—"} />
+        <Row
+          icon={<MessageCircle className="h-4 w-4" />}
+          label="微信绑定"
+          value={
+            wechatBound ? (
+              <span className="text-emerald-400">
+                已绑定{d.wechat_nickname ? `（${d.wechat_nickname}）` : ""}
+              </span>
+            ) : (
+              <span className="text-slate-500">未绑定</span>
+            )
+          }
+        />
+        <Row icon={<Phone className="h-4 w-4" />} label="手机号" value={d.phone || "—"} />
+      </div>
+
+      <div className="rounded-2xl border border-white/5 bg-white/[0.03]">
+        <div className="flex items-center gap-2 border-b border-white/5 px-4 py-3 text-sm font-semibold">
+          <KeyRound className="h-4 w-4 text-brand" />
+          登录密码
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+          <div>
+            <div className="font-mono text-lg tracking-widest text-slate-300">••••••••</div>
+            <p className="mt-1 text-xs text-slate-500">
+              密码已加密存储，无法查看。可一键重置为默认密码 123456。
+            </p>
+          </div>
+          <button
+            disabled={busy}
+            onClick={async () => {
+              if (!confirm("确认将该客户的登录密码重置为 123456？")) return;
+              setBusy(true);
+              setMsg(null);
+              try {
+                await reset({ data: { userId } });
+                setMsg("已重置为 123456");
+              } catch (e: any) {
+                setMsg(e?.message ?? "重置失败");
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+            重置为 123456
+          </button>
+        </div>
+        {msg && (
+          <div className="border-t border-white/5 px-4 py-2 text-xs text-slate-300">{msg}</div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1410,6 +1531,7 @@ function ItemsTab({ userId }: { userId: string }) {
 }
 
 // ===================== Shared bits =====================
+const optionCls = "bg-[#0b1220] text-slate-100";
 const inputCls =
   "h-9 w-full rounded-md border border-white/10 bg-white/5 px-3 text-sm text-slate-100 outline-none focus:border-brand";
 

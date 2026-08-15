@@ -26,6 +26,7 @@ const KEYS = [
   "route_type_display",
   "contact_offices",
   "contact_email_notify",
+  "emt_email_notify",
   "tracking_pixels",
   "promo_landing",
 ];
@@ -37,6 +38,7 @@ const KEY_LABELS: Record<string, string> = {
   print_template: "打印模板",
   contact_offices: "办公室信息",
   contact_email_notify: "留言邮件通知",
+  emt_email_notify: "Email Transfer 充值邮件",
   tracking_pixels: "推广埋点 (Pixel)",
   promo_landing: "推广落地页 /promo",
 };
@@ -93,8 +95,69 @@ interface EmailNotifyCfg {
   from_email: string;
   to_email: string;
   cc_emails: string[];
+  subject_template: string;
+  body_template: string;
 }
-const EMAIL_NOTIFY_DEFAULT: EmailNotifyCfg = { enabled: false, from_email: "", to_email: "", cc_emails: [] };
+const DEFAULT_SUBJECT_TPL = "[SinoCargo 官网留言] {{name}}";
+const DEFAULT_BODY_TPL = [
+  "姓名：{{name}}",
+  "邮箱：{{email}}",
+  "电话：{{phone}}",
+  "时间：{{time}}",
+  "",
+  "留言内容：",
+  "{{message}}",
+].join("\n");
+const EMAIL_NOTIFY_DEFAULT: EmailNotifyCfg = {
+  enabled: false,
+  from_email: "",
+  to_email: "",
+  cc_emails: [],
+  subject_template: DEFAULT_SUBJECT_TPL,
+  body_template: DEFAULT_BODY_TPL,
+};
+
+interface EmtNotifyCfg {
+  subject_template: string;
+  body_template_zh: string;
+  body_template_en: string;
+  cc_emails: string[];
+}
+const EMT_DEFAULT_SUBJECT = "[EPLUS] Email Transfer 充值申请 / Top-up request · CA${{amount}} · {{reference}}";
+const EMT_DEFAULT_BODY_ZH = [
+  "{{name}} 您好，",
+  "",
+  "感谢您的支持，我们已收到您的 Email Transfer 付款提交申请，我们将在 24 小时内完成充值动作，如果后续有问题请联系客服。",
+  "",
+  "提交时间：{{time}}",
+  "提交金额：CA${{amount}}",
+  "客户号：{{customer_code}}",
+  "参考编号：{{reference}}",
+  "备注：{{note}}",
+  "凭证图片：见附件",
+].join("\n");
+const EMT_DEFAULT_BODY_EN = [
+  "Dear {{name}},",
+  "",
+  "Thank you for your support. We have received your Email Transfer payment submission and will complete the top-up within 24 hours. Please contact customer service if you have any questions.",
+  "",
+  "Submitted at: {{time}}",
+  "Amount: CA${{amount}}",
+  "Customer No.: {{customer_code}}",
+  "Reference: {{reference}}",
+  "Note: {{note}}",
+  "Proof image: see attachment",
+  "",
+  "EPLUS International Services Inc.",
+].join("\n");
+const EMT_NOTIFY_DEFAULT: EmtNotifyCfg = {
+  subject_template: EMT_DEFAULT_SUBJECT,
+  body_template_zh: EMT_DEFAULT_BODY_ZH,
+  body_template_en: EMT_DEFAULT_BODY_EN,
+  cc_emails: [],
+};
+
+
 
 interface PointsRuleCfg {
   enabled: boolean;
@@ -151,6 +214,8 @@ function SystemPage() {
   );
   const [emailNotify, setEmailNotify] = useState<EmailNotifyCfg>(EMAIL_NOTIFY_DEFAULT);
   const [ccInput, setCcInput] = useState("");
+  const [emtNotify, setEmtNotify] = useState<EmtNotifyCfg>(EMT_NOTIFY_DEFAULT);
+  const [emtCcInput, setEmtCcInput] = useState("");
   const [pointsRule, setPointsRule] = useState<PointsRuleCfg>(POINTS_RULE_DEFAULT);
   const [pixels, setPixels] = useState<TrackingPixelsCfg>(TRACKING_PIXELS_DEFAULT);
   const [promo, setPromo] = useState<PromoLandingCfg>(PROMO_LANDING_DEFAULT);
@@ -179,6 +244,9 @@ function SystemPage() {
       const savedNotify = { ...EMAIL_NOTIFY_DEFAULT, ...(q.data.settings.contact_email_notify ?? {}) };
       setEmailNotify(savedNotify);
       setCcInput((savedNotify.cc_emails ?? []).join(", "));
+      const savedEmt = { ...EMT_NOTIFY_DEFAULT, ...(q.data.settings.emt_email_notify ?? {}) };
+      setEmtNotify(savedEmt);
+      setEmtCcInput((savedEmt.cc_emails ?? []).join(", "));
       setPixels({ ...TRACKING_PIXELS_DEFAULT, ...(q.data.settings.tracking_pixels ?? {}) });
       setPromo({ ...PROMO_LANDING_DEFAULT, ...(q.data.settings.promo_landing ?? {}) });
     }
@@ -441,7 +509,29 @@ function SystemPage() {
             <Field label="抄送邮箱（多个用逗号分隔）" full>
               <Input value={ccInput} onChange={setCcInput} />
             </Field>
+            <Field label="邮件标题模板" full>
+              <Input
+                value={emailNotify.subject_template}
+                onChange={(v) => setEmailNotify({ ...emailNotify, subject_template: v })}
+              />
+            </Field>
+            <Field label="邮件正文模板" full>
+              <textarea
+                rows={9}
+                value={emailNotify.body_template}
+                onChange={(e) => setEmailNotify({ ...emailNotify, body_template: e.target.value })}
+                className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 font-mono text-sm focus:border-brand focus:outline-none"
+              />
+              <p className="mt-1 text-[11px] text-slate-500">
+                可用变量：<code className="rounded bg-white/10 px-1">{"{{name}}"}</code>{" "}
+                <code className="rounded bg-white/10 px-1">{"{{email}}"}</code>{" "}
+                <code className="rounded bg-white/10 px-1">{"{{phone}}"}</code>{" "}
+                <code className="rounded bg-white/10 px-1">{"{{message}}"}</code>{" "}
+                <code className="rounded bg-white/10 px-1">{"{{time}}"}</code>（留空则使用默认模板）
+              </p>
+            </Field>
           </div>
+
           <SaveBtn
             busy={saving === "contact_email_notify"}
             onClick={() =>
@@ -455,6 +545,64 @@ function SystemPage() {
             }
           />
         </Card>
+
+        {/* Email Transfer top-up confirmation email */}
+        <Card title="Email Transfer 充值邮件">
+          <p className="mb-3 text-[11px] text-slate-500">
+            客户提交 Email Transfer 付款凭证后，系统用上面「留言邮件通知」里配置的发件邮箱给客户发送确认邮件，并抄送下面的邮箱；客户上传的凭证图片会作为附件一起发送。邮件同时包含中英双语内容。
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="抄送邮箱（多个用逗号分隔）" full>
+              <Input value={emtCcInput} onChange={setEmtCcInput} />
+            </Field>
+            <Field label="邮件标题模板" full>
+              <Input
+                value={emtNotify.subject_template}
+                onChange={(v) => setEmtNotify({ ...emtNotify, subject_template: v })}
+              />
+            </Field>
+            <Field label="邮件正文（中文）" full>
+              <textarea
+                rows={10}
+                value={emtNotify.body_template_zh}
+                onChange={(e) => setEmtNotify({ ...emtNotify, body_template_zh: e.target.value })}
+                className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 font-mono text-sm focus:border-brand focus:outline-none"
+              />
+            </Field>
+            <Field label="邮件正文（English）" full>
+              <textarea
+                rows={10}
+                value={emtNotify.body_template_en}
+                onChange={(e) => setEmtNotify({ ...emtNotify, body_template_en: e.target.value })}
+                className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 font-mono text-sm focus:border-brand focus:outline-none"
+              />
+              <p className="mt-1 text-[11px] text-slate-500">
+                可用变量：<code className="rounded bg-white/10 px-1">{"{{name}}"}</code>{" "}
+                <code className="rounded bg-white/10 px-1">{"{{amount}}"}</code>{" "}
+                <code className="rounded bg-white/10 px-1">{"{{customer_code}}"}</code>{" "}
+                <code className="rounded bg-white/10 px-1">{"{{time}}"}</code>{" "}
+                <code className="rounded bg-white/10 px-1">{"{{reference}}"}</code>{" "}
+                <code className="rounded bg-white/10 px-1">{"{{note}}"}</code>{" "}
+                <code className="rounded bg-white/10 px-1">{"{{emt_email}}"}</code>{" "}
+                <code className="rounded bg-white/10 px-1">{"{{proof_url}}"}</code>（留空则使用默认模板）
+              </p>
+            </Field>
+          </div>
+          <SaveBtn
+            busy={saving === "emt_email_notify"}
+            onClick={() =>
+              save("emt_email_notify", {
+                ...emtNotify,
+                cc_emails: emtCcInput
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              })
+            }
+          />
+        </Card>
+
+
 
         {/* Tracking pixels for FB/IG/TikTok/小红书/GA */}
         <Card title="推广埋点 (Pixel)">

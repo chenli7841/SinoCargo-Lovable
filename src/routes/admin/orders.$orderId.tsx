@@ -1,8 +1,8 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { getOrderDetail, cancelOrder, getLabelData, adminShipShopOrder } from "@/lib/orders.functions";
+import { useState, useEffect } from "react";
+import { getOrderDetail, cancelOrder, getLabelData, adminShipShopOrder, updateOrderDomesticTrackingNo } from "@/lib/orders.functions";
 import { getMyRoles } from "@/lib/admin.functions";
 import {
   ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, WAYBILL_STATUS_LABEL, WAYBILL_STATUS_COLOR,
@@ -41,6 +41,10 @@ function OrderDetail() {
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const saveDtnFn = useServerFn(updateOrderDomesticTrackingNo);
+  const serverDtn = detailQ.data?.order?.domestic_tracking_no ?? "";
+  const [dtn, setDtn] = useState("");
+  useEffect(() => { setDtn(serverDtn); }, [serverDtn]);
 
   if (detailQ.isLoading) return <div className="grid place-items-center p-20"><Loader2 className="h-6 w-6 animate-spin text-slate-500"/></div>;
   if (detailQ.isError) return <div className="p-6 text-rose-400">{(detailQ.error as Error).message}</div>;
@@ -132,7 +136,31 @@ function OrderDetail() {
             <div>方式：{METHOD_LABEL[order.shipping_method] ?? order.shipping_method}</div>
             <div>线路：<span className="font-mono">{order.route_code ?? "—"}</span></div>
             <div>国际单号：<span className="font-mono">{order.tracking_no ?? "—"}</span></div>
-            <div>国内单号：<span className="font-mono">{order.domestic_tracking_no ?? "—"}</span></div>
+            <div className="flex items-center gap-2">
+              <span>国内单号：</span>
+              {canEdit ? (
+                <>
+                  <input
+                    value={dtn}
+                    onChange={(e) => setDtn(e.target.value)}
+                    placeholder="未填写"
+                    className="w-40 rounded-md border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs text-slate-100 outline-none focus:border-brand"
+                  />
+                  <button
+                    disabled={busy || dtn.trim() === (order.domestic_tracking_no ?? "")}
+                    onClick={async () => {
+                      setBusy(true); setErr(null);
+                      try {
+                        await saveDtnFn({ data: { orderId, domestic_tracking_no: dtn } });
+                        await qc.invalidateQueries({ queryKey: ["admin-order", orderId] });
+                      } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+                    }}
+                    className="rounded-md border border-brand/30 bg-brand/10 px-2 py-1 text-[11px] font-semibold text-brand disabled:opacity-40">
+                    保存
+                  </button>
+                </>
+              ) : <span className="font-mono">{order.domestic_tracking_no ?? "—"}</span>}
+            </div>
             <div>批次：<span className="font-mono">{order.batch_no ?? "—"}</span></div>
             <div>所属箱号：{order.carton_id ? <span className="font-mono">{String(order.carton_id).slice(0,8)}…</span> : "—"}</div>
             <div>所属托盘：{order.pallet_id ? <span className="font-mono">{String(order.pallet_id).slice(0,8)}…</span> : "—"}</div>

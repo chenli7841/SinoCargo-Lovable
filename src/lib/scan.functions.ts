@@ -1476,8 +1476,13 @@ function assertParityMatch(container: any, child: any, childLabel: string) {
     const cv = (container as any)[k];
     const wv = (child as any)[k];
     // Only fail when BOTH sides are set and they differ. If either side is empty, allow (adoption).
-    if (cv && wv && String(cv) !== String(wv))
-      mismatches.push(`${label}(${String(wv)} ≠ 容器 ${String(cv)})`);
+    const norm = (v: any) =>
+      String(v ?? "")
+        .trim()
+        .toUpperCase();
+    const cn = norm(cv),
+      wn = norm(wv);
+    if (cn && wn && cn !== wn) mismatches.push(`${label}(${wn} ≠ 容器 ${cn})`);
   }
   if (mismatches.length) throw new Error(`${childLabel} 与容器不匹配: ${mismatches.join(", ")}`);
 }

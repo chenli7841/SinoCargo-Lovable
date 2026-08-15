@@ -46,8 +46,7 @@ function toFraction(x: number): {
   denominator: number;
 } {
   const value = +Number(x || 0).toFixed(6);
-  if (Number.isInteger(value))
-    return { value, display: String(value), numerator: value, denominator: 1 };
+  if (Number.isInteger(value)) return { value, display: String(value), numerator: value, denominator: 1 };
   const denom = 12; // 常见箱数（1..12）足以覆盖分箱情形
   let bestN = 1,
     bestD = 1,
@@ -111,8 +110,7 @@ export function matchHsForName(
   const exact = index.byExact.get(s);
   if (exact) {
     // 判定来源：精确命中 name_zh/name_en 视为 name，否则 alias
-    const nm =
-      (exact.name_zh ?? "").toLowerCase() === s || (exact.name_en ?? "").toLowerCase() === s;
+    const nm = (exact.name_zh ?? "").toLowerCase() === s || (exact.name_en ?? "").toLowerCase() === s;
     return { hs: exact, matched: nm ? "name" : "alias" };
   }
   // 包含匹配
@@ -141,18 +139,12 @@ export async function computeWaybillDutyBreakdown(admin: any, wb: any): Promise<
   if (!wb?.forwarding_id) return empty;
 
   const [{ data: fo }, { data: fi }, { data: hs }] = await Promise.all([
-    admin
-      .from("forwarding_orders")
-      .select("id, box_count, route_id")
-      .eq("id", wb.forwarding_id)
-      .maybeSingle(),
+    admin.from("forwarding_orders").select("id, box_count, route_id").eq("id", wb.forwarding_id).maybeSingle(),
     admin
       .from("forwarding_items")
       .select("id, name, quantity, unit_price_cad, unit_price_cny, extras, hs_code")
       .eq("forwarding_id", wb.forwarding_id),
-    admin
-      .from("hs_codes")
-      .select("hs_code, name_zh, name_en, aliases, mfn_rate, gst_rate, anti_dumping_rate"),
+    admin.from("hs_codes").select("hs_code, name_zh, name_en, aliases, mfn_rate, gst_rate, anti_dumping_rate"),
   ]);
   const route_id = fo?.route_id ?? null;
   const boxCount = Math.max(Number(fo?.box_count ?? 1) || 1, 1);
@@ -174,11 +166,7 @@ export async function computeWaybillDutyBreakdown(admin: any, wb: any): Promise<
   // fx 兜底（unit_price_cad 缺失时用 unit_price_cny 折算）
   let fx = 0.19;
   try {
-    const { data: s } = await admin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "fx_rate")
-      .maybeSingle();
+    const { data: s } = await admin.from("app_settings").select("value").eq("key", "fx_rate").maybeSingle();
     const cnyPerCad = Number((s?.value as any)?.cny_per_cad ?? 0);
     if (cnyPerCad > 0) fx = +(1 / cnyPerCad).toFixed(6);
   } catch {
@@ -273,10 +261,7 @@ export async function computeWaybillDutyBreakdown(admin: any, wb: any): Promise<
 // customs_gst_rate/customs_antidumping_rate straight from checkout, set in
 // 电商管理 → 商品管理. order_items.waybill_id already scopes items to this
 // exact waybill (no box-splitting fractions needed, unlike forwarding).
-export async function computeOrderWaybillDutyBreakdown(
-  admin: any,
-  wb: any,
-): Promise<DutyBreakdown> {
+export async function computeOrderWaybillDutyBreakdown(admin: any, wb: any): Promise<DutyBreakdown> {
   const empty: DutyBreakdown = {
     items: [],
     declared_cad: 0,
@@ -288,11 +273,7 @@ export async function computeOrderWaybillDutyBreakdown(
   };
   if (!wb?.order_id) return empty;
 
-  const { data: ord } = await admin
-    .from("orders")
-    .select("id, route_id")
-    .eq("id", wb.order_id)
-    .maybeSingle();
+  const { data: ord } = await admin.from("orders").select("id, route_id").eq("id", wb.order_id).maybeSingle();
   const route_id = ord?.route_id ?? null;
 
   let items: any[] = [];
@@ -324,11 +305,7 @@ export async function computeOrderWaybillDutyBreakdown(
 
   let fx = 0.19;
   try {
-    const { data: s } = await admin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "fx_rate")
-      .maybeSingle();
+    const { data: s } = await admin.from("app_settings").select("value").eq("key", "fx_rate").maybeSingle();
     const cnyPerCad = Number((s?.value as any)?.cny_per_cad ?? 0);
     if (cnyPerCad > 0) fx = +(1 / cnyPerCad).toFixed(6);
   } catch {
@@ -433,11 +410,7 @@ export async function computeWaybillFreightMeta(
       .maybeSingle();
     route_id = fo?.route_id ?? null;
   } else if (wb.order_id) {
-    const { data: ord } = await admin
-      .from("orders")
-      .select("route_id")
-      .eq("id", wb.order_id)
-      .maybeSingle();
+    const { data: ord } = await admin.from("orders").select("route_id").eq("id", wb.order_id).maybeSingle();
     route_id = ord?.route_id ?? null;
   }
   if (!route_id) return null;
@@ -454,11 +427,7 @@ export async function computeWaybillFreightMeta(
 
   let fx = 0.19;
   try {
-    const { data: s } = await admin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "fx_rate")
-      .maybeSingle();
+    const { data: s } = await admin.from("app_settings").select("value").eq("key", "fx_rate").maybeSingle();
     const cnyPerCad = Number((s?.value as any)?.cny_per_cad ?? 0);
     if (cnyPerCad > 0) fx = +(1 / cnyPerCad).toFixed(6);
   } catch {
@@ -469,16 +438,9 @@ export async function computeWaybillFreightMeta(
   const v = Number(wb.length_cm ?? 0) * Number(wb.width_cm ?? 0) * Number(wb.height_cm ?? 0);
   const divisor = Number(rule.volumetric_divisor) || 6000;
   const volW = v / divisor;
-  const chargeable =
-    rule.weight_mode === "actual"
-      ? w
-      : rule.weight_mode === "volumetric"
-        ? volW
-        : Math.max(w, volW);
+  const chargeable = rule.weight_mode === "actual" ? w : rule.weight_mode === "volumetric" ? volW : Math.max(w, volW);
   const rate_cad =
-    Number(rule.unit_price_cad) > 0
-      ? Number(rule.unit_price_cad)
-      : Number(rule.unit_price_cny ?? 0) * fx;
+    Number(rule.unit_price_cad) > 0 ? Number(rule.unit_price_cad) : Number(rule.unit_price_cny ?? 0) * fx;
   return { chargeable_weight_kg: +chargeable.toFixed(2), rate_cad_per_kg: +rate_cad.toFixed(4) };
 }
 
@@ -524,9 +486,7 @@ export async function buildInvoiceLineMeta(admin: any, wb: any): Promise<Invoice
       };
     });
 
-  const freight = freightMeta
-    ? { ...freightMeta, amount_cad: +Number(wb.freight_cad ?? 0).toFixed(2) }
-    : null;
+  const freight = freightMeta ? { ...freightMeta, amount_cad: +Number(wb.freight_cad ?? 0).toFixed(2) } : null;
 
   return {
     waybill_no: wb.waybill_no ?? null,
