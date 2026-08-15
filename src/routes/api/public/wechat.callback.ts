@@ -29,13 +29,17 @@ export const Route = createFileRoute("/api/public/wechat/callback")({
         const state = url.searchParams.get("state");
         const appid = process.env.WECHAT_APPID;
         const secret = process.env.WECHAT_APPSECRET;
-        const accountUrl = (params: string) => new URL(`/account?tab=profile&${params}`, url.origin).toString();
+        const accountUrl = (params: string) =>
+          new URL(`/account?tab=profile&${params}`, url.origin).toString();
 
         if (!appid || !secret) {
-          return new Response("WeChat sign-in not configured. Admin must set WECHAT_APPID and WECHAT_APPSECRET.", {
-            status: 503,
-            headers: { "Content-Type": "text/plain; charset=utf-8" },
-          });
+          return new Response(
+            "WeChat sign-in not configured. Admin must set WECHAT_APPID and WECHAT_APPSECRET.",
+            {
+              status: 503,
+              headers: { "Content-Type": "text/plain; charset=utf-8" },
+            },
+          );
         }
         if (!code || !state) {
           return new Response("Missing ?code or ?state", { status: 400 });
@@ -61,6 +65,17 @@ export const Route = createFileRoute("/api/public/wechat/callback")({
 
           // Login mode: state minted by /api/public/wechat/login (no session yet).
           if (state.startsWith("login:")) {
+            const { data: loginState } = await supabaseAdmin
+              .from("wechat_login_states")
+              .select("state")
+              .eq("state", state)
+              .maybeSingle();
+            if (!loginState) {
+              return Response.redirect(new URL("/auth?wechat=failed", url.origin).toString(), 302);
+            }
+            // Single-use — consume before doing anything else, regardless of outcome.
+            await supabaseAdmin.from("wechat_login_states").delete().eq("state", state);
+
             const { data: linked } = await supabaseAdmin
               .from("profiles")
               .select("id, email")
@@ -68,7 +83,10 @@ export const Route = createFileRoute("/api/public/wechat/callback")({
               .maybeSingle();
 
             if (!linked?.email) {
-              return Response.redirect(new URL("/auth?wechat=notbound", url.origin).toString(), 302);
+              return Response.redirect(
+                new URL("/auth?wechat=notbound", url.origin).toString(),
+                302,
+              );
             }
 
             const { data: link, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
@@ -90,10 +108,13 @@ export const Route = createFileRoute("/api/public/wechat/callback")({
             .maybeSingle();
 
           if (!pending) {
-            return new Response("WeChat callback received, but this link has expired. Please try binding again.", {
-              status: 400,
-              headers: { "Content-Type": "text/plain; charset=utf-8" },
-            });
+            return new Response(
+              "WeChat callback received, but this link has expired. Please try binding again.",
+              {
+                status: 400,
+                headers: { "Content-Type": "text/plain; charset=utf-8" },
+              },
+            );
           }
 
           await supabaseAdmin.from("wechat_bind_states").delete().eq("state", state);

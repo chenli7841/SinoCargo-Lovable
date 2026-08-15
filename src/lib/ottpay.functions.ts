@@ -15,14 +15,15 @@ export type OttStartResult =
       openUrl?: string;
     };
 
-
 /**
  * Create an OTT Pay top-up (WeChat / Alipay) and a matching pending wallet transaction.
  * `device: "mobile"` uses the H5 flows (redirect), desktop uses the scan-code flow (QR).
  */
 export const startOttTopup = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { amountCad: number; channel: "wechat" | "alipay"; device: "mobile" | "desktop" }) => d)
+  .inputValidator(
+    (d: { amountCad: number; channel: "wechat" | "alipay"; device: "mobile" | "desktop" }) => d,
+  )
   .handler(async ({ data, context }): Promise<OttStartResult> => {
     if (!(data.amountCad >= 2)) throw new Error("最低充值 CA$2");
     const { ottPost, toCents, ottConfig } = await import("@/lib/ottpay.server");
@@ -43,7 +44,6 @@ export const startOttTopup = createServerFn({ method: "POST" })
     let notice: string | undefined;
     let openUrl: string | undefined;
 
-
     // ---- 自动判断支付环境（服务端 UA 为准，客户端 device 作为兜底）----
     const { getRequestHeader } = await import("@tanstack/react-start/server");
     const ua = String(getRequestHeader("user-agent") ?? "");
@@ -56,7 +56,8 @@ export const startOttTopup = createServerFn({ method: "POST" })
     const nativeWeChat = data.channel === "wechat" && inWeChat;
     const nativeAlipay = data.channel === "alipay" && inAlipay;
     // 渠道与当前 App 不匹配（如在微信里选支付宝）：只能出二维码让用户换端扫码
-    const crossApp = (data.channel === "wechat" && inAlipay) || (data.channel === "alipay" && inWeChat);
+    const crossApp =
+      (data.channel === "wechat" && inAlipay) || (data.channel === "alipay" && inWeChat);
 
     /** 从 wap 链接里提取内嵌的二维码地址（PC / 跨端场景用） */
     const extractQr = (link: string) => {
@@ -67,17 +68,31 @@ export const startOttTopup = createServerFn({ method: "POST" })
     if (data.channel === "wechat") {
       if (nativeWeChat) {
         // 微信内置浏览器 → 公众号支付，直接调起微信授权
-        const r = await ottPost<any>("/api/v1/pay/weixin/public-pay", { amount, callbackURL, returnURL, remark: reference });
+        const r = await ottPost<any>("/api/v1/pay/weixin/public-pay", {
+          amount,
+          callbackURL,
+          returnURL,
+          remark: reference,
+        });
         payInfo = r.payInfo;
         paymentId = r.paymentId ?? null;
       } else if (isMobile && !crossApp) {
         // 普通手机浏览器 → H5 支付，跳转后自动唤起微信 App 授权
-        const r = await ottPost<any>("/api/v1/pay/weixin/h5-pay", { amount, callbackURL, returnURL, remark: reference });
+        const r = await ottPost<any>("/api/v1/pay/weixin/h5-pay", {
+          amount,
+          callbackURL,
+          returnURL,
+          remark: reference,
+        });
         payInfo = r.payInfo;
         paymentId = r.paymentId ?? null;
       } else {
         // 电脑 / 跨 App → 扫码支付
-        const r = await ottPost<any>("/api/v1/pay/weixin/active-pay", { amount, callbackURL, remark: reference });
+        const r = await ottPost<any>("/api/v1/pay/weixin/active-pay", {
+          amount,
+          callbackURL,
+          remark: reference,
+        });
         payInfo = r.payInfo;
         paymentId = r.paymentId ?? null;
         mode = "qr";
@@ -87,16 +102,25 @@ export const startOttTopup = createServerFn({ method: "POST" })
           notice = "支付宝浏览器不支持微信付款，请跳转到微信 App 进行付款";
         }
       }
-
     } else {
       if (nativeAlipay || (isMobile && !crossApp)) {
         // 支付宝内置浏览器 / 手机浏览器 → WAP 支付，自动唤起支付宝 App 授权
-        const r = await ottPost<any>("/api/v1/pay/alipay/wap-pay", { amount, callbackURL, returnURL, remark: reference });
+        const r = await ottPost<any>("/api/v1/pay/alipay/wap-pay", {
+          amount,
+          callbackURL,
+          returnURL,
+          remark: reference,
+        });
         payInfo = r.payInfo;
         paymentId = r.paymentId ?? null;
       } else if (crossApp) {
         // 在微信里选支付宝：微信内无法调起支付宝，给二维码 + 跳转链接
-        const r = await ottPost<any>("/api/v1/pay/alipay/wap-pay", { amount, callbackURL, returnURL, remark: reference });
+        const r = await ottPost<any>("/api/v1/pay/alipay/wap-pay", {
+          amount,
+          callbackURL,
+          returnURL,
+          remark: reference,
+        });
         paymentId = r.paymentId ?? null;
         const raw = String(r.payInfo ?? "");
         const qr = extractQr(raw);
@@ -104,15 +128,24 @@ export const startOttTopup = createServerFn({ method: "POST" })
         openUrl = qr ?? raw;
         notice = "微信浏览器不支持支付宝付款，请跳转到支付宝 App 进行付款";
         mode = "qr";
-
       } else {
         // 电脑端：优先官方 PC 收银台，失败回退二维码
         try {
-          const r = await ottPost<any>("/api/v1/pay/alipay/web-pay", { amount, callbackURL, returnURL, remark: reference });
+          const r = await ottPost<any>("/api/v1/pay/alipay/web-pay", {
+            amount,
+            callbackURL,
+            returnURL,
+            remark: reference,
+          });
           payInfo = r.payInfo;
           paymentId = r.paymentId ?? null;
         } catch {
-          const r = await ottPost<any>("/api/v1/pay/alipay/wap-pay", { amount, callbackURL, returnURL, remark: reference });
+          const r = await ottPost<any>("/api/v1/pay/alipay/wap-pay", {
+            amount,
+            callbackURL,
+            returnURL,
+            remark: reference,
+          });
           paymentId = r.paymentId ?? null;
           const qr = extractQr(String(r.payInfo ?? ""));
           payInfo = qr ?? String(r.payInfo ?? "");
@@ -120,10 +153,6 @@ export const startOttTopup = createServerFn({ method: "POST" })
         }
       }
     }
-
-
-
-
 
     const { error } = await supabaseAdmin.from("wallet_transactions").insert({
       user_id: context.userId,
@@ -144,93 +173,6 @@ export const startOttTopup = createServerFn({ method: "POST" })
       return { mode, payInfo, qrDataUrl, reference, paymentId, notice, openUrl };
     }
     return { mode: "redirect", url: payInfo, reference, paymentId };
-  });
-
-/** Local card (3DS v2) top-up. Card data is passed straight to OTT Pay and never stored. */
-export const startOttCardTopup = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator(
-    (d: {
-      amountCad: number;
-      card: { number: string; name: string; expire: string; cvn2: string };
-      billing: { address: string; city: string; province: string; country: string; zip: string; email: string };
-      browser: {
-        userAgent: string;
-        acceptHeader: string;
-        language: string;
-        screenHeight: string;
-        screenWidth: string;
-        timezone: string;
-        colorDepth: string;
-      };
-    }) => d,
-  )
-  .handler(async ({ data, context }) => {
-    if (!(data.amountCad >= 2)) throw new Error("最低充值 CA$2");
-    const crypto = await import("crypto");
-    const { ottPost, ottConfig } = await import("@/lib/ottpay.server");
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { getFxCadPerCny } = await import("@/lib/orders.functions");
-
-    const amountCad = Number(data.amountCad.toFixed(2));
-    const fx = await getFxCadPerCny(supabaseAdmin);
-    const reference = `TOPUP${Date.now()}${Math.floor(Math.random() * 1000)}`;
-    const cfg = ottConfig();
-    const sessionID = crypto.randomBytes(16).toString("hex").toUpperCase();
-
-    const r = await ottPost<any>("/api/v1/payment/local-card/payment3dsV2", {
-      accountNumber: data.card.number.replace(/\s+/g, ""),
-      accountName: data.card.name,
-      accountExpire: data.card.expire.replace(/\D/g, ""),
-      cvn2: data.card.cvn2,
-      sslAvsAddress: data.billing.address,
-      sslAvsCity: data.billing.city,
-      sslAvsProvince: data.billing.province,
-      sslAvsCountry: data.billing.country || "CA",
-      sslAvsZip: data.billing.zip,
-      amount: Math.round(amountCad * 100),
-      callBackURL: `${cfg.origin}/api/public/hooks/ottpay`,
-      frontURL: `${cfg.origin}/account?tab=wallet&ott=${reference}`,
-      reference,
-      sessionId: sessionID,
-      email: data.billing.email,
-      purchase3DSAddition: {
-        version: "2.1.0",
-        sessionID,
-        browserUserAgent: data.browser.userAgent,
-        browserAcceptHeader: data.browser.acceptHeader,
-        browserLanguage: data.browser.language,
-        browserJavaScriptEnabledVal: "1",
-        browserJavaEnabledVal: "2",
-        browserScreenHeight: data.browser.screenHeight,
-        browserScreenWidth: data.browser.screenWidth,
-        browserTimezone: data.browser.timezone,
-        browserScreenColorDepth: data.browser.colorDepth,
-      },
-    });
-
-    const status = String(r.paymentStatus ?? "").toLowerCase();
-    const success = ["success", "captured", "authorised", "authorized"].includes(status);
-
-    const { error } = await supabaseAdmin.from("wallet_transactions").insert({
-      user_id: context.userId,
-      type: "recharge",
-      amount_cad: amountCad,
-      amount_cny: +(amountCad / fx).toFixed(2),
-      fx_rate_cny_to_cad: fx,
-      status: success ? "completed" : "pending",
-      channel: "card",
-      ref_no: reference,
-      note: `OTT Pay 信用卡充值 CA$${amountCad}${r.paymentId ? ` · pid=${r.paymentId}` : ""}`,
-    } as any);
-    if (error) throw new Error(error.message);
-
-    return {
-      reference,
-      paymentStatus: r.paymentStatus ?? null,
-      success,
-      challengeHtml: (r.escape3DSChallengeForm as string | null) ?? null,
-    };
   });
 
 /**
@@ -292,7 +234,6 @@ export const syncOttTopup = createServerFn({ method: "POST" })
     const { ottPost } = await import("@/lib/ottpay.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-
     const { data: tx } = await supabaseAdmin
       .from("wallet_transactions")
       .select("*")
@@ -304,9 +245,8 @@ export const syncOttTopup = createServerFn({ method: "POST" })
 
     // Converge hosted (credit card) uses the frontapi STATUS_QUERY endpoint
     if (/hosted=1/.test(tx.note ?? "")) {
-      const { hostedConfig, hostedPost, txnTime, HOSTED_PAID_STATES, HOSTED_FAILED_STATES } = await import(
-        "@/lib/ottpay-hosted.server"
-      );
+      const { hostedConfig, hostedPost, txnTime, HOSTED_PAID_STATES, HOSTED_FAILED_STATES } =
+        await import("@/lib/ottpay-hosted.server");
       const cfg = hostedConfig();
       const q = await hostedPost("STATUS_QUERY", "1.0", {
         orderId: data.reference,
@@ -319,13 +259,16 @@ export const syncOttTopup = createServerFn({ method: "POST" })
       let hostedNext: string | null = null;
       if (HOSTED_PAID_STATES.has(st)) hostedNext = "completed";
       else if (HOSTED_FAILED_STATES.has(st)) hostedNext = "failed";
-      if (hostedNext) await supabaseAdmin.from("wallet_transactions").update({ status: hostedNext }).eq("id", tx.id);
+      if (hostedNext)
+        await supabaseAdmin
+          .from("wallet_transactions")
+          .update({ status: hostedNext })
+          .eq("id", tx.id);
       return { status: hostedNext ?? "pending" };
     }
 
     const pid = /pid=([\w-]+)/.exec(tx.note ?? "")?.[1];
     if (!pid) return { status: "pending" };
-
 
     const r = await ottPost<any>("/api/v1/payment/status-query", { paymentId: pid });
     const s = String(r.paymentStatus ?? "").toLowerCase();
@@ -333,6 +276,7 @@ export const syncOttTopup = createServerFn({ method: "POST" })
     if (["success", "captured", "authorised", "authorized"].includes(s)) next = "completed";
     else if (["failure", "orderclosed"].includes(s)) next = "failed";
 
-    if (next) await supabaseAdmin.from("wallet_transactions").update({ status: next }).eq("id", tx.id);
+    if (next)
+      await supabaseAdmin.from("wallet_transactions").update({ status: next }).eq("id", tx.id);
     return { status: next ?? "pending" };
   });
