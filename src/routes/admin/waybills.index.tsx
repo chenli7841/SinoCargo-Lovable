@@ -6,6 +6,8 @@ import { listWaybills, setWaybillStatus, addTrackingEvents, listTrackingPresets,
 import { getMyRoles } from "@/lib/admin.functions";
 import { WAYBILL_STATUS_LABEL, WAYBILL_STATUS_COLOR, METHOD_LABEL, StatusBadge, Page, fmtDate } from "@/lib/admin-shared";
 import { Pagination } from "@/components/admin/Pagination";
+import { DeleteRowButton, useCanDelete } from "@/components/admin/DeleteRowButton";
+import { deleteWaybill } from "@/lib/admin-delete.functions";
 import { Search, Loader2, ArrowRight, MapPin, ListChecks } from "lucide-react";
 
 export const Route = createFileRoute("/admin/waybills/")({ component: WaybillsPage });
@@ -19,6 +21,8 @@ function WaybillsPage() {
   const fetchRoles = useServerFn(getMyRoles);
   const setStatusFn = useServerFn(setWaybillStatus);
   const addEvent = useServerFn(addTrackingEvents);
+  const delWaybill = useServerFn(deleteWaybill);
+  const canDelete = useCanDelete();
 
   const [status, setStatus] = useState<WaybillStatus | "all">("all");
   const [search, setSearch] = useState(""); const [searchInput, setSearchInput] = useState("");
@@ -174,7 +178,9 @@ function WaybillsPage() {
                   ) : <span className="text-slate-500">—</span>}
                 </td>
                 <td className="px-4 py-2.5 text-xs text-slate-400">{fmtDate(w.created_at)}</td>
-                <td className="px-4 py-2.5 text-right"><Link to="/admin/waybills/$waybillId" params={{ waybillId: w.id }} className="text-xs text-brand hover:underline">详情 <ArrowRight className="inline h-3 w-3"/></Link></td>
+                <td className="px-4 py-2.5 text-right"><Link to="/admin/waybills/$waybillId" params={{ waybillId: w.id }} className="text-xs text-brand hover:underline">详情 <ArrowRight className="inline h-3 w-3"/></Link>
+                  {canDelete && <DeleteRowButton label="运单" name={w.waybill_no} onDelete={async () => { await delWaybill({ data: { id: w.id } }); await qc.invalidateQueries({ queryKey: ["admin-waybills"] }); }}/>}
+                </td>
               </tr>
             ))}
           </tbody>

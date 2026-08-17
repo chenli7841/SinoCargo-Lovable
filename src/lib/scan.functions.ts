@@ -1213,9 +1213,10 @@ export async function computeWaybillFeesCad(admin: any, wb: any) {
   const volW = divisor > 0 ? (L * W * H) / divisor : 0;
   const chargeable = rule.weight_mode === "actual" ? w : rule.weight_mode === "volumetric" ? volW : Math.max(w, volW);
   const unit_cad = Number(rule.unit_price_cad ?? 0) || Number(rule.unit_price_cny ?? 0) * fx;
-  const min_level = String(rule.min_charge_level ?? "waybill");
-  const min_cad = min_level === "batch" ? 0 : Number(rule.min_charge_cad ?? 0) || Number(rule.min_charge_cny ?? 0) * fx;
-  const clearance_cad = Number(rule.clearance_fee_cad ?? 0) || Number(rule.extra_fee_cny ?? 0) * fx;
+  // 运单级最低收费 / 清关费：每张运单各判断一次（批次级另行结算）
+  const min_cad = Number(rule.min_charge_waybill_cad ?? 0);
+  const clearance_cad = Number(rule.clearance_fee_waybill_cad ?? 0);
+
   let freight_cad = +(chargeable * unit_cad).toFixed(2);
   if (freight_cad < min_cad) freight_cad = +min_cad.toFixed(2);
   // 关税 —— 统一走 HS 明细口径 (mfn+gst+反倾销)；customs_rules.rate_pct 已弃用，只用 enabled/threshold

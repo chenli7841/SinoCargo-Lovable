@@ -80,115 +80,37 @@ export const listUsers = createServerFn({ method: "POST" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Sorting is by role rank (staff first, customers last) then customer_code,
-    // which lives in a separate user_roles join table — PostgREST can't order
-    // by that in one query, so fetch every matching profile unpaginated, sort
-    // in JS, then slice the page before fetching the heavier per-row data
-    // (wallet balance, unpaid invoices) for just that page.
-    let q = supabaseAdmin
-      .from("profiles")
-      .select(
-        "id, email, full_name, phone, customer_code, created_at, vip_level, points, is_blacklisted, blacklist_reason",
-      );
-
-    if (data.search && data.search.trim()) {
-      const s = data.search.trim();
-      q = q.or(`email.ilike.%${s}%,full_name.ilike.%${s}%,customer_code.ilike.%${s}%,phone.ilike.%${s}%`);
-    }
-
-    if (data.role && data.role !== "all") {
-      const { data: ur, error: urE } = await supabaseAdmin.from("user_roles").select("user_id").eq("role", data.role);
-      if (urE) throw new Error(urE.message);
-      const ids = (ur ?? []).map((r: any) => r.user_id);
-      if (ids.length === 0) return { users: [], total: 0, page, pageSize };
-      q = q.in("id", ids);
-    }
-
-    if (data.vipLevel && data.vipLevel !== "all") {
-      q = q.eq("vip_level", data.vipLevel);
-    }
-
-    if (data.unpaidOnly) {
-      const { data: invRows, error: invErr } = await supabaseAdmin
-        .from("invoices")
-        .select("user_id")
-        .in("status", ["unpaid", "overdue"]);
-      if (invErr) throw new Error(invErr.message);
-      const unpaidIds = Array.from(new Set((invRows ?? []).map((r: any) => r.user_id)));
-      if (unpaidIds.length === 0) return { users: [], total: 0, page, pageSize };
-      q = q.in("id", unpaidIds);
-    }
-
-    const { data: allProfiles, error } = await q;
+    // Sorting (staff first, then customer_code), filtering, paging and the
+    // per-row wallet / unpaid-invoice aggregates all happen in one database
+    // call — fetching every profile into JS was the main slow path here.
+    const { data: res, error } = await supabaseAdmin.rpc("admin_list_users", {
+      _search: data.search?.trim() || null,
+      _role: data.role && data.role !== "all" ? data.role : null,
+      _vip: data.vipLevel && data.vipLevel !== "all" ? data.vipLevel : null,
+      _unpaid_only: !!data.unpaidOnly,
+      _limit: pageSize,
+      _offset: (page - 1) * pageSize,
+    } as any);
     if (error) throw new Error(error.message);
 
-    const allIds = (allProfiles ?? []).map((p: any) => p.id);
-    const rolesByUser: Record<string, AppRole[]> = {};
-    if (allIds.length) {
-      const { data: rolesR, error: rolesErr } = await supabaseAdmin
-        .from("user_roles")
-        .select("user_id, role")
-        .in("user_id", allIds);
-      if (rolesErr) throw new Error(rolesErr.message);
-      for (const r of rolesR ?? []) (rolesByUser[r.user_id] ??= []).push(r.role as AppRole);
-    }
-
-    const sorted = (allProfiles ?? []).slice().sort((a: any, b: any) => {
-      const rankDiff = roleRank(rolesByUser[a.id] ?? []) - roleRank(rolesByUser[b.id] ?? []);
-      if (rankDiff !== 0) return rankDiff;
-      const ca = a.customer_code ?? "";
-      const cb = b.customer_code ?? "";
-      if (ca && cb) return ca.localeCompare(cb);
-      if (ca) return -1; // profiles without a customer_code sort last
-      if (cb) return 1;
-      return 0;
-    });
-
-    const total = sorted.length;
-    const from = (page - 1) * pageSize;
-    const profiles = sorted.slice(from, from + pageSize);
-
-    const ids = profiles.map((p: any) => p.id);
-    const walletByUser: Record<string, { balance_cad: number }> = {};
-    const unpaidByUser: Record<string, { count: number; amount_cny: number }> = {};
-    if (ids.length) {
-      const [walletsR, invR] = await Promise.all([
-        supabaseAdmin.from("wallets").select("user_id, balance_cad").in("user_id", ids),
-        supabaseAdmin
-          .from("invoices")
-          .select("user_id, total_cny, paid_cny, status")
-          .in("user_id", ids)
-          .in("status", ["unpaid", "overdue"]),
-      ]);
-      for (const w of walletsR.data ?? [])
-        walletByUser[w.user_id] = {
-          balance_cad: Number(w.balance_cad ?? 0),
-        };
-      for (const inv of invR.data ?? []) {
-        const due = Math.max(0, Number(inv.total_cny ?? 0) - Number(inv.paid_cny ?? 0));
-        const bucket = (unpaidByUser[inv.user_id] ??= { count: 0, amount_cny: 0 });
-        bucket.count += 1;
-        bucket.amount_cny += due;
-      }
-    }
-
+    const payload = (res ?? {}) as { users?: any[]; total?: number };
     return {
-      users: profiles.map((p: any) => ({
-        id: p.id,
-        email: p.email,
-        full_name: p.full_name,
-        phone: p.phone,
-        customer_code: p.customer_code,
-        created_at: p.created_at,
-        vip_level: (p.vip_level ?? "normal") as VipLevel,
-        points: Number(p.points ?? 0),
-        is_blacklisted: !!p.is_blacklisted,
-        blacklist_reason: p.blacklist_reason ?? null,
-        roles: rolesByUser[p.id] ?? [],
-        wallet: walletByUser[p.id] ?? { balance_cad: 0 },
-        unpaid: unpaidByUser[p.id] ?? { count: 0, amount_cny: 0 },
+      users: (payload.users ?? []).map((u: any) => ({
+        id: u.id,
+        email: u.email,
+        full_name: u.full_name,
+        phone: u.phone,
+        customer_code: u.customer_code,
+        created_at: u.created_at,
+        vip_level: (u.vip_level ?? "normal") as VipLevel,
+        points: Number(u.points ?? 0),
+        is_blacklisted: !!u.is_blacklisted,
+        blacklist_reason: u.blacklist_reason ?? null,
+        roles: (u.roles ?? []) as AppRole[],
+        wallet: { balance_cad: Number(u.wallet?.balance_cad ?? 0) },
+        unpaid: { count: Number(u.unpaid?.count ?? 0), amount_cny: Number(u.unpaid?.amount_cny ?? 0) },
       })),
-      total,
+      total: Number(payload.total ?? 0),
       page,
       pageSize,
     };

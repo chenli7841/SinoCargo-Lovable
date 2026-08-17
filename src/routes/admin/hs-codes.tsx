@@ -10,8 +10,10 @@ export const Route = createFileRoute("/admin/hs-codes")({ component: HsCodesPage
 const EMPTY: any = {
   hs_code: "", chapter: "", name_zh: "", name_en: "", unit: "",
   mfn_rate: 0, gst_rate: 0.05, anti_dumping_rate: 0,
-  anti_dumping_note: "", note: "", aliases: [], sima_involved: false, is_active: true,
+  anti_dumping_note: "", note: "", material: "", origin: "China",
+  aliases: [], sima_involved: false, is_active: true,
 };
+
 
 
 function HsCodesPage() {
@@ -110,6 +112,9 @@ function HsCodesPage() {
                       <td className="p-3 max-w-md">
                         <div>{c.name_zh}</div>
                         {c.name_en && <div className="text-[11px] text-slate-500">{c.name_en}</div>}
+                        <div className="text-[11px] text-slate-500">
+                          材质：{c.material || "—"} · 产地：{c.origin || "China"}
+                        </div>
                         {Array.isArray(c.aliases) && c.aliases.length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">
                             {c.aliases.map((a: string, i: number) => (
@@ -155,6 +160,11 @@ function HsCodesPage() {
             <Field label="品名（中文）*"><Input value={current.name_zh} onChange={v => update("name_zh", v)}/></Field>
             <Field label="品名（英文）"><Input value={current.name_en ?? ""} onChange={v => update("name_en", v)}/></Field>
             <Field label="计量单位"><Input value={current.unit ?? ""} onChange={v => update("unit", v)} placeholder="KGM / NMB / -"/></Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="材质"><Input value={current.material ?? ""} onChange={v => update("material", v)} placeholder="如：塑料 / 纯棉 / 不锈钢"/></Field>
+              <Field label="产地"><Input value={current.origin ?? "China"} onChange={v => update("origin", v)} placeholder="China"/></Field>
+            </div>
+
             <div className="grid grid-cols-3 gap-3">
               <Field label="MFN 关税"><RateInput value={current.mfn_rate} onChange={v => update("mfn_rate", v)}/></Field>
               <Field label="GST"><RateInput value={current.gst_rate} onChange={v => update("gst_rate", v)}/></Field>

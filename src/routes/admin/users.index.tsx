@@ -5,7 +5,8 @@ import { useState } from "react";
 import { listUsers, type AppRole } from "@/lib/admin.functions";
 import { ROLE_LABEL, ROLE_COLOR, ASSIGNABLE_ROLES } from "@/lib/admin-roles";
 import { VIP_LEVELS, VIP_LABEL, VIP_COLOR, type VipLevel } from "@/lib/vip-levels";
-import { Search, ChevronLeft, ChevronRight, Loader2, ArrowRight, Receipt, Ban } from "lucide-react";
+import { Search, Loader2, ArrowRight, Receipt, Ban } from "lucide-react";
+import { Pagination } from "@/components/admin/Pagination";
 
 export const Route = createFileRoute("/admin/users/")({
   component: UsersPage,
@@ -19,14 +20,13 @@ function UsersPage() {
   const [vipLevel, setVipLevel] = useState<VipLevel | "all">("all");
   const [unpaidOnly, setUnpaidOnly] = useState(false);
   const [page, setPage] = useState(1);
-  const pageSize = 25;
+  const pageSize = 10;
 
   const q = useQuery({
     queryKey: ["admin-users", { search, role, vipLevel, unpaidOnly, page }],
     queryFn: () => fetchUsers({ data: { search, role, vipLevel, unpaidOnly, page, pageSize } }),
   });
 
-  const totalPages = q.data ? Math.max(1, Math.ceil(q.data.total / pageSize)) : 1;
 
   return (
     <div className="mx-auto max-w-7xl p-6">
@@ -231,30 +231,7 @@ function UsersPage() {
         </table>
       </div>
 
-      {q.data && q.data.total > pageSize && (
-        <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
-          <div>
-            第 {page} / {totalPages} 页
-          </div>
-          <div className="flex gap-1">
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-              className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 hover:bg-white/5 disabled:opacity-40"
-            >
-              <ChevronLeft className="h-3 w-3" />
-              上一页
-            </button>
-            <button
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
-              className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 hover:bg-white/5 disabled:opacity-40"
-            >
-              下一页 <ChevronRight className="h-3 w-3" />
-            </button>
-          </div>
-        </div>
-      )}
+      {q.data && <Pagination page={page} pageSize={pageSize} total={q.data.total} onChange={setPage} />}
     </div>
   );
 }

@@ -10,6 +10,9 @@ import { getMyRoles } from "@/lib/admin.functions";
 import { BATCH_STATUS_LABEL, BATCH_STATUS_COLOR, METHOD_LABEL, StatusBadge, Page, fmtDate } from "@/lib/admin-shared";
 import { renderLabel } from "@/lib/label-render";
 import { DateInput } from "@/components/admin/DateInput";
+import { Pagination } from "@/components/admin/Pagination";
+import { DeleteRowButton, useCanDelete } from "@/components/admin/DeleteRowButton";
+import { deleteBatchRecord } from "@/lib/admin-delete.functions";
 import { Plus, Loader2, X, ArrowRight, Truck, Printer } from "lucide-react";
 
 export const Route = createFileRoute("/admin/batches/")({ component: BatchesPage });
@@ -27,12 +30,18 @@ function BatchesPage() {
   const fetchDests = useServerFn(listDestinations);
   const fetchRoutes = useServerFn(listRoutes);
   const fetchLabel = useServerFn(getContainerLabelData);
+  const delBatch = useServerFn(deleteBatchRecord);
+  const canDelete = useCanDelete();
+
+  // Preset lists are only needed by the "new batch" dialog — load them lazily
+  // so opening the batch list doesn't wait on three extra round-trips.
+  const [showForm, setShowForm] = useState(false);
 
   const q = useQuery({ queryKey: ["admin-batches"], queryFn: () => fetchList() });
-  const meQ = useQuery({ queryKey: ["my-roles"], queryFn: () => fetchRoles(), staleTime: 60_000 });
-  const cargoQ = useQuery({ queryKey: ["cargo-types"], queryFn: () => fetchCargoTypes() });
-  const destQ = useQuery({ queryKey: ["destinations"], queryFn: () => fetchDests() });
-  const routesQ = useQuery({ queryKey: ["routes-for-batches"], queryFn: () => fetchRoutes() });
+  const meQ = useQuery({ queryKey: ["my-roles"], queryFn: () => fetchRoles(), staleTime: 30 * 60_000, refetchOnMount: false, refetchOnWindowFocus: false });
+  const cargoQ = useQuery({ queryKey: ["cargo-types"], queryFn: () => fetchCargoTypes(), enabled: showForm, staleTime: 10 * 60_000 });
+  const destQ = useQuery({ queryKey: ["destinations"], queryFn: () => fetchDests(), enabled: showForm, staleTime: 10 * 60_000 });
+  const routesQ = useQuery({ queryKey: ["routes-for-batches"], queryFn: () => fetchRoutes(), enabled: showForm, staleTime: 10 * 60_000 });
   const canCreate = (meQ.data?.roles ?? []).some(r => ["owner","manager","warehouse_cn"].includes(r));
   const canEdit = (meQ.data?.roles ?? []).some(r => ["owner","manager"].includes(r));
 
@@ -47,7 +56,10 @@ function BatchesPage() {
 
   const onPrint = async (id: string) => { const d = await fetchLabel({ data: { kind: "batch", id } }); renderLabel(d as any); };
 
-  const [showForm, setShowForm] = useState(false);
+  const [page, setPage] = useState(1); const pageSize = 10;
+  const allBatches = (q.data?.batches ?? []) as any[];
+  const pageItems = allBatches.slice((page - 1) * pageSize, page * pageSize);
+
   const [form, setForm] = useState({ planned_ship_date: "", shipping_method: "air" as BatchMethod, cargo_type: "", destination_code: "", notes: "" });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
 
@@ -88,24 +100,24 @@ function BatchesPage() {
           <tbody className="divide-y divide-white/5">
             {q.isLoading && <tr><td colSpan={10} className="py-10 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-slate-500"/></td></tr>}
             {q.data?.batches.length === 0 && <tr><td colSpan={10} className="py-10 text-center text-slate-500">暂无批次</td></tr>}
-            {q.data?.batches.map((b: any) => {
+            {pageItems.map((b: any) => {
               const pmap: Record<string, string> = { paid: "text-emerald-300", partial: "text-amber-300", unpaid: "text-rose-300", empty: "text-slate-500" };
               const plabel: Record<string, string> = { paid: "已付", partial: "部分", unpaid: "未付", empty: "—" };
               const grand = Number(b.grand_total_cny ?? 0);
               return (
               <tr key={b.id} className="hover:bg-white/[0.03]">
-                <td className="px-4 py-3 font-mono text-xs text-slate-200">{b.batch_no}</td>
-                <td className="px-4 py-3 text-xs">{b.planned_ship_date}</td>
-                <td className="px-4 py-3 text-xs">{METHOD_LABEL[b.shipping_method] ?? b.shipping_method}</td>
-                <td className="px-4 py-3 text-xs text-slate-400">{b.cargo_type ?? "—"} / {b.destination_code ?? "—"}</td>
-                <td className="px-4 py-3 text-xs font-semibold text-slate-200">{b.waybill_total ?? 0}</td>
-                <td className="px-4 py-3 text-right text-xs font-mono">
+                <td className="px-4 py-2.5 font-mono text-base text-brand">{b.batch_no}</td>
+                <td className="px-4 py-2.5 text-sm">{b.planned_ship_date}</td>
+                <td className="px-4 py-2.5 text-sm">{METHOD_LABEL[b.shipping_method] ?? b.shipping_method}</td>
+                <td className="px-4 py-2.5 text-sm text-slate-400">{b.cargo_type ?? "—"} / {b.destination_code ?? "—"}</td>
+                <td className="px-4 py-2.5 text-sm font-semibold text-slate-200">{b.waybill_total ?? 0}</td>
+                <td className="px-4 py-2.5 text-right text-sm font-mono">
                   {b.status === "draft"
                     ? <span className="text-slate-500" title="草稿状态不结算总额，锁定后写入">—（草稿）</span>
-                    : <span className="font-semibold text-emerald-300">¥{grand.toFixed(2)}</span>}
+                    : <span className="font-semibold text-emerald-300">CA${grand.toFixed(2)}</span>}
                 </td>
-                <td className={`px-4 py-3 text-xs ${pmap[b.payment_status] ?? ""}`}>{plabel[b.payment_status] ?? "—"}</td>
-                <td className="px-4 py-3">
+                <td className={`px-4 py-2.5 text-sm ${pmap[b.payment_status] ?? ""}`}>{plabel[b.payment_status] ?? "—"}</td>
+                <td className="px-4 py-2.5">
                   {canEdit ? (
                     <select value={b.status} onClick={(e) => e.stopPropagation()}
                       onChange={async (e) => {
@@ -117,16 +129,20 @@ function BatchesPage() {
                     </select>
                   ) : <StatusBadge map={BATCH_STATUS_LABEL} color={BATCH_STATUS_COLOR} value={b.status}/>}
                 </td>
-                <td className="px-4 py-3 text-xs text-slate-400">{fmtDate(b.created_at)}</td>
-                <td className="px-4 py-3 text-right whitespace-nowrap">
-                  <button onClick={() => onPrint(b.id)} className="mr-2 text-[10px] text-slate-300 hover:text-white"><Printer className="inline h-3 w-3"/></button>
-                  <Link to="/admin/batches/$batchId" params={{ batchId: b.id }} className="text-xs text-brand hover:underline">详情 <ArrowRight className="inline h-3 w-3"/></Link>
+                <td className="px-4 py-2.5 text-sm text-slate-400">{fmtDate(b.created_at)}</td>
+                <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                  <button onClick={() => onPrint(b.id)} className="mr-2 text-xs text-slate-300 hover:text-white"><Printer className="inline h-3.5 w-3.5"/></button>
+                  <Link to="/admin/batches/$batchId" params={{ batchId: b.id }} className="text-sm text-brand hover:underline">详情 <ArrowRight className="inline h-3.5 w-3.5"/></Link>
+                  {canDelete && <DeleteRowButton label="批次" name={b.batch_no} extra="下属运单 / 箱号 / 托盘会被解绑，但不会删除。" onDelete={async () => { await delBatch({ data: { id: b.id } }); await qc.invalidateQueries({ queryKey: ["admin-batches"] }); }}/>}
                 </td>
               </tr>
             );})}
           </tbody>
         </table>
       </div>
+      <Pagination page={page} pageSize={pageSize} total={allBatches.length} onChange={setPage}/>
+
+
 
       {showForm && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">

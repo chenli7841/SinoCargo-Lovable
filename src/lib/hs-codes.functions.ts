@@ -42,6 +42,8 @@ export const upsertHsCode = createServerFn({ method: "POST" })
       anti_dumping_rate?: number;
       anti_dumping_note?: string;
       note?: string;
+      material?: string;
+      origin?: string;
       aliases?: string[];
       sima_involved?: boolean;
       is_active?: boolean;
@@ -63,6 +65,9 @@ export const upsertHsCode = createServerFn({ method: "POST" })
       anti_dumping_rate: data.anti_dumping_rate ?? 0,
       anti_dumping_note: data.anti_dumping_note ?? null,
       note: data.note ?? null,
+      material: data.material?.trim() || null,
+      // 产地固定默认 China（可手工覆盖）
+      origin: data.origin?.trim() || "China",
       aliases: (data.aliases ?? []).map((s) => s.trim()).filter(Boolean),
       sima_involved: data.sima_involved ?? false,
       is_active: data.is_active ?? true,

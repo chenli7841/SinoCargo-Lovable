@@ -23,6 +23,7 @@ import {
   splitPallet,
 } from "@/lib/cartons.functions";
 import { getMyRoles } from "@/lib/admin.functions";
+import { listBatchInvoices } from "@/lib/invoices.functions";
 import {
   BATCH_STATUS_LABEL,
   BATCH_STATUS_COLOR,
@@ -826,7 +827,10 @@ function BatchDetail() {
         </div>
       )}
 
+      <BatchInvoicesPanel batchNo={batch.batch_no ?? ""} />
+
       {showAddCarton && (
+
         <PickerDialog
           title="加入箱号"
           onClose={() => setShowAddCarton(false)}
@@ -1116,6 +1120,79 @@ function PickerDialog({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// 批次账单：价格确认时自动生成（每客户一张），此处可查看/下载
+function BatchInvoicesPanel({ batchNo }: { batchNo: string }) {
+  const fetchInvoices = useServerFn(listBatchInvoices);
+  const q = useQuery({
+    queryKey: ["batch-invoices", batchNo],
+    queryFn: () => fetchInvoices({ data: { batchNo } }),
+  });
+  const items: any[] = (q.data as any)?.items ?? [];
+  const LABEL: Record<string, string> = { unpaid: "待付", paid: "已付", overdue: "逾期", void: "作废" };
+  const COLOR: Record<string, string> = {
+    unpaid: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+    paid: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+    overdue: "border-rose-500/30 bg-rose-500/10 text-rose-300",
+    void: "border-slate-500/30 bg-slate-500/10 text-slate-400",
+  };
+  return (
+    <div className="mt-5 overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02]">
+      <div className="flex items-center gap-2 border-b border-white/5 px-4 py-3 text-sm font-semibold">
+        <Wallet className="h-4 w-4 text-blue-400" />
+        批次账单（{items.length}）
+        <span className="text-[11px] font-normal text-slate-500">价格确认后每位客户自动生成一张账单</span>
+      </div>
+      {q.isLoading ? (
+        <div className="py-8 text-center">
+          <Loader2 className="mx-auto h-4 w-4 animate-spin text-slate-500" />
+        </div>
+      ) : items.length === 0 ? (
+        <div className="py-8 text-center text-xs text-slate-500">暂无账单（确认客户价格后自动生成）</div>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="bg-white/[0.03] text-left text-[11px] uppercase tracking-wider text-slate-400">
+            <tr>
+              <th className="px-4 py-2">账单号</th>
+              <th className="px-4 py-2">客户</th>
+              <th className="px-4 py-2">金额</th>
+              <th className="px-4 py-2">状态</th>
+              <th className="px-4 py-2 text-right">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {items.map((r) => (
+              <tr key={r.id} className="hover:bg-white/[0.03]">
+                <td className="px-4 py-2.5 font-mono text-xs">{r.invoice_no}</td>
+                <td className="px-4 py-2.5 text-xs">
+                  {r.customer?.full_name ?? r.customer?.email ?? "—"}
+                  <span className="ml-1 font-mono text-[10px] text-slate-500">{r.customer?.customer_code}</span>
+                </td>
+                <td className="px-4 py-2.5 text-xs font-semibold">
+                  CA${(Number(r.total_cny) * Number(r.fx_rate ?? 1)).toFixed(2)}
+                </td>
+                <td className="px-4 py-2.5">
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${COLOR[r.status]}`}>
+                    {LABEL[r.status] ?? r.status}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5 text-right">
+                  <Link
+                    to="/admin/invoices/$invoiceId"
+                    params={{ invoiceId: r.id }}
+                    className="text-xs text-blue-300 hover:underline"
+                  >
+                    查看 / 下载 PDF
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

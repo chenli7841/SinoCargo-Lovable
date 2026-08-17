@@ -59,6 +59,10 @@ interface RouteRow {
   transit_days_max: number | null;
   item_fields: string[] | null;
   item_field_required: Record<string, boolean> | null;
+  visible_vip_levels: string[] | null;
+  visible_customer_codes: string[] | null;
+  blacklist_vip_levels: string[] | null;
+  blacklist_customer_codes: string[] | null;
 }
 interface FreightRule {
   route_id: string;
@@ -98,6 +102,10 @@ interface MyItemRow {
   hs_code: string | null;
   declared_value_cad: number | null;
   inner_qty: number | null;
+  material: string | null;
+  origin: string | null;
+  brand: string | null;
+  weight_kg: number | null;
 }
 
 type ItemFieldKey =
@@ -198,6 +206,8 @@ function ForwardingPage() {
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
 
   const [phoneRow, setPhoneRow] = useState<string | null | undefined>(undefined);
+  const [myVip, setMyVip] = useState<string | null>(null);
+  const [myCustomerCode, setMyCustomerCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
@@ -233,7 +243,7 @@ function ForwardingPage() {
     if (!user) return;
     (async () => {
       const [p, w, r, fr, a, d, mi] = await Promise.all([
-        sb.from("profiles").select("phone").eq("id", user.id).maybeSingle(),
+        sb.from("profiles").select("phone, vip_level, customer_code").eq("id", user.id).maybeSingle(),
         sb
           .from("warehouses")
           .select("id,code,name_zh,name_en,address,business_hours,phone,country,type")
@@ -242,7 +252,7 @@ function ForwardingPage() {
         sb
           .from("shipping_routes")
           .select(
-            "id,code,name_zh,name_en,shipping_method,destination_code,origin_warehouse_id,destination_warehouse_id,is_bidirectional,transit_days_min,transit_days_max,item_fields,item_field_required",
+            "id,code,name_zh,name_en,shipping_method,destination_code,origin_warehouse_id,destination_warehouse_id,is_bidirectional,transit_days_min,transit_days_max,item_fields,item_field_required,visible_vip_levels,visible_customer_codes,blacklist_vip_levels,blacklist_customer_codes",
           )
           .eq("is_active", true)
           .in("usage_scope", ["forwarding", "both"])
@@ -258,6 +268,8 @@ function ForwardingPage() {
         sb.from("my_items").select("id", { count: "exact", head: true }),
       ]);
       setPhoneRow(p.data?.phone ?? null);
+      setMyVip(((p.data as any)?.vip_level as string) ?? null);
+      setMyCustomerCode(((p.data as any)?.customer_code as string) ?? null);
       setHasMyItems((mi.count ?? 0) > 0);
       // Show all warehouses that any active route can ship FROM:
       // forward (origin_warehouse_id) and, for bidirectional routes, also the destination warehouse.
@@ -284,13 +296,29 @@ function ForwardingPage() {
     })();
   }, [user]);
 
+  // 线路权限：指定可见，不向下兼容 —— 只有会员等级 / 客户号被精确列出（或线路未做限制）才可见；
+  // 命中黑名单则一律不可见。
+  const canSeeRoute = (r: RouteRow) => {
+    const code = (myCustomerCode ?? "").trim().toUpperCase();
+    const blackVip = r.blacklist_vip_levels ?? [];
+    const blackCodes = (r.blacklist_customer_codes ?? []).map((x) => String(x).trim().toUpperCase());
+    if (myVip && blackVip.includes(myVip)) return false;
+    if (code && blackCodes.includes(code)) return false;
+    const whiteVip = r.visible_vip_levels ?? [];
+    const whiteCodes = (r.visible_customer_codes ?? []).map((x) => String(x).trim().toUpperCase());
+    if (whiteVip.length === 0 && whiteCodes.length === 0) return true;
+    if (code && whiteCodes.includes(code)) return true;
+    return !!myVip && whiteVip.includes(myVip);
+  };
+
   const availableRoutes = useMemo(() => {
     if (!warehouseId) return [];
     return routes.filter(
       (r) =>
-        r.origin_warehouse_id === warehouseId || (r.is_bidirectional && r.destination_warehouse_id === warehouseId),
+        (r.origin_warehouse_id === warehouseId || (r.is_bidirectional && r.destination_warehouse_id === warehouseId)) &&
+        canSeeRoute(r),
     );
-  }, [routes, warehouseId]);
+  }, [routes, warehouseId, myVip, myCustomerCode]);
 
   useEffect(() => {
     setRouteCode("");
@@ -340,7 +368,7 @@ function ForwardingPage() {
       setSkuLoading(true);
       const { data, error } = await sb
         .from("my_items")
-        .select("id,sku,name,hs_code,declared_value_cad,inner_qty")
+        .select("id,sku,name,hs_code,declared_value_cad,inner_qty,material,origin,brand,weight_kg")
         .or(`sku.ilike.%${q}%,name.ilike.%${q}%,hs_code.ilike.%${q}%`)
         .order("updated_at", { ascending: false })
         .limit(8);
@@ -372,6 +400,10 @@ function ForwardingPage() {
       hscode: row.hs_code ?? undefined,
       unit_price_cad: row.declared_value_cad ?? undefined,
       inner_qty: row.inner_qty ?? undefined,
+      material: row.material ?? undefined,
+      origin: row.origin ?? "China",
+      brand: row.brand ?? undefined,
+      weight_kg: row.weight_kg ?? undefined,
     });
     setSkuActiveKey(null);
     setSkuResults([]);
@@ -442,6 +474,8 @@ function ForwardingPage() {
               // forwarding order, not spawn new waybills.
               box_count: i.locked ? null : (i.box_count ?? null),
               inner_qty: i.locked ? null : (i.inner_qty ?? null),
+              // 库存发货标记：入库扫描页据此列出待入库的库存发货订单，并核对每个 SKU 的箱数。
+              inv_box_count: i.locked ? (i.box_count ?? null) : null,
               material: i.material ?? null,
               origin: i.origin ?? null,
               brand: i.brand ?? null,

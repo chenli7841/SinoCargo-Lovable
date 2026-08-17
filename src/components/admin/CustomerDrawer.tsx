@@ -3,7 +3,13 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Card } from "@/lib/admin-shared";
-import { saveInspectionFee, deductWalletForBatch, deductBatchOffline } from "@/lib/orders.functions";
+import {
+  saveInspectionFee,
+  saveDeliveryFee,
+  setBatchPriceConfirmed,
+  deductWalletForBatch,
+  deductBatchOffline,
+} from "@/lib/orders.functions";
 import { X, Truck, Package, Layers, ChevronDown, ChevronRight, Wallet, Save, AlertTriangle } from "lucide-react";
 
 type Props = {
@@ -19,6 +25,8 @@ const cad = (n: any) => `CA$${Number(n ?? 0).toFixed(2)}`;
 export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, onClose }: Props) {
   const qc = useQueryClient();
   const saveInspection = useServerFn(saveInspectionFee);
+  const saveDelivery = useServerFn(saveDeliveryFee);
+  const setConfirmedFn = useServerFn(setBatchPriceConfirmed);
   const deduct = useServerFn(deductWalletForBatch);
   const deductOffline = useServerFn(deductBatchOffline);
 
@@ -40,23 +48,56 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
   const feeClearance = Number(c.fee_clearance_cad ?? c.fee_clearance_cny ?? 0);
   const feeSurcharge = Number(c.fee_surcharge_cad ?? c.fee_surcharge_cny ?? 0);
 
+  const deliverySuggested = Number(c.delivery_suggested_cad ?? 0);
+  const warnings = (c.warnings ?? []) as { kind: string; ref: string; detail: string }[];
+
   const [inspection, setInspection] = useState(String(Number(c.fee_inspection_cad ?? 0)));
+  const [delivery, setDelivery] = useState(
+    String(Number(c.fee_delivery_cad ?? 0) || Number(c.delivery_suggested_cad ?? 0)),
+  );
   const [discount, setDiscount] = useState("0");
   const [method, setMethod] = useState<"wallet" | "emt" | "cash">("wallet");
   const [refNo, setRefNo] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmed, setConfirmed] = useState<boolean>(!!c.price_confirmed);
 
   const inspAmt = Math.max(0, Number(inspection || 0));
+  const deliveryAmt = Math.max(0, Number(delivery || 0));
   const discAmt = Math.max(0, Number(discount || 0));
-  const subtotal = +(feeFreight + feeCustoms + feeInsurance + feeClearance + feeSurcharge + inspAmt).toFixed(2);
+  const subtotal = +(
+    feeFreight +
+    feeCustoms +
+    feeInsurance +
+    feeClearance +
+    feeSurcharge +
+    deliveryAmt +
+    inspAmt
+  ).toFixed(2);
   const finalDeduct = Math.max(0, +(subtotal - discAmt).toFixed(2));
 
   const onSave = async () => {
     setBusy(true);
     try {
       await saveInspection({ data: { batchId, customerCode, amountCad: inspAmt } });
+      await saveDelivery({ data: { batchId, customerCode, amountCad: deliveryAmt } });
       await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
-      alert("已保存检查费");
+      alert("已保存派送费 / 检查费");
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const onToggleConfirm = async () => {
+    const next = !confirmed;
+    if (next && warnings.length > 0 && !window.confirm("存在超长/超重/偏远预警，确认价格已核对无误？")) return;
+    setBusy(true);
+    try {
+      await saveInspection({ data: { batchId, customerCode, amountCad: inspAmt } });
+      await saveDelivery({ data: { batchId, customerCode, amountCad: deliveryAmt } });
+      await setConfirmedFn({ data: { batchId, customerCode, confirmed: next } });
+      setConfirmed(next);
+      await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
     } catch (e: any) {
       alert(e.message);
     } finally {
@@ -72,12 +113,22 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
       alert("金额需大于 0");
       return;
     }
+    if (!confirmed) {
+      alert("请先点击「确认价格」，确认后才能扣款并向客户显示金额");
+      return;
+    }
     const methodLabel = method === "wallet" ? "钱包扣款" : method === "emt" ? "EMT 收款" : "现金收款";
-    if (!confirm(`确认${methodLabel} ${cad(finalDeduct)}（含检查费 ${cad(inspAmt)}，折扣 ${cad(discAmt)}）？`)) return;
+    if (
+      !confirm(
+        `确认${methodLabel} ${cad(finalDeduct)}（含派送费 ${cad(deliveryAmt)}，检查费 ${cad(inspAmt)}，折扣 ${cad(discAmt)}）？`,
+      )
+    )
+      return;
     setBusy(true);
     try {
-      // Save inspection first so it's reflected in the batch bill
+      // Save inspection/delivery first so they're reflected in the batch bill
       if (inspAmt >= 0) await saveInspection({ data: { batchId, customerCode, amountCad: inspAmt } });
+      if (deliveryAmt >= 0) await saveDelivery({ data: { batchId, customerCode, amountCad: deliveryAmt } });
       if (method === "wallet") {
         const r: any = await deduct({
           data: {
@@ -192,6 +243,26 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
             >
               <ContainerTable kind="pallet" rows={pallets} />
             </Section>
+
+            {warnings.length > 0 && (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+                <div className="mb-1 inline-flex items-center gap-1.5 font-semibold">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  该客户存在 {warnings.length} 条派送风险提示 · 请客服核对并修改合适的末端派送费
+                </div>
+                <ul className="ml-4 list-disc space-y-0.5">
+                  {warnings.map((w, i) => (
+                    <li key={i}>
+                      <span className="rounded bg-white/10 px-1 py-0.5 font-mono text-[10px]">
+                        {w.kind === "oversize" ? "超长" : w.kind === "overweight" ? "超重" : "偏远"}
+                      </span>{" "}
+                      <span className="font-mono">{w.ref}</span> · {w.detail}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
 
             <Card
               title={`关税明细 (${items.length}) · Σ 申报价值 ${cad(items.reduce((s, i) => s + Number(i.declared_value_cad || 0), 0))} · Σ 关税 ${cad(items.reduce((s, i) => s + Number(i.duty_cad || 0), 0))}`}
@@ -372,6 +443,35 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
 
               <div className="mt-2 border-t border-white/5 pt-2">
                 <label className="block text-[10px] uppercase tracking-wider text-slate-500">
+                  末端派送费 (CAD) · 可输入
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={delivery}
+                  disabled={!canEdit}
+                  onChange={(e) => setDelivery(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100"
+                />
+                <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-slate-500">
+                  <span>
+                    建议 <span className="font-mono text-slate-300">{cad(deliverySuggested)}</span>
+                    {c.delivery_note ? ` · ${c.delivery_note}` : " · 未匹配派送费规则（可在线路设置中配置）"}
+                  </span>
+                  {canEdit && deliverySuggested > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setDelivery(String(deliverySuggested))}
+                      className="rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-slate-300 hover:bg-white/10"
+                    >
+                      采用
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="mt-2 border-t border-white/5 pt-2">
+                <label className="block text-[10px] uppercase tracking-wider text-slate-500">
                   检查费 (CAD) · 可输入
                 </label>
                 <input
@@ -436,6 +536,21 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
                 </p>
               </div>
             </Card>
+
+            <div
+              className={`rounded-xl border p-3 text-xs ${confirmed ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-amber-500/30 bg-amber-500/10 text-amber-200"}`}
+            >
+              <div className="font-semibold">{confirmed ? "价格已确认 · 客户端可见并可付款" : "价格未确认 · 客户端不显示金额、不可付款"}</div>
+              {canEdit && (
+                <button
+                  onClick={onToggleConfirm}
+                  disabled={busy}
+                  className={`mt-2 w-full rounded-md px-3 py-2 text-xs font-semibold disabled:opacity-50 ${confirmed ? "border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10" : "bg-emerald-600 text-white hover:bg-emerald-500"}`}
+                >
+                  {confirmed ? "取消确认" : "确认价格并对客户显示"}
+                </button>
+              )}
+            </div>
 
             {canEdit && (
               <div className="grid grid-cols-2 gap-2">

@@ -49,7 +49,10 @@ import {
   ArrowRight,
   AlertTriangle,
   Send,
+  ChevronDown,
+
 } from "lucide-react";
+import { CustomerForwardingForm } from "@/components/admin/CustomerForwardingForm";
 
 export const Route = createFileRoute("/admin/customer-view")({
   head: () => ({
@@ -58,7 +61,7 @@ export const Route = createFileRoute("/admin/customer-view")({
   component: CustomerViewPage,
 });
 
-type Tab = "overview" | "myOrders" | "inventory" | "items" | "batches" | "addresses" | "profile";
+type Tab = "overview" | "newForwarding" | "myOrders" | "inventory" | "items" | "batches" | "addresses" | "profile";
 
 // This page never switches the acting session — every read/write goes
 // through admin-customer-view.functions.ts (service role, explicit
@@ -85,6 +88,7 @@ function CustomerViewPage() {
   // as a read-only stat on 概览, and batch payment on 我的批次 still works).
   const nav: { k: Tab; l: string; i: React.ReactNode }[] = [
     { k: "overview", l: "概览", i: <LayoutIcon /> },
+    { k: "newForwarding", l: "发起集运", i: <Send className="h-4 w-4" /> },
     { k: "myOrders", l: "我的订单/运单", i: <Package className="h-4 w-4" /> },
     { k: "inventory", l: "我的库存", i: <Warehouse className="h-4 w-4" /> },
     { k: "items", l: "我的物品", i: <Tags className="h-4 w-4" /> },
@@ -220,6 +224,7 @@ function CustomerViewPage() {
 
             <section>
               {tab === "overview" && <OverviewTab userId={profile.id} />}
+              {tab === "newForwarding" && <CustomerForwardingForm userId={profile.id} />}
               {tab === "myOrders" && <MyOrdersTab userId={profile.id} />}
               {tab === "inventory" && <InventoryTab userId={profile.id} />}
               {tab === "items" && <ItemsTab userId={profile.id} />}
@@ -550,6 +555,8 @@ function InventoryTab({ userId }: { userId: string }) {
             // same as the customer's own "ship from inventory" flow.
             box_count: null,
             inner_qty: null,
+            // 库存发货标记 + 应到箱数，供入库扫描页核对。
+            inv_box_count: boxCount,
           },
         };
       }),
@@ -654,13 +661,20 @@ function InventoryTab({ userId }: { userId: string }) {
               <div className="mt-1 text-xs text-slate-400">
                 SKU {g.sku} · 每箱 {g.qtyPerBox} 件 · {g.warehouseName ?? "未知仓库"}
               </div>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {g.boxes.map((b) => (
-                  <span key={b.id} className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-slate-300">
-                    {b.waybillNo}
-                  </span>
-                ))}
-              </div>
+              <details className="group mt-2 rounded-md border border-white/5 bg-white/[0.02]">
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2 py-1.5 text-[11px] text-slate-400 hover:text-slate-200">
+                  <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
+                  运单号（{g.boxes.length}）
+                </summary>
+                <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto px-2 pb-2">
+                  {g.boxes.map((b) => (
+                    <span key={b.id} className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-slate-300">
+                      {b.waybillNo}
+                    </span>
+                  ))}
+                </div>
+              </details>
+
               <div className="mt-2 flex items-center gap-2">
                 <label className="text-[11px] text-slate-500">发货箱数</label>
                 <input
@@ -698,7 +712,7 @@ function InventoryTab({ userId }: { userId: string }) {
                 <select
                   value={addressId}
                   onChange={(e) => setAddressId(e.target.value)}
-                  className="mt-1 block h-9 w-full rounded-md border border-white/10 bg-white/[0.03] px-2 text-xs text-slate-100 outline-none focus:border-brand"
+                  className="mt-1 block h-9 w-full rounded-md border border-white/10 bg-white/[0.03] px-2 text-xs text-slate-100 outline-none focus:border-brand [&>option]:bg-[#0E1626] [&>option]:text-slate-100"
                 >
                   <option value="">请选择该客户的地址…</option>
                   {addresses.map((a) => (
@@ -719,7 +733,7 @@ function InventoryTab({ userId }: { userId: string }) {
                 <select
                   value={routeCode}
                   onChange={(e) => setRouteCode(e.target.value)}
-                  className="mt-1 block h-9 w-full rounded-md border border-white/10 bg-white/[0.03] px-2 text-xs text-slate-100 outline-none focus:border-brand"
+                  className="mt-1 block h-9 w-full rounded-md border border-white/10 bg-white/[0.03] px-2 text-xs text-slate-100 outline-none focus:border-brand [&>option]:bg-[#0E1626] [&>option]:text-slate-100"
                 >
                   <option value="">请选择线路…</option>
                   {availableRoutes.map((r) => (
@@ -1215,7 +1229,7 @@ function ItemsTab({ userId }: { userId: string }) {
       <div className="flex items-center justify-between">
         <h3 className="font-display text-base font-bold">我的物品 / SKU 库（{list.length}）</h3>
         <button
-          onClick={() => setEditing({ name: "", hs_code: "", sku: "", declared_value_cad: 0, inner_qty: null })}
+          onClick={() => setEditing({ name: "", hs_code: "", sku: "", declared_value_cad: 0, inner_qty: null, origin: "China" })}
           className="inline-flex items-center gap-1 rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"
         >
           <Plus className="h-3.5 w-3.5" /> 新增物品
@@ -1270,7 +1284,40 @@ function ItemsTab({ userId }: { userId: string }) {
                 }
               />
             </AField>
+            <AField label="材质（留空自动跟随 HS 编码库）">
+              <input
+                className={inputCls}
+                value={editing.material ?? ""}
+                onChange={(e) => setEditing({ ...editing, material: e.target.value })}
+              />
+            </AField>
+            <AField label="产地">
+              <input
+                className={inputCls}
+                value={editing.origin ?? "China"}
+                onChange={(e) => setEditing({ ...editing, origin: e.target.value })}
+              />
+            </AField>
+            <AField label="品牌">
+              <input
+                className={inputCls}
+                value={editing.brand ?? ""}
+                onChange={(e) => setEditing({ ...editing, brand: e.target.value })}
+              />
+            </AField>
+            <AField label="单件重量 KG">
+              <input
+                type="number"
+                step="0.001"
+                className={inputCls}
+                value={editing.weight_kg ?? ""}
+                onChange={(e) =>
+                  setEditing({ ...editing, weight_kg: e.target.value ? Number(e.target.value) : null })
+                }
+              />
+            </AField>
           </div>
+
           <div className="mt-4 flex gap-2">
             <button
               onClick={onSave}
@@ -1303,6 +1350,8 @@ function ItemsTab({ userId }: { userId: string }) {
                 <th className="px-3 py-2">HS 编码</th>
                 <th className="px-3 py-2 text-right">单价 CAD</th>
                 <th className="px-3 py-2 text-right">内件数</th>
+                <th className="px-3 py-2">材质</th>
+                <th className="px-3 py-2">产地</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
@@ -1316,6 +1365,8 @@ function ItemsTab({ userId }: { userId: string }) {
                     ${Number(r.declared_value_cad ?? 0).toFixed(2)}
                   </td>
                   <td className="px-3 py-2 text-right text-slate-300">{r.inner_qty ?? "—"}</td>
+                  <td className="px-3 py-2 text-slate-300">{r.material ?? "—"}</td>
+                  <td className="px-3 py-2 text-slate-300">{r.origin ?? "China"}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     <button
                       onClick={() => setEditing(r)}

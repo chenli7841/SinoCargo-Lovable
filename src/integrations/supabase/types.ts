@@ -158,6 +158,47 @@ export type Database = {
         }
         Relationships: []
       }
+      batch_settlements: {
+        Row: {
+          batch_id: string
+          confirmed: boolean
+          confirmed_at: string | null
+          confirmed_by: string | null
+          created_at: string
+          customer_code: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          batch_id: string
+          confirmed?: boolean
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          customer_code: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          batch_id?: string
+          confirmed?: boolean
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          customer_code?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_settlements_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       batches: {
         Row: {
           batch_no: string | null
@@ -580,43 +621,55 @@ export type Database = {
       }
       customer_hs_items: {
         Row: {
+          brand: string | null
           created_at: string
           ctns: number | null
           description: string
           hs_code: string | null
           id: string
           items_per_carton: number | null
+          material: string | null
           note: string | null
+          origin: string | null
           sku: string | null
           unit_price_cad: number | null
           updated_at: string
           user_id: string
+          weight_kg: number | null
         }
         Insert: {
+          brand?: string | null
           created_at?: string
           ctns?: number | null
           description: string
           hs_code?: string | null
           id?: string
           items_per_carton?: number | null
+          material?: string | null
           note?: string | null
+          origin?: string | null
           sku?: string | null
           unit_price_cad?: number | null
           updated_at?: string
           user_id: string
+          weight_kg?: number | null
         }
         Update: {
+          brand?: string | null
           created_at?: string
           ctns?: number | null
           description?: string
           hs_code?: string | null
           id?: string
           items_per_carton?: number | null
+          material?: string | null
           note?: string | null
+          origin?: string | null
           sku?: string | null
           unit_price_cad?: number | null
           updated_at?: string
           user_id?: string
+          weight_kg?: number | null
         }
         Relationships: []
       }
@@ -1021,9 +1074,15 @@ export type Database = {
       }
       freight_rules: {
         Row: {
+          clearance_fee_batch_cad: number
           clearance_fee_cad: number
           clearance_fee_level: string
+          clearance_fee_waybill_cad: number
           created_at: string
+          delivery_heavy_min_kg: number | null
+          delivery_light_fee_cad: number | null
+          delivery_light_max_kg: number | null
+          delivery_unit_fee_cad: number | null
           direction: string
           effective_from: string | null
           effective_to: string | null
@@ -1031,10 +1090,14 @@ export type Database = {
           id: string
           insurance_rate_pct: number
           is_active: boolean
+          min_charge_batch_cad: number
           min_charge_cad: number
           min_charge_cny: number
           min_charge_level: string
+          min_charge_waybill_cad: number
           note: string | null
+          oversize_alert_length_cm: number | null
+          overweight_alert_ratio: number | null
           pallet_max_height_cm: number | null
           pallet_max_length_cm: number | null
           pallet_max_weight_kg: number | null
@@ -1042,6 +1105,7 @@ export type Database = {
           pallet_overflow_factor: number
           pallet_unit_price_cad: number
           pricing_mode: string
+          remote_postal_prefixes: string | null
           route_id: string
           unit_price_cad: number
           unit_price_cny: number
@@ -1050,9 +1114,15 @@ export type Database = {
           weight_mode: string
         }
         Insert: {
+          clearance_fee_batch_cad?: number
           clearance_fee_cad?: number
           clearance_fee_level?: string
+          clearance_fee_waybill_cad?: number
           created_at?: string
+          delivery_heavy_min_kg?: number | null
+          delivery_light_fee_cad?: number | null
+          delivery_light_max_kg?: number | null
+          delivery_unit_fee_cad?: number | null
           direction?: string
           effective_from?: string | null
           effective_to?: string | null
@@ -1060,10 +1130,14 @@ export type Database = {
           id?: string
           insurance_rate_pct?: number
           is_active?: boolean
+          min_charge_batch_cad?: number
           min_charge_cad?: number
           min_charge_cny?: number
           min_charge_level?: string
+          min_charge_waybill_cad?: number
           note?: string | null
+          oversize_alert_length_cm?: number | null
+          overweight_alert_ratio?: number | null
           pallet_max_height_cm?: number | null
           pallet_max_length_cm?: number | null
           pallet_max_weight_kg?: number | null
@@ -1071,6 +1145,7 @@ export type Database = {
           pallet_overflow_factor?: number
           pallet_unit_price_cad?: number
           pricing_mode?: string
+          remote_postal_prefixes?: string | null
           route_id: string
           unit_price_cad?: number
           unit_price_cny?: number
@@ -1079,9 +1154,15 @@ export type Database = {
           weight_mode?: string
         }
         Update: {
+          clearance_fee_batch_cad?: number
           clearance_fee_cad?: number
           clearance_fee_level?: string
+          clearance_fee_waybill_cad?: number
           created_at?: string
+          delivery_heavy_min_kg?: number | null
+          delivery_light_fee_cad?: number | null
+          delivery_light_max_kg?: number | null
+          delivery_unit_fee_cad?: number | null
           direction?: string
           effective_from?: string | null
           effective_to?: string | null
@@ -1089,10 +1170,14 @@ export type Database = {
           id?: string
           insurance_rate_pct?: number
           is_active?: boolean
+          min_charge_batch_cad?: number
           min_charge_cad?: number
           min_charge_cny?: number
           min_charge_level?: string
+          min_charge_waybill_cad?: number
           note?: string | null
+          oversize_alert_length_cm?: number | null
+          overweight_alert_ratio?: number | null
           pallet_max_height_cm?: number | null
           pallet_max_length_cm?: number | null
           pallet_max_weight_kg?: number | null
@@ -1100,6 +1185,7 @@ export type Database = {
           pallet_overflow_factor?: number
           pallet_unit_price_cad?: number
           pricing_mode?: string
+          remote_postal_prefixes?: string | null
           route_id?: string
           unit_price_cad?: number
           unit_price_cny?: number
@@ -1128,10 +1214,12 @@ export type Database = {
           hs_code: string
           id: string
           is_active: boolean
+          material: string | null
           mfn_rate: number | null
           name_en: string | null
           name_zh: string
           note: string | null
+          origin: string | null
           sima_involved: boolean
           unit: string | null
           updated_at: string
@@ -1146,10 +1234,12 @@ export type Database = {
           hs_code: string
           id?: string
           is_active?: boolean
+          material?: string | null
           mfn_rate?: number | null
           name_en?: string | null
           name_zh: string
           note?: string | null
+          origin?: string | null
           sima_involved?: boolean
           unit?: string | null
           updated_at?: string
@@ -1164,10 +1254,12 @@ export type Database = {
           hs_code?: string
           id?: string
           is_active?: boolean
+          material?: string | null
           mfn_rate?: number | null
           name_en?: string | null
           name_zh?: string
           note?: string | null
+          origin?: string | null
           sima_involved?: boolean
           unit?: string | null
           updated_at?: string
@@ -1391,49 +1483,61 @@ export type Database = {
       }
       my_items: {
         Row: {
+          brand: string | null
           created_at: string
           declared_value_cad: number
           gst_rate: number
           hs_code: string
           id: string
           inner_qty: number | null
+          material: string | null
           mfn_rate: number
           name: string
+          origin: string | null
           sima_involved: boolean
           sku: string | null
           unit: string | null
           updated_at: string
           user_id: string
+          weight_kg: number | null
         }
         Insert: {
+          brand?: string | null
           created_at?: string
           declared_value_cad?: number
           gst_rate?: number
           hs_code: string
           id?: string
           inner_qty?: number | null
+          material?: string | null
           mfn_rate?: number
           name: string
+          origin?: string | null
           sima_involved?: boolean
           sku?: string | null
           unit?: string | null
           updated_at?: string
           user_id: string
+          weight_kg?: number | null
         }
         Update: {
+          brand?: string | null
           created_at?: string
           declared_value_cad?: number
           gst_rate?: number
           hs_code?: string
           id?: string
           inner_qty?: number | null
+          material?: string | null
           mfn_rate?: number
           name?: string
+          origin?: string | null
           sima_involved?: boolean
           sku?: string | null
           unit?: string | null
           updated_at?: string
           user_id?: string
+          weight_kg?: number | null
         }
         Relationships: []
       }
@@ -3315,6 +3419,17 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_list_users: {
+        Args: {
+          _limit?: number
+          _offset?: number
+          _role?: Database["public"]["Enums"]["app_role"]
+          _search?: string
+          _unpaid_only?: boolean
+          _vip?: Database["public"]["Enums"]["vip_level"]
+        }
+        Returns: Json
+      }
       admin_ship_shop_order: { Args: { _order_id: string }; Returns: Json }
       award_points_for_spend: {
         Args: { _amount_cad: number; _user_id: string }
@@ -3347,6 +3462,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      infer_material: { Args: { _hs: string; _name: string }; Returns: string }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
       lookup_shipment: { Args: { _tracking_no: string }; Returns: Json }
       mark_invoices_overdue: { Args: never; Returns: number }

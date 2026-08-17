@@ -1,10 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { listOrders, type OrderStatus } from "@/lib/orders.functions";
 import { ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, METHOD_LABEL, StatusBadge, Page, fmtDate, fmtCNY } from "@/lib/admin-shared";
 import { Search, Loader2, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { DeleteRowButton, useCanDelete } from "@/components/admin/DeleteRowButton";
+import { deleteOrderRecord } from "@/lib/admin-delete.functions";
 
 export const Route = createFileRoute("/admin/orders/")({ component: OrdersPage });
 
@@ -12,6 +14,9 @@ const ORDER_STATUSES: (OrderStatus | "all")[] = ["all","procurement","pending","
 
 function OrdersPage() {
   const fetchList = useServerFn(listOrders);
+  const delOrder = useServerFn(deleteOrderRecord);
+  const canDelete = useCanDelete();
+  const qc = useQueryClient();
   const [status, setStatus] = useState<OrderStatus | "all">("all");
   const [pay, setPay] = useState<"all" | "paid" | "unpaid">("all");
   const [searchInput, setSearchInput] = useState("");
@@ -92,6 +97,7 @@ function OrdersPage() {
                 <td className="px-4 py-2.5 text-right">
                   <Link to="/admin/orders/$orderId" params={{ orderId: o.id }}
                     className="inline-flex items-center gap-1 text-xs text-brand hover:underline">详情 <ArrowRight className="h-3 w-3"/></Link>
+                  {canDelete && <DeleteRowButton label="订单" name={o.order_no} extra="其下属运单、订单商品将一并删除。" onDelete={async () => { await delOrder({ data: { id: o.id } }); await qc.invalidateQueries({ queryKey: ["admin-orders"] }); }}/>}
                 </td>
               </tr>
             ))}

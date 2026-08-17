@@ -281,8 +281,17 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
     pallet_max_height_cm: initial.freight?.pallet_max_height_cm ?? null,
     pallet_max_weight_kg: initial.freight?.pallet_max_weight_kg ?? null,
     pallet_overflow_factor: Number(initial.freight?.pallet_overflow_factor ?? 2),
-    clearance_fee_level: (initial.freight?.clearance_fee_level as any) ?? "waybill",
-    min_charge_level: (initial.freight?.min_charge_level as any) ?? "waybill",
+    min_charge_waybill_cad: Number(initial.freight?.min_charge_waybill_cad ?? 0),
+    min_charge_batch_cad: Number(initial.freight?.min_charge_batch_cad ?? 0),
+    clearance_fee_waybill_cad: Number(initial.freight?.clearance_fee_waybill_cad ?? 0),
+    clearance_fee_batch_cad: Number(initial.freight?.clearance_fee_batch_cad ?? 0),
+    delivery_light_max_kg: Number(initial.freight?.delivery_light_max_kg ?? 0),
+    delivery_light_fee_cad: Number(initial.freight?.delivery_light_fee_cad ?? 0),
+    delivery_heavy_min_kg: Number(initial.freight?.delivery_heavy_min_kg ?? 0),
+    delivery_unit_fee_cad: Number(initial.freight?.delivery_unit_fee_cad ?? 0),
+    oversize_alert_length_cm: Number(initial.freight?.oversize_alert_length_cm ?? 0),
+    overweight_alert_ratio: Number(initial.freight?.overweight_alert_ratio ?? 0),
+    remote_postal_prefixes: initial.freight?.remote_postal_prefixes ?? "",
   });
 
   const mkFreight = (src: any): FreightRule => ({
@@ -300,8 +309,17 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
     pallet_max_height_cm: src?.pallet_max_height_cm ?? null,
     pallet_max_weight_kg: src?.pallet_max_weight_kg ?? null,
     pallet_overflow_factor: Number(src?.pallet_overflow_factor ?? 2),
-    clearance_fee_level: (src?.clearance_fee_level as any) ?? "waybill",
-    min_charge_level: (src?.min_charge_level as any) ?? "waybill",
+    min_charge_waybill_cad: Number(src?.min_charge_waybill_cad ?? 0),
+    min_charge_batch_cad: Number(src?.min_charge_batch_cad ?? 0),
+    clearance_fee_waybill_cad: Number(src?.clearance_fee_waybill_cad ?? 0),
+    clearance_fee_batch_cad: Number(src?.clearance_fee_batch_cad ?? 0),
+    delivery_light_max_kg: Number(src?.delivery_light_max_kg ?? 0),
+    delivery_light_fee_cad: Number(src?.delivery_light_fee_cad ?? 0),
+    delivery_heavy_min_kg: Number(src?.delivery_heavy_min_kg ?? 0),
+    delivery_unit_fee_cad: Number(src?.delivery_unit_fee_cad ?? 0),
+    oversize_alert_length_cm: Number(src?.oversize_alert_length_cm ?? 0),
+    overweight_alert_ratio: Number(src?.overweight_alert_ratio ?? 0),
+    remote_postal_prefixes: src?.remote_postal_prefixes ?? "",
   });
   const [freightReverse, setFreightReverse] = useState<FreightRule>(
     mkFreight(initial.freight_reverse ?? initial.freight ?? {}),
@@ -767,7 +785,11 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
               </Section>
             )}
 
-            <Section title="末端派送费">
+            <Section title="末端派送费 · 旧版（已停用，仅箱号/托盘页面预览）">
+              <p className="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] leading-snug text-amber-200">
+                实际批次结算的末端派送费已改为在上方「运费公式」中配置（低重量固定费 / 高重量按板箱计费），
+                并由客服在批次结算页确认。此处的旧字段<b>不参与任何账单计算</b>，仅用于箱号 / 托盘列表页的费用预览显示。
+              </p>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <Field label="触发门槛 (kg)">
                   <Input
@@ -790,25 +812,10 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
                     onChange={(v) => setRoute({ ...route, last_mile_rate_cad: Number(v) })}
                   />
                 </Field>
-                <Field label="旧字段 · 批次末端费 CA$（保留兼容）">
-                  <Input
-                    type="number"
-                    value={String(route.last_mile_fee_cad ?? 0)}
-                    onChange={(v) => setRoute({ ...route, last_mile_fee_cad: Number(v) })}
-                  />
-                </Field>
-                <Field label="末端派送公式占位（预留后期按邮编/城市/区域覆盖）" full>
-                  <Input
-                    value={route.last_mile_formula ?? ""}
-                    onChange={(v) => setRoute({ ...route, last_mile_formula: v || null })}
-                  />
-                </Field>
               </div>
               <p className="mt-2 text-[11px] text-slate-500">
-                规则：当箱号/托盘的<b>计费重量 &gt; 触发门槛</b>时，末端派送费 = <b>floor(计费重量 / YYY) × XXX</b>{" "}
-                CAD（按整档收费）。 门槛或费率为 0 则不触发。
-                <br />
-                公式占位：后期支持按收件地址邮编 / 城市 / 区域覆盖，不同线路可配置不同公式。
+                预览规则：当箱号/托盘的<b>计费重量 &gt; 触发门槛</b>时，预览末端费 = <b>floor(计费重量 / YYY) × XXX</b>{" "}
+                CAD。门槛或费率为 0 则不显示。
               </p>
             </Section>
 
@@ -825,13 +832,6 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
                     <span>对本线路计算关税</span>
                   </label>
                 </Field>
-                <Field label="税率 %">
-                  <Input
-                    type="number"
-                    value={String(customs.rate_pct)}
-                    onChange={(v) => setCustoms({ ...customs, rate_pct: Number(v) })}
-                  />
-                </Field>
                 <Field label="起征金额 CA$">
                   <Input
                     type="number"
@@ -843,6 +843,10 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
                   <Input value={customs.note ?? ""} onChange={(v) => setCustoms({ ...customs, note: v })} />
                 </Field>
               </div>
+              <p className="mt-2 text-[11px] text-slate-500">
+                关税一律按物品 HS 编码明细计算（MFN + GST + 反倾销）。此处只控制「本线路是否征税」与「起征金额」，
+                原来的线路统一税率 % 已停用并移除。
+              </p>
             </Section>
           </div>
 
@@ -1149,36 +1153,94 @@ function FreightFields({ value: f, onChange }: { value: FreightRule; onChange: (
           </p>
         </>
       )}
-      <Field label="最低收费 CA$">
-        <Input type="number" value={String(f.min_charge_cad)} onChange={(v) => set({ min_charge_cad: Number(v) })} />
-      </Field>
-      <Field label="最低收费级别">
-        <select
-          value={(f as any).min_charge_level ?? "waybill"}
-          onChange={(e) => set({ min_charge_level: e.target.value } as any)}
-          className="h-9 w-full rounded-md border border-white/10 bg-white/5 px-2 text-sm text-slate-100"
-        >
-          <option value="waybill">运单级（每张运单单独判断）</option>
-          <option value="batch">批次级（合并后仅整批判断一次）</option>
-        </select>
-      </Field>
-      <Field label="清关费 CA$">
+      <Field label="最低收费 CA$（运单级）">
         <Input
           type="number"
-          value={String(f.clearance_fee_cad)}
-          onChange={(v) => set({ clearance_fee_cad: Number(v) })}
+          value={String(f.min_charge_waybill_cad ?? 0)}
+          onChange={(v) => set({ min_charge_waybill_cad: Number(v) })}
         />
       </Field>
-      <Field label="清关费计算级别">
-        <select
-          value={(f as any).clearance_fee_level ?? "waybill"}
-          onChange={(e) => set({ clearance_fee_level: e.target.value } as any)}
-          className="h-9 w-full rounded-md border border-white/10 bg-white/5 px-2 text-sm text-slate-100"
-        >
-          <option value="waybill">运单级（每张运单加一次）</option>
-          <option value="batch">批次级（同线路同客户号合并加一次）</option>
-        </select>
+      <Field label="最低收费 CA$（批次级）">
+        <Input
+          type="number"
+          value={String(f.min_charge_batch_cad ?? 0)}
+          onChange={(v) => set({ min_charge_batch_cad: Number(v) })}
+        />
       </Field>
+      <Field label="清关费 CA$（运单级）">
+        <Input
+          type="number"
+          value={String(f.clearance_fee_waybill_cad ?? 0)}
+          onChange={(v) => set({ clearance_fee_waybill_cad: Number(v) })}
+        />
+      </Field>
+      <Field label="清关费 CA$（批次级）">
+        <Input
+          type="number"
+          value={String(f.clearance_fee_batch_cad ?? 0)}
+          onChange={(v) => set({ clearance_fee_batch_cad: Number(v) })}
+        />
+      </Field>
+      <p className="col-span-2 text-[11px] text-slate-500">
+        最低收费与清关费分别在运单级 / 批次级生效：运单级按每张运单各判断一次，批次级按同线路同客户号在批次内合并判断一次。
+      </p>
+
+      <Field label="末端派送费：重量低于 (kg)">
+        <Input
+          type="number"
+          value={String(f.delivery_light_max_kg ?? 0)}
+          onChange={(v) => set({ delivery_light_max_kg: Number(v) })}
+        />
+      </Field>
+      <Field label="低重量固定派送费 CA$">
+        <Input
+          type="number"
+          value={String(f.delivery_light_fee_cad ?? 0)}
+          onChange={(v) => set({ delivery_light_fee_cad: Number(v) })}
+        />
+      </Field>
+      <Field label="末端派送费：重量高于 (kg)">
+        <Input
+          type="number"
+          value={String(f.delivery_heavy_min_kg ?? 0)}
+          onChange={(v) => set({ delivery_heavy_min_kg: Number(v) })}
+        />
+      </Field>
+      <Field label="按板/箱单价 CA$（× 托盘+箱数量）">
+        <Input
+          type="number"
+          value={String(f.delivery_unit_fee_cad ?? 0)}
+          onChange={(v) => set({ delivery_unit_fee_cad: Number(v) })}
+        />
+      </Field>
+      <Field label="超长预警：最长边 (cm)">
+        <Input
+          type="number"
+          value={String(f.oversize_alert_length_cm ?? 0)}
+          onChange={(v) => set({ oversize_alert_length_cm: Number(v) })}
+        />
+      </Field>
+      <Field label="超重预警：体积重量比 (kg/m³)">
+        <Input
+          type="number"
+          value={String(f.overweight_alert_ratio ?? 0)}
+          onChange={(v) => set({ overweight_alert_ratio: Number(v) })}
+        />
+      </Field>
+      <Field label="偏远地区邮编前缀（逗号分隔）" full>
+        <Input
+          value={String(f.remote_postal_prefixes ?? "")}
+          onChange={(v) => set({ remote_postal_prefixes: v })}
+          placeholder="例：A0, X0, Y1"
+        />
+      </Field>
+      <p className="col-span-2 text-[11px] text-slate-500">
+        末端派送费为批次级：先判断「重量低于阈值 → 加收固定派送费」，否则「重量高于第二阈值 → 按（托盘+箱）数量 × 单价」。
+        超长 / 超重 / 偏远邮编只用于在批次结算页给出提示，不自动计费。
+      </p>
+
+
+
 
       <Field label="保险费率 %  (申报价值 × 费率 = 保费)" full>
         <Input

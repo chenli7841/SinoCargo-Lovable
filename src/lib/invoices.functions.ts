@@ -572,3 +572,25 @@ export const deleteOfflinePayment = createServerFn({ method: "POST" })
     });
     return { ok: true };
   });
+
+// ---- 批次账单：批次详情页展示 / 下载 ----
+export const listBatchInvoices = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { batchNo: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows, error } = await supabaseAdmin
+      .from("invoices")
+      .select("*")
+      .eq("batch_no", data.batchNo)
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    const userIds = Array.from(new Set((rows ?? []).map((r: any) => r.user_id)));
+    const { data: profs } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name, customer_code, email")
+      .in("id", userIds.length ? userIds : ["00000000-0000-0000-0000-000000000000"]);
+    const map = new Map((profs ?? []).map((p: any) => [p.id, p]));
+    return { items: (rows ?? []).map((r: any) => ({ ...r, customer: map.get(r.user_id) ?? null })) };
+  });

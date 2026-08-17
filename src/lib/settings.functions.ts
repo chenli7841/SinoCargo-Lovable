@@ -98,8 +98,20 @@ export type FreightRule = {
   pallet_max_weight_kg?: number | null;
   pallet_overflow_factor?: number;
   direction?: FreightDirection;
-  clearance_fee_level?: "waybill" | "batch";
-  min_charge_level?: "waybill" | "batch";
+  /** 最低收费 / 清关费分别在运单级与批次级设置 */
+  min_charge_waybill_cad?: number;
+  min_charge_batch_cad?: number;
+  clearance_fee_waybill_cad?: number;
+  clearance_fee_batch_cad?: number;
+  /** 末端派送费（批次级）：轻货固定费 + 重货按板/箱计费 */
+  delivery_light_max_kg?: number;
+  delivery_light_fee_cad?: number;
+  delivery_heavy_min_kg?: number;
+  delivery_unit_fee_cad?: number;
+  /** 派送风险预警阈值 */
+  oversize_alert_length_cm?: number;
+  overweight_alert_ratio?: number;
+  remote_postal_prefixes?: string | null;
 };
 
 /**
@@ -320,8 +332,17 @@ export const upsertRoute = createServerFn({ method: "POST" })
       pallet_max_height_cm: f.pallet_max_height_cm ?? null,
       pallet_max_weight_kg: f.pallet_max_weight_kg ?? null,
       pallet_overflow_factor: f.pallet_overflow_factor ?? 2,
-      clearance_fee_level: f.clearance_fee_level ?? "waybill",
-      min_charge_level: f.min_charge_level ?? "waybill",
+      min_charge_waybill_cad: f.min_charge_waybill_cad ?? 0,
+      min_charge_batch_cad: f.min_charge_batch_cad ?? 0,
+      clearance_fee_waybill_cad: f.clearance_fee_waybill_cad ?? 0,
+      clearance_fee_batch_cad: f.clearance_fee_batch_cad ?? 0,
+      delivery_light_max_kg: f.delivery_light_max_kg ?? 0,
+      delivery_light_fee_cad: f.delivery_light_fee_cad ?? 0,
+      delivery_heavy_min_kg: f.delivery_heavy_min_kg ?? 0,
+      delivery_unit_fee_cad: f.delivery_unit_fee_cad ?? 0,
+      oversize_alert_length_cm: f.oversize_alert_length_cm ?? 0,
+      overweight_alert_ratio: f.overweight_alert_ratio ?? 0,
+      remote_postal_prefixes: f.remote_postal_prefixes ?? null,
     });
 
     // Deactivate all prior rules for this route, then insert the active set
@@ -424,8 +445,9 @@ export const quoteFreight = createServerFn({ method: "POST" })
     // Prefer CAD columns; fall back to legacy CNY * 0.19 for older rows.
     const fx = 0.19;
     const unit_cad = Number(rule.unit_price_cad ?? 0) || Number(rule.unit_price_cny ?? 0) * fx;
-    const min_cad = Number(rule.min_charge_cad ?? 0) || Number(rule.min_charge_cny ?? 0) * fx;
-    const clearance_cad = Number(rule.clearance_fee_cad ?? 0) || Number(rule.extra_fee_cny ?? 0) * fx;
+    // 最低收费 / 清关费按运单级试算（批次级另行结算）
+    const min_cad = Number(rule.min_charge_waybill_cad ?? 0);
+    const clearance_cad = Number(rule.clearance_fee_waybill_cad ?? 0);
 
     const pricing_mode = (rule.pricing_mode as PricingMode) ?? "weight";
     let freight_cad = 0;

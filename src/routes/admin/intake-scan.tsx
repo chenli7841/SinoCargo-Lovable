@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState, useRef, useEffect } from "react";
 import { intakeScanSearch, intakeScanCommit, markDetained, intakeScanReceiveWaybill, intakeScanReceiveOrder } from "@/lib/scan.functions";
 import { Page } from "@/lib/admin-shared";
+import { InventoryIntakePanel } from "@/components/admin/InventoryIntakePanel";
 import { ScanLine, Search, Package, AlertTriangle, Loader2, Check, StickyNote } from "lucide-react";
 
 export const Route = createFileRoute("/admin/intake-scan")({ component: IntakeScanPage });
@@ -135,6 +136,9 @@ function IntakeScanPage() {
           </div>
           {msg && <div className={`mt-2 text-sm ${msg.ok ? "text-emerald-300" : "text-rose-300"}`}>{msg.text}</div>}
         </form>
+
+        <InventoryIntakePanel />
+
 
         {waybillNote && (
           <div className="rounded-2xl border-2 border-amber-500/60 bg-amber-500/10 p-4">

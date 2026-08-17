@@ -1,10 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { listForwardings } from "@/lib/orders.functions";
 import { METHOD_LABEL, Page, fmtDate, fmtCAD } from "@/lib/admin-shared";
 import { Pagination } from "@/components/admin/Pagination";
+import { DeleteRowButton, useCanDelete } from "@/components/admin/DeleteRowButton";
+import { deleteForwardingRecord } from "@/lib/admin-delete.functions";
 import { Search, Loader2, ArrowRight } from "lucide-react";
 
 export const Route = createFileRoute("/admin/forwardings/")({ component: ForwardingsPage });
@@ -17,6 +19,9 @@ const STATUS_LABEL: Record<string, string> = {
 
 function ForwardingsPage() {
   const fetchList = useServerFn(listForwardings);
+  const delFo = useServerFn(deleteForwardingRecord);
+  const canDelete = useCanDelete();
+  const qc = useQueryClient();
   const [status, setStatus] = useState("all");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -86,6 +91,7 @@ function ForwardingsPage() {
                 <td className="px-4 py-2.5 text-right">
                   <Link to="/admin/forwardings/$forwardingId" params={{ forwardingId: f.id }}
                     className="inline-flex items-center gap-1 text-xs text-brand hover:underline">详情 <ArrowRight className="h-3 w-3"/></Link>
+                  {canDelete && <DeleteRowButton label="集运单" name={f.request_no} extra="其下属运单、物品信息将一并删除。" onDelete={async () => { await delFo({ data: { id: f.id } }); await qc.invalidateQueries({ queryKey: ["admin-forwardings"] }); }}/>}
                 </td>
               </tr>
             ))}

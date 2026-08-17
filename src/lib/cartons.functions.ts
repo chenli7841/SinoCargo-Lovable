@@ -166,8 +166,8 @@ async function computeSelfFreightCad(
   const chargeable = rule.weight_mode === "actual" ? w : rule.weight_mode === "volumetric" ? volW : Math.max(w, volW);
   const fx = await getFxCadPerCny(admin);
   const unit_cad = Number(rule.unit_price_cad ?? 0) || Number(rule.unit_price_cny ?? 0) * fx;
-  const min_level = String(rule.min_charge_level ?? "waybill");
-  const min_cad = min_level === "batch" ? 0 : Number(rule.min_charge_cad ?? 0) || Number(rule.min_charge_cny ?? 0) * fx;
+  // 运单/箱自身层不再套用最低收费（只在订单级、批次级结算）
+  const min_cad = 0;
   let freight = chargeable * unit_cad;
   if (freight < min_cad) freight = min_cad;
   return +freight.toFixed(2);
@@ -247,20 +247,29 @@ async function getLastMileFeeCad(
   admin: any,
   routeId: string | null | undefined,
   chargeableKg: number,
+  units = 1,
 ): Promise<number> {
   if (!routeId || !chargeableKg || chargeableKg <= 0) return 0;
+  // 新口径：读取运费公式（freight_rules）里的末端派送费设置
   const { data: r } = await admin
-    .from("shipping_routes")
-    .select("last_mile_threshold_kg, last_mile_step_kg, last_mile_rate_cad")
-    .eq("id", routeId)
+    .from("freight_rules")
+    .select("delivery_light_max_kg, delivery_light_fee_cad, delivery_heavy_min_kg, delivery_unit_fee_cad")
+    .eq("route_id", routeId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (!r) return 0;
-  const th = Number(r.last_mile_threshold_kg ?? 0);
-  const step = Number(r.last_mile_step_kg ?? 0);
-  const rate = Number(r.last_mile_rate_cad ?? 0);
-  if (!step || !rate || chargeableKg <= th) return 0;
-  return +(Math.floor(chargeableKg / step) * rate).toFixed(2);
+  const lightMax = Number(r.delivery_light_max_kg ?? 0);
+  const lightFee = Number(r.delivery_light_fee_cad ?? 0);
+  const heavyMin = Number(r.delivery_heavy_min_kg ?? 0);
+  const unitFee = Number(r.delivery_unit_fee_cad ?? 0);
+  if (lightMax > 0 && chargeableKg < lightMax && lightFee > 0) return +lightFee.toFixed(2);
+  if (heavyMin > 0 && chargeableKg > heavyMin && unitFee > 0)
+    return +(unitFee * Math.max(1, units)).toFixed(2);
+  return 0;
 }
+
 
 function composeCad(
   selfCad: number,
@@ -854,7 +863,8 @@ export const deleteCarton = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertStaff(context.supabase, context.userId);
+    const { assertManagerLevel } = await import("./admin-delete.server");
+    await assertManagerLevel(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: before } = await supabaseAdmin.from("cartons").select("*").eq("id", data.id).maybeSingle();
     const { error } = await supabaseAdmin.from("cartons").delete().eq("id", data.id);
@@ -1348,7 +1358,8 @@ export const deletePallet = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertStaff(context.supabase, context.userId);
+    const { assertManagerLevel } = await import("./admin-delete.server");
+    await assertManagerLevel(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: before } = await supabaseAdmin.from("pallets").select("*").eq("id", data.id).maybeSingle();
     const { error } = await supabaseAdmin.from("pallets").delete().eq("id", data.id);

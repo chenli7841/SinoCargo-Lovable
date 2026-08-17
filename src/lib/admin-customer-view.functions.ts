@@ -269,6 +269,10 @@ export const saveCustomerItem = createServerFn({ method: "POST" })
       mfn_rate?: number;
       gst_rate?: number;
       sima_involved?: boolean;
+      material?: string | null;
+      origin?: string | null;
+      brand?: string | null;
+      weight_kg?: number | null;
     }) => d,
   )
   .handler(async ({ data, context }) => {
@@ -299,6 +303,11 @@ export const saveCustomerItem = createServerFn({ method: "POST" })
       mfn_rate: (resolved as any)?.mfn_rate ?? data.mfn_rate ?? 0,
       gst_rate: (resolved as any)?.gst_rate ?? data.gst_rate ?? 0.05,
       sima_involved: (resolved as any)?.sima_involved ?? data.sima_involved ?? false,
+      // 材质优先跟随 HS 编码库；产地默认 China
+      material: (resolved as any)?.material ?? (data.material?.trim() || null),
+      origin: data.origin?.trim() || "China",
+      brand: data.brand?.trim() || null,
+      weight_kg: data.weight_kg ?? null,
     };
     const op = data.id
       ? supabaseAdmin.from("my_items").update(payload).eq("id", data.id).eq("user_id", data.userId)
@@ -444,7 +453,9 @@ export const listShippingOptions = createServerFn({ method: "POST" })
       context.supabase.from("warehouses").select("id,code,name_zh,name_en").eq("is_active", true).order("sort_order"),
       context.supabase
         .from("shipping_routes")
-        .select("id,code,name_zh,name_en,shipping_method,origin_warehouse_id,destination_warehouse_id,is_bidirectional")
+        .select(
+          "id,code,name_zh,name_en,shipping_method,origin_warehouse_id,destination_warehouse_id,is_bidirectional,item_fields,item_field_required",
+        )
         .eq("is_active", true)
         .in("usage_scope", ["forwarding", "both"])
         .order("sort_order"),
@@ -494,8 +505,45 @@ export const createCustomerForwarding = createServerFn({ method: "POST" })
   .inputValidator((d: { userId: string; payload: any }) => d)
   .handler(async ({ data, context }) => {
     await assertCustomerViewAccess(context.supabase, context.userId);
+    // Auto-fill HS code / material / origin from the customer's saved items when
+    // staff typed a品名 without picking it from the library — place_forwarding
+    // rejects rows missing route-required fields like hscode.
+    const payload = { ...(data.payload ?? {}) } as any;
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    if (items.length) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: saved } = await supabaseAdmin
+        .from("my_items")
+        .select("sku, name, hs_code, material, origin, weight_kg, declared_value_cad, inner_qty")
+        .eq("user_id", data.userId);
+      const rows = (saved ?? []) as any[];
+      const norm = (v: any) => String(v ?? "").trim().toLowerCase();
+      payload.items = items.map((it: any) => {
+        const ex = { ...(it.extras ?? {}) };
+        if (!ex.hscode || !ex.material || !ex.origin) {
+          const hit = rows.find((r) => norm(r.name) === norm(it.name) || (ex.sku && norm(r.sku) === norm(ex.sku)));
+          if (hit) {
+            ex.hscode = ex.hscode || hit.hs_code || null;
+            ex.material = ex.material || hit.material || null;
+            ex.origin = ex.origin || hit.origin || "China";
+            ex.weight_kg = ex.weight_kg ?? hit.weight_kg ?? null;
+            ex.inner_qty = ex.inner_qty ?? hit.inner_qty ?? null;
+          }
+        }
+        if (!ex.origin) ex.origin = "China";
+        // sensible defaults so a blank optional box doesn't fail the RPC —
+        // 库存发货（extras.inv_box_count）除外：货已在仓，不能再生成新运单。
+        const fromInventory = ex.inv_box_count !== null && ex.inv_box_count !== undefined && ex.inv_box_count !== "";
+        if (!fromInventory) {
+          if (ex.box_count === null || ex.box_count === undefined || ex.box_count === "") ex.box_count = 1;
+          if (ex.inner_qty === null || ex.inner_qty === undefined || ex.inner_qty === "") ex.inner_qty = 1;
+        }
+        const qty = Number(it.quantity) > 0 ? Number(it.quantity) : 1;
+        return { ...it, quantity: qty, extras: ex };
+      });
+    }
     const { data: result, error } = await context.supabase.rpc("place_forwarding", {
-      _payload: data.payload,
+      _payload: payload,
       _target_user_id: data.userId,
     });
     if (error) throw new Error(error.message);
@@ -585,7 +633,8 @@ export const getCustomerBatches = createServerFn({ method: "POST" })
         status: b.status as "shipped" | "arrived" | "closed",
         shipping_method: b.shipping_method,
         eta: b.eta_date,
-        subtotal_cad: +(subtotalCny * FX).toFixed(2),
+        // per_customer.subtotal_cny is already CAD — no FX conversion
+        subtotal_cad: subtotalCny,
         is_paid: allPaid,
         items,
         intl_tracking_nos: Array.from(new Set(wbs.map((w: any) => w.intl_tracking_no).filter(Boolean))) as string[],

@@ -180,17 +180,25 @@ function AdminLayout() {
   const fetchNavItems = useServerFn(listNavItems);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
+  // Roles and the nav config barely change during a session — cache them for
+  // the whole session so every admin page navigation stops re-fetching them.
   const rolesQ = useQuery({
     queryKey: ["my-roles"],
     queryFn: () => fetchRoles(),
     enabled: !!user,
-    staleTime: 60_000,
+    staleTime: 30 * 60_000,
+    gcTime: 60 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
   const navQ = useQuery({
     queryKey: ["admin-nav-items"],
     queryFn: () => fetchNavItems(),
     enabled: !!user,
-    staleTime: 60_000,
+    staleTime: 30 * 60_000,
+    gcTime: 60 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const roles = rolesQ.data?.roles ?? [];

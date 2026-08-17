@@ -8,6 +8,8 @@ import { Pagination } from "@/components/admin/Pagination";
 import { Plus, Loader2, ArrowRight, Printer, Filter } from "lucide-react";
 import { renderLabel } from "@/lib/label-render";
 import { ContainerCreateDialog } from "@/components/admin/ContainerCreateDialog";
+import { DeleteRowButton, useCanDelete } from "@/components/admin/DeleteRowButton";
+import { deleteCarton } from "@/lib/cartons.functions";
 
 export const Route = createFileRoute("/admin/cartons/")({ component: CartonsPage });
 
@@ -27,10 +29,12 @@ function CartonsPage() {
   const fetchList = useServerFn(listCartons);
   const create = useServerFn(createCarton);
   const fetchLabel = useServerFn(getContainerLabelData);
+  const delCarton = useServerFn(deleteCarton);
+  const canDelete = useCanDelete();
 
   const [search, setSearch] = useState("");
   const [showClosed, setShowClosed] = useState(false);
-  const [page, setPage] = useState(1); const pageSize = 25;
+  const [page, setPage] = useState(1); const pageSize = 10;
   const q = useQuery({
     queryKey: ["cartons", search, showClosed, page],
     queryFn: () => fetchList({ data: { search, showClosed, page, pageSize } }),
@@ -63,35 +67,38 @@ function CartonsPage() {
       <div className="overflow-x-auto rounded-2xl border border-white/5 bg-white/[0.02]">
         <table className="w-full text-sm">
           <thead className="bg-white/[0.03] text-left text-[11px] uppercase text-slate-400">
-            <tr><th className="px-4 py-2.5">箱号</th><th>线路</th><th>客户</th><th>目的地</th><th>状态</th><th>付款</th><th>计费重</th><th>总费用 (CAD)</th><th>所属托盘</th><th>所属批次</th><th>创建</th><th></th></tr>
+            <tr><th className="px-4 py-2.5">箱号</th><th>线路</th><th>客户</th><th>目的地</th><th>状态</th><th>付款</th><th>计费重<div className="normal-case text-[10px] text-slate-500"><span className="text-sky-300/70">本身</span> / <span className="text-amber-300/70">运单合计</span></div></th><th>总费用 (CAD)<div className="normal-case text-[10px] text-slate-500"><span className="text-sky-300/70">A 本身</span> / <span className="text-amber-300/70">B 运单合计</span></div></th><th>所属托盘</th><th>所属批次</th><th>创建</th><th></th></tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {q.isLoading && <tr><td colSpan={12} className="py-10 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-slate-500"/></td></tr>}
             {q.data?.items.length === 0 && <tr><td colSpan={12} className="py-10 text-center text-slate-500">暂无</td></tr>}
             {q.data?.items.map((c: any) => {
-              const chargeW = c.customer_code ? Number(c.self_chargeable_kg ?? 0) : Number(c.child_chargeable_kg ?? 0);
+              const selfChg = Number(c.self_chargeable_kg ?? 0);
+              const childChg = Number(c.child_chargeable_kg ?? 0);
               return (
               <tr key={c.id} className="hover:bg-white/[0.03]">
-                <td className="px-4 py-3 font-mono text-xs text-slate-200">{c.carton_no}</td>
-                <td className="text-xs text-slate-400">{c.route_code ?? "—"}</td>
-                <td className="text-xs font-mono">{c.customer_code ?? "—"}</td>
-                <td className="text-xs text-slate-400">{c.destination_code ?? "—"}</td>
-                <td className="text-xs">{c.status}</td>
+                <td className="px-4 py-2.5 font-mono text-base text-brand">{c.carton_no}</td>
+                <td className="text-sm text-slate-400">{c.route_code ?? "—"}</td>
+                <td className="text-sm font-mono">{c.customer_code ?? "—"}</td>
+                <td className="text-sm text-slate-400">{c.destination_code ?? "—"}</td>
+                <td className="text-sm">{c.status}</td>
                 <td><PaymentBadge s={c.payment_status}/></td>
-                <td className="text-xs" title={`自身计费重 ${c.self_chargeable_kg ?? 0} · 下属计费重之和 ${c.child_chargeable_kg ?? 0} kg · 采用 ${c.customer_code ? "自身" : "下属之和"}`}>
-                  {chargeW ? `${chargeW} kg` : "—"}
+                <td className="text-sm" title={`采用 ${c.has_customer ? "本身计费重(A)" : "运单合计计费重(B)"}`}>
+                  <div className={`font-mono ${c.has_customer ? "font-bold text-sky-300" : "text-sky-300/60"}`}>本身 {selfChg ? `${selfChg} kg` : "—"}</div>
+                  <div className={`font-mono ${c.has_customer ? "text-amber-300/60" : "font-bold text-amber-300"}`}>运单 {childChg ? `${childChg} kg` : "—"}</div>
                 </td>
-                <td className="text-xs font-mono text-emerald-300" title={c.has_customer
-                  ? `客户号模式 = 自身运费 CA$${(c.self_freight_cad ?? 0).toFixed(2)} + 关税 CA$${(c.child_customs_cad ?? 0).toFixed(2)} + 保险 CA$${(c.child_insurance_cad ?? 0).toFixed(2)} + 清关费 CA$${(c.clearance_fee_cad ?? 0).toFixed(2)} + 附加费 CA$${(c.surcharge_cad ?? 0).toFixed(2)}`
-                  : `无客户号模式 = 下属运费 CA$${(c.child_freight_cad ?? 0).toFixed(2)} + 关税 CA$${(c.child_customs_cad ?? 0).toFixed(2)} + 保险 CA$${(c.child_insurance_cad ?? 0).toFixed(2)}`}>
-                  CA${(c.total_fee_cad ?? 0).toFixed?.(2) ?? "0.00"}
+                <td className="text-sm font-mono" title={`A 本身计费 = 自身运费 CA$${Number(c.self_freight_cad ?? 0).toFixed(2)} + 关税 CA$${Number(c.child_customs_cad ?? 0).toFixed(2)} + 保险 CA$${Number(c.child_insurance_cad ?? 0).toFixed(2)} + 附加费 CA$${Number(c.surcharge_cad ?? 0).toFixed(2)}\nB 运单合计 = 下属运费 CA$${Number(c.child_freight_cad ?? 0).toFixed(2)} + 关税 + 保险 + 清关费 CA$${Number(c.clearance_fee_cad ?? 0).toFixed(2)}\n当前采用：${c.has_customer ? "A（有客户号）" : "B（无客户号）"}`}>
+                  <div className={c.has_customer ? "font-bold text-sky-300" : "text-sky-300/60"}>A 本身 CA${Number(c.with_customer_total_cad ?? 0).toFixed(2)}</div>
+                  <div className={c.has_customer ? "text-amber-300/60" : "font-bold text-amber-300"}>B 运单 CA${Number(c.without_customer_total_cad ?? 0).toFixed(2)}</div>
                 </td>
-                <td className="text-xs font-mono">{c.pallet_no ? <Link to="/admin/pallets/$palletId" params={{ palletId: c.pallet_id }} className="text-brand hover:underline">{c.pallet_no}</Link> : "—"}</td>
-                <td className="text-xs font-mono">{c.batch_no ? <Link to="/admin/batches/$batchId" params={{ batchId: c.batch_id }} className="text-brand hover:underline">{c.batch_no}</Link> : "—"}</td>
-                <td className="text-xs text-slate-400">{fmtDate(c.created_at)}</td>
+
+                <td className="text-sm font-mono">{c.pallet_no ? <Link to="/admin/pallets/$palletId" params={{ palletId: c.pallet_id }} className="text-brand hover:underline">{c.pallet_no}</Link> : "—"}</td>
+                <td className="text-sm font-mono">{c.batch_no ? <Link to="/admin/batches/$batchId" params={{ batchId: c.batch_id }} className="text-brand hover:underline">{c.batch_no}</Link> : "—"}</td>
+                <td className="text-sm text-slate-400">{fmtDate(c.created_at)}</td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
                   <button onClick={() => onPrint(c.id)} className="mr-2 text-[10px] text-slate-300 hover:text-white"><Printer className="inline h-3 w-3"/></button>
                   <Link to="/admin/cartons/$cartonId" params={{ cartonId: c.id }} className="text-xs text-brand">详情 <ArrowRight className="inline h-3 w-3"/></Link>
+                  {canDelete && <DeleteRowButton label="箱号" name={c.carton_no} extra="下属运单/订单的箱号关联会被清空。" onDelete={async () => { await delCarton({ data: { id: c.id } }); await qc.invalidateQueries({ queryKey: ["cartons"] }); }}/>}
                 </td>
               </tr>
               );

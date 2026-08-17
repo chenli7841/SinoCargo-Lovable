@@ -749,7 +749,20 @@ function ProfileTab() {
   );
 }
 
+// Supabase throws "Auth session missing!"/session_not_found when the stored
+// session was revoked elsewhere (logout in another tab, password change, expiry).
+// Revalidate + refresh before any auth mutation, and bounce to sign-in if gone.
+async function ensureFreshSession(): Promise<boolean> {
+  const { data, error } = await supabase.auth.getUser();
+  if (!error && data.user) return true;
+  const { data: r } = await supabase.auth.refreshSession();
+  if (r?.session) return true;
+  await supabase.auth.signOut().catch(() => {});
+  return false;
+}
+
 // ===================== Account security (password / email / WeChat) =====================
+
 function AccountSecurityCard({ profile, setProfile }: { profile: Profile; setProfile: (p: Profile) => void }) {
   const { lang } = useApp();
   const tr = (zh: string, en: string) => (lang === "zh" ? zh : en);
@@ -817,10 +830,19 @@ function AccountSecurityCard({ profile, setProfile }: { profile: Profile; setPro
 
   const [emailBusy, setEmailBusy] = useState(false);
 
+  const sessionGone = () => {
+    toast.error(tr("登录状态已失效，请重新登录", "Your session expired — please sign in again"));
+    window.location.href = "/auth?redirect=/account";
+  };
+
   const changeEmail = async () => {
     const email = newEmail.trim();
     if (!email) return;
     setEmailBusy(true);
+    if (!(await ensureFreshSession())) {
+      setEmailBusy(false);
+      return sessionGone();
+    }
     const { error } = await supabase.auth.updateUser({ email });
     setEmailBusy(false);
     if (error) return toast.error(error.message);
@@ -840,6 +862,10 @@ function AccountSecurityCard({ profile, setProfile }: { profile: Profile; setPro
     if (pw1.length < 6) return toast.error(tr("密码至少需要6位", "Password must be at least 6 characters"));
     if (pw1 !== pw2) return toast.error(tr("两次输入的密码不一致", "Passwords do not match"));
     setPwBusy(true);
+    if (!(await ensureFreshSession())) {
+      setPwBusy(false);
+      return sessionGone();
+    }
     const { error } = await supabase.auth.updateUser({ password: pw1 });
     setPwBusy(false);
     if (error) return toast.error(error.message);
@@ -847,6 +873,7 @@ function AccountSecurityCard({ profile, setProfile }: { profile: Profile; setPro
     setPw1("");
     setPw2("");
   };
+
 
   const startBind = useServerFn(startWechatBind);
   const doUnbind = useServerFn(unbindWechat);
@@ -1252,7 +1279,8 @@ interface Batch {
   eta: string | null;
   status: "shipped" | "arrived" | "closed";
   items: BatchItem[];
-  subtotal_cad: number;
+  subtotal_cad: number | null;
+  price_confirmed?: boolean;
   is_paid: boolean;
   intl_tracking_nos: string[];
 }
@@ -1453,7 +1481,11 @@ function BatchCard({
           <div className="text-[10px] uppercase tracking-wider text-ink-soft">
             {b.is_paid ? tr("批次合计", "Batch total") : tr("批次待付", "Batch unpaid")}
           </div>
-          <div className="font-display text-lg font-bold text-brand-gradient">CA${b.subtotal_cad.toFixed(2)}</div>
+          {b.subtotal_cad === null ? (
+            <div className="text-xs font-medium text-amber-600">{tr("等待客服确认费用", "Awaiting fee confirmation")}</div>
+          ) : (
+            <div className="font-display text-lg font-bold text-brand-gradient">CA${b.subtotal_cad.toFixed(2)}</div>
+          )}
         </div>
       </header>
 
@@ -1533,15 +1565,22 @@ function BatchCard({
         )}
       </div>
 
-      {!b.is_paid && b.subtotal_cad > 0 && (
+      {!b.is_paid && b.subtotal_cad === null && (
+        <div className="border-t border-border bg-background px-5 py-3 text-xs text-amber-600">
+          {tr("等待客服确认费用，确认后即可查看金额并付款", "Awaiting fee confirmation — amount and payment unlock once confirmed")}
+        </div>
+      )}
+      {!b.is_paid && (b.subtotal_cad ?? 0) > 0 && (
         <div className="flex flex-wrap items-center gap-3 border-t border-border bg-background px-5 py-3">
           <div className="text-xs text-ink-soft">
             {tr("待付", "Unpaid")}:{" "}
-            <span className="font-display text-base font-bold text-foreground">CA${b.subtotal_cad.toFixed(2)}</span>
+            <span className="font-display text-base font-bold text-foreground">
+              CA${(b.subtotal_cad ?? 0).toFixed(2)}
+            </span>
           </div>
           <button
             disabled={paying === b.batch_id}
-            onClick={() => onPay(b.batch_id, b.batch_no, b.subtotal_cad)}
+            onClick={() => onPay(b.batch_id, b.batch_no, b.subtotal_cad ?? 0)}
             className="ml-auto inline-flex items-center gap-2 rounded-full bg-cta-gradient px-5 py-2 text-xs font-semibold text-cta-foreground shadow-elevated transition hover:brightness-110 disabled:opacity-50"
           >
             {paying === b.batch_id ? (
@@ -1783,6 +1822,7 @@ function InventoryTab() {
       const boxCount = shipBoxes[g.key] ?? 0;
       return {
         name: g.productName,
+        sku: g.sku !== "—" ? g.sku : null,
         quantity: boxCount * g.qtyPerBox,
         unit_price_cad: 0,
         box_count: boxCount,
@@ -1936,6 +1976,10 @@ interface MyItem {
   gst_rate: number;
   sima_involved: boolean;
   unit: string | null;
+  material: string | null;
+  origin: string | null;
+  brand: string | null;
+  weight_kg: number | null;
 }
 
 function newMyItem(): Partial<MyItem> {
@@ -1949,6 +1993,10 @@ function newMyItem(): Partial<MyItem> {
     gst_rate: 0.05,
     sima_involved: false,
     unit: "",
+    material: "",
+    origin: "China",
+    brand: "",
+    weight_kg: undefined,
   };
 }
 
@@ -2026,6 +2074,11 @@ function MyItemsTab() {
       mfn_rate: resolved?.mfn_rate ?? editing.mfn_rate ?? 0,
       gst_rate: resolved?.gst_rate ?? editing.gst_rate ?? 0.05,
       sima_involved: resolved?.sima_involved ?? editing.sima_involved ?? false,
+      // 材质优先跟随 HS 编码库；产地默认 China
+      material: resolved?.material ?? (editing.material?.trim() || null),
+      origin: editing.origin?.trim() || "China",
+      brand: editing.brand?.trim() || null,
+      weight_kg: editing.weight_kg ?? null,
     };
     const { error } = await withRetry<any>(() =>
       editing.id
@@ -2130,6 +2183,41 @@ function MyItemsTab() {
                 }
               />
             </Field>
+            <Field label={tr("材质", "Material")}>
+              <input
+                className={inputCls}
+                placeholder={tr("留空则自动跟随 HS 编码库", "Leave blank to follow the HS library")}
+                value={editing.material ?? ""}
+                onChange={(e) => setEditing({ ...editing, material: e.target.value })}
+              />
+            </Field>
+            <Field label={tr("产地", "Origin")}>
+              <input
+                className={inputCls}
+                value={editing.origin ?? "China"}
+                onChange={(e) => setEditing({ ...editing, origin: e.target.value })}
+              />
+            </Field>
+            <Field label={tr("品牌", "Brand")}>
+              <input
+                className={inputCls}
+                placeholder={tr("无牌请填 NO BRAND", "NO BRAND if unbranded")}
+                value={editing.brand ?? ""}
+                onChange={(e) => setEditing({ ...editing, brand: e.target.value })}
+              />
+            </Field>
+            <Field label={tr("单件重量 (KG)", "Weight (KG)")}>
+              <input
+                type="number"
+                min={0}
+                step="0.001"
+                className={inputCls}
+                value={editing.weight_kg ?? ""}
+                onChange={(e) =>
+                  setEditing({ ...editing, weight_kg: e.target.value === "" ? undefined : Number(e.target.value) })
+                }
+              />
+            </Field>
             <Field label={tr("MFN 税率", "MFN rate")}>
               <input
                 type="number"
@@ -2214,6 +2302,20 @@ function MyItemsTab() {
                     <span>
                       · {tr("申报价值", "Declared")}: CA${Number(it.declared_value_cad).toFixed(2)}
                     </span>
+                    {it.material && (
+                      <span>
+                        · {tr("材质", "Material")}: {it.material}
+                      </span>
+                    )}
+                    <span>
+                      · {tr("产地", "Origin")}: {it.origin ?? "China"}
+                    </span>
+                    {it.brand && (
+                      <span>
+                        · {tr("品牌", "Brand")}: {it.brand}
+                      </span>
+                    )}
+                    {it.weight_kg != null && <span>· {Number(it.weight_kg)}KG</span>}
                     <span>· MFN {(Number(it.mfn_rate) * 100).toFixed(2)}%</span>
                     <span>· GST {(Number(it.gst_rate) * 100).toFixed(2)}%</span>
                     {it.sima_involved && <span className="font-semibold text-warning">· SIMA</span>}
