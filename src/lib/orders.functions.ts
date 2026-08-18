@@ -2276,7 +2276,31 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
 // invoice from the exact same authoritative per-waybill numbers. Idempotent:
 // only unpaid waybills are considered, so a second call for an already-settled
 // batch is a no-op ({ ok:false, reason:'already_paid' }) instead of double-charging.
+// 批次级「末端派送费 / 检查费」（按客户）——展示端由 computeBatchFeeSummary 计入总额，
+// 结算与账单必须使用同一数值，否则客户看到的金额与实际扣款不一致。
+async function batchExtraFeesCad(
+  admin: any,
+  batchId: string,
+  customerCode: string,
+): Promise<{ delivery: number; inspection: number }> {
+  if (!customerCode) return { delivery: 0, inspection: 0 };
+  try {
+    const summary: any = await computeBatchFeeSummary(admin, batchId);
+    let delivery = 0,
+      inspection = 0;
+    for (const p of (summary?.per_customer ?? []) as any[]) {
+      if (p.customer_code !== customerCode) continue;
+      delivery += Number(p.fee_delivery_cad ?? 0);
+      inspection += Number(p.fee_inspection_cad ?? 0);
+    }
+    return { delivery: +delivery.toFixed(2), inspection: +inspection.toFixed(2) };
+  } catch {
+    return { delivery: 0, inspection: 0 };
+  }
+}
+
 async function settleBatchForCustomer(
+
   admin: any,
   params: {
     batchId: string;
@@ -2431,7 +2455,27 @@ async function settleBatchForCustomer(
       });
     }
   }
+  // 批次级派送费 / 检查费（展示端已计入总额，这里必须一并收取）
+  const extras = await batchExtraFeesCad(admin, batchId, customerCode);
+  for (const [label, cad] of [
+    ["末端派送费", extras.delivery],
+    ["检查费", extras.inspection],
+  ] as const) {
+    if (!cad) continue;
+    const cny = +(cad / FX).toFixed(2);
+    other += cny;
+    lineItems.push({
+      description: `${label} · 批次 ${batchNo}`,
+      freight_cny: 0,
+      customs_cny: 0,
+      insurance_cny: 0,
+      other_cny: cny,
+      amount_cny: cny,
+      meta: { fee_type: label, batch_no: batchNo, amount_cad: +cad.toFixed(2) },
+    });
+  }
   const subCny = +(f + cst + ins + other).toFixed(2);
+
   const discountCny = discount > 0 ? +(discount / FX).toFixed(2) : 0;
   const totalCny = +(subCny - discountCny).toFixed(2);
   const subCad = +(subCny * FX).toFixed(2);
@@ -3213,7 +3257,27 @@ async function ensureUnpaidBatchInvoice(
       });
     }
   }
+  // 批次级派送费 / 检查费，与结算口径保持一致
+  const extras = await batchExtraFeesCad(admin, params.batchId, params.customerCode);
+  for (const [label, cad] of [
+    ["末端派送费", extras.delivery],
+    ["检查费", extras.inspection],
+  ] as const) {
+    if (!cad) continue;
+    const cny = +(cad / FX).toFixed(2);
+    other += cny;
+    lineItems.push({
+      description: `${label} · 批次 ${batchNo}`,
+      freight_cny: 0,
+      customs_cny: 0,
+      insurance_cny: 0,
+      other_cny: cny,
+      amount_cny: cny,
+      meta: { fee_type: label, batch_no: batchNo, amount_cad: +cad.toFixed(2) },
+    });
+  }
   const subCny = +(f + cst + ins + other).toFixed(2);
+
   if (subCny <= 0) return { ok: false, reason: "nothing_to_bill" };
 
   const payload = {

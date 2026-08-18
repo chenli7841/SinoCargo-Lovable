@@ -81,8 +81,8 @@ const dict = {
     "shipping.login_hint": "登录后可提交集运单并接收短信通知",
 
     "track.title": "物流追踪",
-    "track.sub": "输入电商订单号 / 集运订单号 / 运单号，查询您包裹的实时状态",
-    "track.placeholder": "订单号 / 集运单号 / 运单号，如 SC2026000123",
+    "track.sub": "输入电商订单号 / 集运订单号 / 运单号 / 国内单号 / 国际单号，查询您包裹的实时状态",
+    "track.placeholder": "订单号 / 运单号 / 国内单号 / 国际单号，如 SC2026000123",
     "track.btn": "查询",
     "track.notfound": "未找到相关记录，请检查订单号/运单号后重试",
     "track.demo_hint": "示例运单号：SC2026000123",
@@ -179,8 +179,8 @@ const dict = {
     "shipping.login_hint": "Sign in to submit a shipment request and get SMS updates",
 
     "track.title": "Track your shipment",
-    "track.sub": "Enter your shop order number, forwarding order number, or waybill number to see real-time status",
-    "track.placeholder": "Order / forwarding / waybill number, e.g. SC2026000123",
+    "track.sub": "Enter your shop order, forwarding order, waybill, domestic or international tracking number to see real-time status",
+    "track.placeholder": "Order / waybill / domestic / intl tracking number, e.g. SC2026000123",
     "track.btn": "Track",
     "track.notfound": "No matching record found. Please check the number and retry.",
     "track.demo_hint": "Demo tracking number: SC2026000123",

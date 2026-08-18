@@ -60,6 +60,7 @@ import { Route as AdminDeliveryQueueIndexRouteImport } from './routes/admin/deli
 import { Route as AdminCartonsIndexRouteImport } from './routes/admin/cartons.index'
 import { Route as AdminBatchesIndexRouteImport } from './routes/admin/batches.index'
 import { Route as AuthenticatedForwardingIndexRouteImport } from './routes/_authenticated/forwarding.index'
+import { Route as ApiPublicAiTrackRouteImport } from './routes/api/public/ai-track'
 import { Route as AdminWaybillsWaybillIdRouteImport } from './routes/admin/waybills.$waybillId'
 import { Route as AdminUsersUserIdRouteImport } from './routes/admin/users.$userId'
 import { Route as AdminShopInventoryRouteImport } from './routes/admin/shop.inventory'
@@ -349,6 +350,11 @@ const AuthenticatedForwardingIndexRoute =
     path: '/forwarding/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const ApiPublicAiTrackRoute = ApiPublicAiTrackRouteImport.update({
+  id: '/api/public/ai-track',
+  path: '/api/public/ai-track',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminWaybillsWaybillIdRoute = AdminWaybillsWaybillIdRouteImport.update({
   id: '/waybills/$waybillId',
   path: '/waybills/$waybillId',
@@ -575,6 +581,7 @@ export interface FileRoutesByFullPath {
   '/admin/shop/inventory': typeof AdminShopInventoryRoute
   '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/admin/waybills/$waybillId': typeof AdminWaybillsWaybillIdRoute
+  '/api/public/ai-track': typeof ApiPublicAiTrackRoute
   '/forwarding/': typeof AuthenticatedForwardingIndexRoute
   '/admin/batches/': typeof AdminBatchesIndexRoute
   '/admin/cartons/': typeof AdminCartonsIndexRoute
@@ -656,6 +663,7 @@ export interface FileRoutesByTo {
   '/admin/shop/inventory': typeof AdminShopInventoryRoute
   '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/admin/waybills/$waybillId': typeof AdminWaybillsWaybillIdRoute
+  '/api/public/ai-track': typeof ApiPublicAiTrackRoute
   '/forwarding': typeof AuthenticatedForwardingIndexRoute
   '/admin/batches': typeof AdminBatchesIndexRoute
   '/admin/cartons': typeof AdminCartonsIndexRoute
@@ -741,6 +749,7 @@ export interface FileRoutesById {
   '/admin/shop/inventory': typeof AdminShopInventoryRoute
   '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/admin/waybills/$waybillId': typeof AdminWaybillsWaybillIdRoute
+  '/api/public/ai-track': typeof ApiPublicAiTrackRoute
   '/_authenticated/forwarding/': typeof AuthenticatedForwardingIndexRoute
   '/admin/batches/': typeof AdminBatchesIndexRoute
   '/admin/cartons/': typeof AdminCartonsIndexRoute
@@ -826,6 +835,7 @@ export interface FileRouteTypes {
     | '/admin/shop/inventory'
     | '/admin/users/$userId'
     | '/admin/waybills/$waybillId'
+    | '/api/public/ai-track'
     | '/forwarding/'
     | '/admin/batches/'
     | '/admin/cartons/'
@@ -907,6 +917,7 @@ export interface FileRouteTypes {
     | '/admin/shop/inventory'
     | '/admin/users/$userId'
     | '/admin/waybills/$waybillId'
+    | '/api/public/ai-track'
     | '/forwarding'
     | '/admin/batches'
     | '/admin/cartons'
@@ -991,6 +1002,7 @@ export interface FileRouteTypes {
     | '/admin/shop/inventory'
     | '/admin/users/$userId'
     | '/admin/waybills/$waybillId'
+    | '/api/public/ai-track'
     | '/_authenticated/forwarding/'
     | '/admin/batches/'
     | '/admin/cartons/'
@@ -1034,6 +1046,7 @@ export interface RootRouteChildren {
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
   Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
+  ApiPublicAiTrackRoute: typeof ApiPublicAiTrackRoute
   ApiPublicHooksMarkOverdueRoute: typeof ApiPublicHooksMarkOverdueRoute
   ApiPublicHooksOttpayRoute: typeof ApiPublicHooksOttpayRoute
   ApiPublicHooksOttpayCardRoute: typeof ApiPublicHooksOttpayCardRoute
@@ -1399,6 +1412,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/forwarding/'
       preLoaderRoute: typeof AuthenticatedForwardingIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/ai-track': {
+      id: '/api/public/ai-track'
+      path: '/api/public/ai-track'
+      fullPath: '/api/public/ai-track'
+      preLoaderRoute: typeof ApiPublicAiTrackRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/waybills/$waybillId': {
       id: '/admin/waybills/$waybillId'
@@ -1788,6 +1808,7 @@ const rootRouteChildren: RootRouteChildren = {
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
   DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
   Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
+  ApiPublicAiTrackRoute: ApiPublicAiTrackRoute,
   ApiPublicHooksMarkOverdueRoute: ApiPublicHooksMarkOverdueRoute,
   ApiPublicHooksOttpayRoute: ApiPublicHooksOttpayRoute,
   ApiPublicHooksOttpayCardRoute: ApiPublicHooksOttpayCardRoute,
