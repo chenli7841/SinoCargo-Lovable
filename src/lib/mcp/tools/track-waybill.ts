@@ -1,13 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
-import { defineTool, type ToolContext } from "@lovable.dev/mcp-js";
+import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
-
-function supabaseForUser(ctx: ToolContext) {
-  return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_PUBLISHABLE_KEY!, {
-    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+import { queryFailedResult, supabaseForUser, unauthenticatedResult } from "../supabase-user";
 
 export default defineTool({
   name: "track_waybill",
@@ -19,14 +12,19 @@ export default defineTool({
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ waybill_no }, ctx) => {
     if (!ctx.isAuthenticated()) {
-      return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+      return unauthenticatedResult();
     }
     const { data, error } = await supabaseForUser(ctx)
       .from("waybills")
-      .select("id, waybill_no, status, tracking_no, created_at, updated_at")
+      .select(
+        "id, waybill_no, status, intl_tracking_no, shipping_method, eta, payment_status, freight_cad, insurance_cad, clearance_cad, duty_cad, surcharge_cad, created_at, updated_at",
+      )
       .eq("waybill_no", waybill_no)
       .maybeSingle();
-    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    if (error) {
+      console.error("MCP track_waybill failed", { code: error.code });
+      return queryFailedResult();
+    }
     if (!data) return { content: [{ type: "text", text: "Waybill not found or not accessible." }], isError: true };
     return {
       content: [{ type: "text", text: JSON.stringify(data, null, 2) }],

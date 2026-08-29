@@ -1,13 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
-import { defineTool, type ToolContext } from "@lovable.dev/mcp-js";
+import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
-
-function supabaseForUser(ctx: ToolContext) {
-  return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_PUBLISHABLE_KEY!, {
-    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+import { queryFailedResult, supabaseForUser, unauthenticatedResult } from "../supabase-user";
 
 export default defineTool({
   name: "list_my_forwardings",
@@ -19,14 +12,19 @@ export default defineTool({
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ limit }, ctx) => {
     if (!ctx.isAuthenticated()) {
-      return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
+      return unauthenticatedResult();
     }
     const { data, error } = await supabaseForUser(ctx)
-      .from("forwardings")
-      .select("id, forwarding_no, status, created_at")
+      .from("forwarding_orders")
+      .select(
+        "id, request_no, domestic_tracking_no, intl_tracking_no, status, payment_status, shipping_method, route_code, fee_cny, created_at",
+      )
       .order("created_at", { ascending: false })
       .limit(limit ?? 20);
-    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    if (error) {
+      console.error("MCP list_my_forwardings failed", { code: error.code });
+      return queryFailedResult();
+    }
     return {
       content: [{ type: "text", text: JSON.stringify(data ?? [], null, 2) }],
       structuredContent: { forwardings: data ?? [] },
