@@ -7,7 +7,10 @@
     "dev": "vite dev",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "preview": "vite preview",
+    "preview": "nitro preview",
+    "mcp:manifest": "lovable-mcp-extract-manifest",
+    "mcp:validate": "node scripts/validate-mcp.mjs && node scripts/validate-chatgpt-migrations.mjs && node scripts/validate-chatgpt-release-config.mjs",
+    "mcp:check": "npm run mcp:manifest && npm run mcp:validate && npm run build",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

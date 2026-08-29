@@ -141,9 +141,13 @@ function OrderDetailPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:py-12">
-      <Link to="/account" className="mb-6 inline-flex items-center gap-2 text-sm text-ink-soft hover:text-foreground">
+      <Link
+        to="/account"
+        search={{ tab: "myOrders" }}
+        className="mb-6 inline-flex items-center gap-2 text-sm text-ink-soft hover:text-foreground"
+      >
         <ArrowLeft className="h-4 w-4" />
-        {tr("返回我的账户", "Back to account")}
+        {tr("返回我的订单", "Back to my orders")}
       </Link>
 
       <div className="mb-6 flex flex-wrap items-center gap-3">

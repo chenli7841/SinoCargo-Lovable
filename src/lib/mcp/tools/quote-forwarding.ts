@@ -1,12 +1,12 @@
 import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
-import { queryFailedResult, supabaseForUser, unauthenticatedResult } from "../supabase-user";
+import { isPermissionError, permissionDeniedResult, queryFailedResult, supabaseForUser, unauthenticatedResult } from "../supabase-user";
 
 export default defineTool({
   name: "quote_forwarding_cad",
   title: "Quote forwarding in CAD",
   description:
-    "Calculate an EPLUS forwarding estimate from the active database pricing rule. Every monetary value returned by this tool is in Canadian dollars (CAD), never CNY/RMB.",
+    "Calculate an EPLUS forwarding estimate from the active database pricing rule after route, weight, required dimensions and declared CAD value are known. Never guess missing measurements. Every monetary value is CAD, never CNY/RMB.",
   inputSchema: {
     route_code: z.string().min(1),
     weight_kg: z.number().nonnegative(),
@@ -27,7 +27,7 @@ export default defineTool({
     });
     if (error) {
       console.error("MCP quote_forwarding_cad failed", { code: error.code });
-      return queryFailedResult();
+      return isPermissionError(error) ? permissionDeniedResult() : queryFailedResult();
     }
     return {
       content: [{ type: "text", text: JSON.stringify(data, null, 2) }],

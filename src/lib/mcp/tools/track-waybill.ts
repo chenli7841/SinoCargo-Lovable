@@ -1,6 +1,6 @@
 import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
-import { queryFailedResult, supabaseForUser, unauthenticatedResult } from "../supabase-user";
+import { isPermissionError, permissionDeniedResult, queryFailedResult, supabaseForUser, unauthenticatedResult } from "../supabase-user";
 
 export default defineTool({
   name: "track_waybill",
@@ -23,7 +23,7 @@ export default defineTool({
       .maybeSingle();
     if (error) {
       console.error("MCP track_waybill failed", { code: error.code });
-      return queryFailedResult();
+      return isPermissionError(error) ? permissionDeniedResult() : queryFailedResult();
     }
     if (!data) return { content: [{ type: "text", text: "Waybill not found or not accessible." }], isError: true };
     return {

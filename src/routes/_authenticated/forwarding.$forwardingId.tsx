@@ -1,5 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useApp } from "@/lib/i18n";
 import { OrderAttachments } from "@/components/order-attachments";
@@ -20,6 +21,7 @@ import {
   Boxes,
   Weight,
   Ruler,
+  Trash2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/forwarding/$forwardingId")({
@@ -46,6 +48,8 @@ function ForwardingDetailPage() {
   const [shipAddr, setShipAddr] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [routeInfo, setRouteInfo] = useState<any | null>(null);
+  const [busyDel, setBusyDel] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     (async () => {
@@ -131,6 +135,39 @@ function ForwardingDetailPage() {
       }) as Record<string, string>
     )[s] ?? s;
 
+  // Only a still-"未入库" request may be removed by the customer; the DB policy
+  // fo_delete_own enforces the same status === "pending" rule server-side.
+  const onDelete = async () => {
+    if (
+      !window.confirm(
+        tr(`确定删除集运订单 ${fo.request_no}？删除后无法恢复。`, `Delete forwarding request ${fo.request_no}? This cannot be undone.`),
+      )
+    )
+      return;
+    setBusyDel(true);
+    try {
+      const { data, error } = await sb
+        .from("forwarding_orders")
+        .delete()
+        .eq("id", forwardingId)
+        .eq("status", "pending")
+        .select("id");
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        toast.error(
+          tr("无法删除：该集运订单已入库或状态已变更", "Cannot delete: this request is already in the warehouse"),
+        );
+        return;
+      }
+      toast.success(tr("集运订单已删除", "Forwarding request deleted"));
+      navigate({ to: "/account", search: { tab: "myOrders" } });
+    } catch (e: any) {
+      toast.error(e?.message ?? tr("删除失败", "Delete failed"));
+    } finally {
+      setBusyDel(false);
+    }
+  };
+
   const waybillNos = waybills.map((w) => w.waybill_no).filter(Boolean);
   const totalWeight = waybills.reduce((a, w) => a + Number(w.weight_kg ?? 0), 0);
   const totalVolume = waybills.reduce((a, w) => {
@@ -151,9 +188,13 @@ function ForwardingDetailPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:py-12">
-      <Link to="/account" className="mb-6 inline-flex items-center gap-2 text-sm text-ink-soft hover:text-foreground">
+      <Link
+        to="/account"
+        search={{ tab: "myOrders" }}
+        className="mb-6 inline-flex items-center gap-2 text-sm text-ink-soft hover:text-foreground"
+      >
         <ArrowLeft className="h-4 w-4" />
-        {tr("返回我的账户", "Back to account")}
+        {tr("返回我的订单", "Back to my orders")}
       </Link>
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -166,6 +207,16 @@ function ForwardingDetailPage() {
         <span className="rounded-full bg-brand/10 px-2.5 py-0.5 text-xs font-semibold text-brand">
           {statusLabel(fo.status)}
         </span>
+        {fo.status === "pending" && (
+          <button
+            onClick={onDelete}
+            disabled={busyDel}
+            className="ml-auto inline-flex items-center gap-1 rounded-full border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
+          >
+            {busyDel ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            {tr("删除集运订单", "Delete request")}
+          </button>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">

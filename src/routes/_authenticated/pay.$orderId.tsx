@@ -79,9 +79,13 @@ function PayPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:py-14">
-      <Link to="/account" className="mb-4 inline-flex items-center gap-1 text-sm text-ink-soft hover:text-foreground">
+      <Link
+        to="/account"
+        search={{ tab: "myOrders" }}
+        className="mb-4 inline-flex items-center gap-1 text-sm text-ink-soft hover:text-foreground"
+      >
         <ArrowLeft className="h-4 w-4" />
-        {tr("我的账户", "My account")}
+        {tr("我的订单", "My orders")}
       </Link>
       <h1 className="mb-2 font-display text-3xl font-bold">{tr("订单付款", "Pay order")}</h1>
       <div className="mb-8 text-sm text-ink-soft">#{order.order_no}</div>
@@ -137,7 +141,7 @@ function PayPage() {
             <div className="text-right">
               <div className="text-2xl font-bold">CA${bal.toFixed(2)}</div>
               {!enough && (
-                <Link to="/account" className="text-xs text-brand hover:underline">
+                <Link to="/account" search={{ tab: "wallet" }} className="text-xs text-brand hover:underline">
                   {tr("去充值", "Top up")}
                 </Link>
               )}

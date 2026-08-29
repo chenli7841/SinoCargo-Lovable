@@ -35,3 +35,15 @@ export function queryFailedResult(requestId?: string) {
     isError: true,
   };
 }
+
+export function permissionDeniedResult() {
+  return {
+    content: [{ type: "text" as const, text: "没有权限" }],
+    isError: true,
+  };
+}
+
+export function isPermissionError(error: { message?: string; code?: string } | null | undefined) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return error?.code === "42501" || message.includes("access required") || message.includes("forbidden") || message.includes("permission");
+}

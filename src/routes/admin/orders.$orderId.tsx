@@ -10,6 +10,7 @@ import {
 } from "@/lib/admin-shared";
 import { Loader2, XCircle, Printer, Truck } from "lucide-react";
 import { renderLabel } from "@/lib/label-render";
+import { LabelSizeToggle } from "@/components/admin/LabelSizeToggle";
 import { WorkflowStepper, SHOP_FLOW, WAYBILL_FLOW } from "@/components/admin/WorkflowStepper";
 import { OrderAttachments } from "@/components/order-attachments";
 
@@ -77,7 +78,8 @@ function OrderDetail() {
             <span>· 创建于 {fmtDate(order.created_at)}</span>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <LabelSizeToggle />
           <button onClick={onPrint}
             className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/10">
             <Printer className="h-3.5 w-3.5"/>生成面单

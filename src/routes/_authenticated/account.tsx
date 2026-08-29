@@ -2413,6 +2413,10 @@ interface MyWaybill {
   waybill_no: string;
   status: string;
 }
+interface MyLineItem {
+  name: string;
+  qty: number;
+}
 interface MyOrderItem {
   kind: "order" | "forwarding";
   id: string;
@@ -2428,6 +2432,7 @@ interface MyOrderItem {
   domestic_tracking_no?: string | null;
   note?: string | null;
   waybills?: MyWaybill[];
+  lineItems?: MyLineItem[];
   total_weight_kg?: number;
   total_volume_m3?: number;
   total_cad?: number | null;
@@ -2443,6 +2448,7 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
   const [openId, setOpenId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [busyDel, setBusyDel] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -2462,9 +2468,24 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
         .from("waybills")
         .select("order_id,forwarding_id,waybill_no,status,weight_kg,length_cm,width_cm,height_cm,created_at")
         .order("created_at"),
-    ]).then(([o, f, w]: any) => {
+      sb.from("order_items").select("order_id,name_zh,name_en,quantity").order("created_at"),
+      sb.from("forwarding_items").select("forwarding_id,name,quantity").order("created_at"),
+    ]).then(([o, f, w, oi, fi]: any) => {
       const byOrder = new Map<string, MyWaybill[]>();
       const byFwd = new Map<string, MyWaybill[]>();
+      // 内件明细（品名 / 数量）
+      const itemsByOrder = new Map<string, MyLineItem[]>();
+      const itemsByFwd = new Map<string, MyLineItem[]>();
+      (oi.data ?? []).forEach((r: any) => {
+        if (!r.order_id) return;
+        if (!itemsByOrder.has(r.order_id)) itemsByOrder.set(r.order_id, []);
+        itemsByOrder.get(r.order_id)!.push({ name: r.name_zh || r.name_en || "—", qty: Number(r.quantity ?? 0) });
+      });
+      (fi.data ?? []).forEach((r: any) => {
+        if (!r.forwarding_id) return;
+        if (!itemsByFwd.has(r.forwarding_id)) itemsByFwd.set(r.forwarding_id, []);
+        itemsByFwd.get(r.forwarding_id)!.push({ name: r.name || "—", qty: Number(r.quantity ?? 0) });
+      });
       const sumOrder = new Map<string, { w: number; v: number }>();
       const sumFwd = new Map<string, { w: number; v: number }>();
       (w.data ?? []).forEach((wb: any) => {
@@ -2495,6 +2516,7 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
           shipping_method: r.shipping_method,
           domestic_tracking_no: r.domestic_tracking_no ?? null,
           waybills: byOrder.get(r.id) ?? [],
+          lineItems: itemsByOrder.get(r.id) ?? [],
           total_weight_kg: sumOrder.get(r.id)?.w ?? 0,
           total_volume_m3: sumOrder.get(r.id)?.v ?? 0,
         })),
@@ -2517,6 +2539,7 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
             domestic_tracking_no: r.domestic_tracking_no ?? null,
             note: r.note,
             waybills: byFwd.get(r.id) ?? [],
+            lineItems: itemsByFwd.get(r.id) ?? [],
             total_weight_kg: sumFwd.get(r.id)?.w ?? Number(r.weight_kg ?? 0),
             total_volume_m3: sumFwd.get(r.id)?.v ?? 0,
           };
@@ -2526,6 +2549,40 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
       setItems(combined);
     });
   }, []);
+
+  // A forwarding request can be deleted by the customer only while it is still
+  // "未入库" (status === "pending"); the DB policy fo_delete_own enforces the
+  // same rule, so this is just the matching UI affordance.
+  const onDeleteForwarding = async (id: string, no: string) => {
+    if (
+      !window.confirm(
+        tr(`确定删除集运订单 ${no}？删除后无法恢复。`, `Delete forwarding request ${no}? This cannot be undone.`),
+      )
+    )
+      return;
+    setBusyDel(id);
+    try {
+      const { data, error } = await sb
+        .from("forwarding_orders")
+        .delete()
+        .eq("id", id)
+        .eq("status", "pending")
+        .select("id");
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        toast.error(
+          tr("无法删除：该集运订单已入库或状态已变更", "Cannot delete: this request is already in the warehouse"),
+        );
+        return;
+      }
+      setItems((prev) => (prev ?? []).filter((it) => !(it.kind === "forwarding" && it.id === id)));
+      toast.success(tr("集运订单已删除", "Forwarding request deleted"));
+    } catch (e: any) {
+      toast.error(e?.message ?? tr("删除失败", "Delete failed"));
+    } finally {
+      setBusyDel(null);
+    }
+  };
 
   if (items === null) return <Spinner />;
 
@@ -2727,6 +2784,18 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
                 {tr("国内单号", "Domestic")}: <span className="font-mono">{o.domestic_tracking_no}</span>
               </div>
             )}
+            {(o.lineItems?.length ?? 0) > 0 && (
+              <div className="mt-1 text-xs text-ink-soft">
+                {tr("内件", "Contents")}:{" "}
+                {o.lineItems!.map((it, i) => (
+                  <span key={it.name + i}>
+                    {i > 0 && "、"}
+                    <span className="text-foreground">{it.name}</span>
+                    <span>×{it.qty}</span>
+                  </span>
+                ))}
+              </div>
+            )}
             {o.kind === "forwarding" && o.note && (
               <div className="mt-1 text-xs text-ink-soft">
                 {tr("备注", "Note")}: {o.note}
@@ -2755,13 +2824,29 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
                   {tr("查看详情", "View detail")} <ArrowRight className="h-3 w-3" />
                 </Link>
               ) : (
-                <Link
-                  to="/forwarding/$forwardingId"
-                  params={{ forwardingId: o.id }}
-                  className="ml-auto inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-medium hover:border-brand hover:text-brand"
-                >
-                  {tr("查看详情", "View detail")} <ArrowRight className="h-3 w-3" />
-                </Link>
+                <>
+                  {o.status === "pending" && (
+                    <button
+                      onClick={() => onDeleteForwarding(o.id, o.no)}
+                      disabled={busyDel === o.id}
+                      className="ml-auto inline-flex items-center gap-1 rounded-full border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                    >
+                      {busyDel === o.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3 w-3" />
+                      )}
+                      {tr("删除", "Delete")}
+                    </button>
+                  )}
+                  <Link
+                    to="/forwarding/$forwardingId"
+                    params={{ forwardingId: o.id }}
+                    className={`${o.status === "pending" ? "" : "ml-auto"} inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-medium hover:border-brand hover:text-brand`}
+                  >
+                    {tr("查看详情", "View detail")} <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </>
               )}
             </div>
             {openId === `${o.kind}-${o.id}` && o.tracking_no && <InlineTrack trackingNo={o.tracking_no} />}

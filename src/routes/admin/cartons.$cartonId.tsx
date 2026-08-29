@@ -11,6 +11,7 @@ import { SurchargePanel } from "@/components/admin/SurchargePanel";
 import { ScanAddDialog } from "@/components/admin/ScanAddDialog";
 import { WaybillCompactList } from "@/components/admin/ContainerChildList";
 import { renderLabel } from "@/lib/label-render";
+import { LabelSizeToggle } from "@/components/admin/LabelSizeToggle";
 import { Loader2, Trash2, Printer, ScanLine, History, Lock, Unlock } from "lucide-react";
 import { useEffect } from "react";
 import { Save } from "lucide-react";
@@ -54,7 +55,8 @@ function CartonDetail() {
           <h1 className="font-display text-2xl font-bold font-mono">{carton.carton_no}</h1>
           <div className="mt-1 text-xs text-slate-400">状态：{carton.status} · 付款 {carton.payment_status} · 创建 {fmtDate(carton.created_at)} · 计费重 <span className="font-mono text-amber-300">{chargeableW ?? 0} kg</span>（{carton.customer_code ? "自身" : "下属之和"}）{carton.batch_status ? ` · 批次状态 ${carton.batch_status}` : ""}</div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <LabelSizeToggle />
           <button onClick={() => setShowScan(true)} className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand/90"><ScanLine className="inline h-3 w-3 mr-1"/>扫码加入</button>
           {carton.batch_status && carton.batch_status !== "draft" && (
             <button onClick={async () => { await setUnlock({ data: { kind: "carton", id: cartonId, unlocked: !carton.unlocked } }); invalidate(); }}

@@ -539,6 +539,7 @@ function ForwardingPage() {
           </button>
           <Link
             to="/account"
+            search={{ tab: "myOrders" }}
             className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-6 py-3 text-sm font-medium"
           >
             {tr("查看我的订单", "View my orders")}

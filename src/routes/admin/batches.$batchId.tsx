@@ -39,6 +39,7 @@ import { SurchargePanel } from "@/components/admin/SurchargePanel";
 import { CustomerDrawer } from "@/components/admin/CustomerDrawer";
 import { WaybillCompactList, CartonCompactList, PalletCompactList } from "@/components/admin/ContainerChildList";
 import { renderLabel } from "@/lib/label-render";
+import { LabelSizeToggle } from "@/components/admin/LabelSizeToggle";
 import { Loader2, X, Wand2, Printer, ScanLine, ChevronRight, AlertCircle, Wallet } from "lucide-react";
 import { ScanAddDialog } from "@/components/admin/ScanAddDialog";
 import { DateInput } from "@/components/admin/DateInput";
@@ -222,7 +223,8 @@ function BatchDetail() {
             <span>· 计划发货 {batch.planned_ship_date}</span>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <LabelSizeToggle />
           <button
             onClick={onPrintLabel}
             className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/10"

@@ -90,8 +90,21 @@ function Consent() {
           将 <span className="text-brand-gradient">{clientName}</span> 连接到您的 SinoCargo 账号
         </h1>
         <p className="mt-2 text-sm text-ink-soft">
-          {clientName} 将可以作为您本人调用本应用启用的工具（例如查询您的订单和集运单）。此授权不会绕过 SinoCargo 的权限和后端策略。
+          {clientName} 将可以作为您本人调用 EPLUS 启用的工具。此授权不会绕过您的账号权限或 EPLUS 后端安全策略。
         </p>
+
+        <div className="mt-4 rounded-xl border border-border bg-background p-4 text-xs text-ink-soft">
+          <div className="font-semibold text-foreground">授权后可以做什么</div>
+          <ul className="mt-2 list-disc space-y-1.5 pl-4">
+            <li>查询您自己的订单、集运、物流、库存、账单和加币金额。</li>
+            <li>按您的指示维护地址和“我的物品”，以及保存集运草稿。</li>
+            <li>创建集运单、删除资料或执行高影响修改前，必须再次得到您的明确确认。</li>
+            <li>员工和管理员只能执行其 EPLUS 后台账号原本有权执行的操作。</li>
+          </ul>
+          <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 font-medium text-amber-700 dark:text-amber-300">
+            ChatGPT App 不能支付、充值、扣除钱包余额、退款或修改付款状态；付款请在 EPLUS 网页完成。
+          </div>
+        </div>
 
         {scopes.length > 0 && (
           <div className="mt-4 rounded-xl border border-border bg-background p-3 text-xs text-ink-soft">

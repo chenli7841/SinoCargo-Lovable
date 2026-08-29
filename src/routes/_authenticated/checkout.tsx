@@ -284,6 +284,7 @@ function CheckoutPage() {
             {addresses.length === 0 ? (
               <Link
                 to="/account"
+                search={{ tab: "addresses" }}
                 className="inline-flex items-center gap-2 rounded-full border border-dashed border-border px-4 py-3 text-sm text-ink-soft hover:border-brand"
               >
                 {tr("还没有地址，先去添加 →", "No address yet — add one →")}

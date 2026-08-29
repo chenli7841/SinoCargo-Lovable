@@ -1,5 +1,5 @@
 import { defineTool } from "@lovable.dev/mcp-js";
-import { queryFailedResult, supabaseForUser, unauthenticatedResult } from "../supabase-user";
+import { isPermissionError, permissionDeniedResult, queryFailedResult, supabaseForUser, unauthenticatedResult } from "../supabase-user";
 
 export default defineTool({
   name: "get_current_customer",
@@ -18,7 +18,7 @@ export default defineTool({
 
     if (error) {
       console.error("MCP get_current_customer failed", { code: error.code });
-      return queryFailedResult();
+      return isPermissionError(error) ? permissionDeniedResult() : queryFailedResult();
     }
     if (!data) {
       return { content: [{ type: "text", text: "No EPLUS customer profile is connected." }], isError: true };

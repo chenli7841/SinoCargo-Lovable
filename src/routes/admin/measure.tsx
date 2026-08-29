@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useRef, useState, useEffect } from "react";
 import { measureLookup, measureSaveDims, measureCreatePalletsBatch, getWaybillsLabelData } from "@/lib/scan.functions";
 import { renderLabel } from "@/lib/label-render";
+import { LabelSizeToggle } from "@/components/admin/LabelSizeToggle";
 import { Page } from "@/lib/admin-shared";
 import { Ruler, Search, Loader2, Copy, Save, Layers, X, CheckSquare, Square, Plus, Trash2, StickyNote } from "lucide-react";
 
@@ -237,7 +238,8 @@ function MeasurePage() {
                 <span className="ml-3 text-slate-400">线路: </span>
                 <span className="text-slate-200">{parent.route_code ?? "—"} / {parent.destination_code ?? "—"}</span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <LabelSizeToggle className="mr-1" />
                 <button onClick={() => { setPalletForms([emptyPallet()]); setShowPallet(true); }} className="inline-flex items-center gap-1.5 rounded-md border border-brand/40 bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand hover:bg-brand/20">
                   <Layers className="h-3.5 w-3.5"/>新建托盘 / 入托 (支持多个)
                 </button>

@@ -10,6 +10,7 @@ import { getMyRoles } from "@/lib/admin.functions";
 import { METHOD_LABEL, WAYBILL_STATUS_LABEL, WAYBILL_STATUS_COLOR, StatusBadge, Card, fmtDate, fmtCAD, BackLink } from "@/lib/admin-shared";
 import { Loader2, PackageCheck, Plus, Copy, Printer, X, Calculator, Repeat, Pencil, MapPin, ShieldCheck, ShieldOff, Package } from "lucide-react";
 import { renderLabel } from "@/lib/label-render";
+import { LabelSizeToggle } from "@/components/admin/LabelSizeToggle";
 import { WorkflowStepper, WAYBILL_FLOW } from "@/components/admin/WorkflowStepper";
 import { TrackingTimeline } from "@/components/tracking-timeline";
 import { OrderAttachments } from "@/components/order-attachments";
@@ -129,10 +130,13 @@ function FwDetail() {
             {fo.intake_at ? <span className="text-emerald-300">已入库 · {fmtDate(fo.intake_at)}</span> : <span className="text-amber-300">待入库</span>}
           </div>
         </div>
-        <button onClick={onPrintLabel}
-          className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/10">
-          <Printer className="h-3.5 w-3.5"/>生成面单
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <LabelSizeToggle />
+          <button onClick={onPrintLabel}
+            className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/10">
+            <Printer className="h-3.5 w-3.5"/>生成面单
+          </button>
+        </div>
       </div>
 
       <WorkflowStepper

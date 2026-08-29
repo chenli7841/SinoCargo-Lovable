@@ -21,19 +21,24 @@ CREATE INDEX IF NOT EXISTS ai_forwarding_drafts_active
   ON public.ai_forwarding_drafts(user_id) WHERE status = 'active';
 
 ALTER TABLE public.ai_forwarding_drafts ENABLE ROW LEVEL SECURITY;
-GRANT SELECT, INSERT, UPDATE ON public.ai_forwarding_drafts TO authenticated;
+GRANT SELECT, INSERT ON public.ai_forwarding_drafts TO authenticated;
+GRANT UPDATE (draft_data) ON public.ai_forwarding_drafts TO authenticated;
 
 DROP POLICY IF EXISTS "customers read own ai drafts" ON public.ai_forwarding_drafts;
 CREATE POLICY "customers read own ai drafts" ON public.ai_forwarding_drafts
   FOR SELECT TO authenticated USING (user_id = auth.uid());
 DROP POLICY IF EXISTS "customers create own ai drafts" ON public.ai_forwarding_drafts;
 CREATE POLICY "customers create own ai drafts" ON public.ai_forwarding_drafts
-  FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid());
+  FOR INSERT TO authenticated WITH CHECK (
+    user_id = auth.uid() AND status = 'active' AND version = 1
+    AND forwarding_id IS NULL AND request_no IS NULL AND confirmed_at IS NULL
+    AND draft_data->>'currency' = 'CAD'
+  );
 DROP POLICY IF EXISTS "customers update own active ai drafts" ON public.ai_forwarding_drafts;
 CREATE POLICY "customers update own active ai drafts" ON public.ai_forwarding_drafts
   FOR UPDATE TO authenticated
   USING (user_id = auth.uid() AND status = 'active')
-  WITH CHECK (user_id = auth.uid());
+  WITH CHECK (user_id = auth.uid() AND status = 'active');
 
 CREATE OR REPLACE FUNCTION public.bump_ai_forwarding_draft_version()
 RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
@@ -48,6 +53,91 @@ DROP TRIGGER IF EXISTS trg_ai_forwarding_draft_version ON public.ai_forwarding_d
 CREATE TRIGGER trg_ai_forwarding_draft_version
 BEFORE UPDATE ON public.ai_forwarding_drafts
 FOR EACH ROW EXECUTE FUNCTION public.bump_ai_forwarding_draft_version();
+
+-- Route availability is a server-side authorization rule.  The web UI also
+-- filters these routes, but callers must not be able to bypass that filter by
+-- invoking place_forwarding/quote RPCs directly.
+CREATE OR REPLACE FUNCTION public.is_forwarding_route_visible_to_user(
+  _route_id uuid,
+  _user_id uuid
+) RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_route public.shipping_routes;
+  v_profile public.profiles;
+  v_customer_code text;
+BEGIN
+  IF _route_id IS NULL OR _user_id IS NULL THEN RETURN false; END IF;
+
+  SELECT * INTO v_route
+  FROM public.shipping_routes
+  WHERE id = _route_id
+    AND is_active = true
+    AND usage_scope IN ('forwarding', 'both');
+  IF v_route IS NULL THEN RETURN false; END IF;
+
+  SELECT * INTO v_profile FROM public.profiles WHERE id = _user_id;
+  IF v_profile IS NULL THEN RETURN false; END IF;
+  v_customer_code := upper(trim(COALESCE(v_profile.customer_code, '')));
+
+  IF v_profile.vip_level = ANY(COALESCE(v_route.blacklist_vip_levels, ARRAY[]::public.vip_level[])) THEN
+    RETURN false;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM unnest(COALESCE(v_route.blacklist_customer_codes, ARRAY[]::text[])) AS code
+    WHERE upper(trim(code)) = v_customer_code AND v_customer_code <> ''
+  ) THEN
+    RETURN false;
+  END IF;
+
+  IF cardinality(COALESCE(v_route.visible_vip_levels, ARRAY[]::public.vip_level[])) = 0
+     AND cardinality(COALESCE(v_route.visible_customer_codes, ARRAY[]::text[])) = 0 THEN
+    RETURN true;
+  END IF;
+  IF v_profile.vip_level = ANY(COALESCE(v_route.visible_vip_levels, ARRAY[]::public.vip_level[])) THEN
+    RETURN true;
+  END IF;
+  RETURN EXISTS (
+    SELECT 1 FROM unnest(COALESCE(v_route.visible_customer_codes, ARRAY[]::text[])) AS code
+    WHERE upper(trim(code)) = v_customer_code AND v_customer_code <> ''
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.is_forwarding_route_visible_to_user(uuid, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.is_forwarding_route_visible_to_user(uuid, uuid) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.enforce_forwarding_route_visibility()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE v_route_id uuid;
+BEGIN
+  v_route_id := NEW.route_id;
+  IF v_route_id IS NULL AND NULLIF(NEW.route_code, '') IS NOT NULL THEN
+    SELECT id INTO v_route_id FROM public.shipping_routes WHERE code = NEW.route_code;
+  END IF;
+  IF v_route_id IS NOT NULL
+     AND NOT public.is_forwarding_route_visible_to_user(v_route_id, NEW.user_id) THEN
+    RAISE EXCEPTION 'route unavailable for customer';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.enforce_forwarding_route_visibility() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.enforce_forwarding_route_visibility() TO authenticated;
+
+DROP TRIGGER IF EXISTS trg_enforce_forwarding_route_visibility ON public.forwarding_orders;
+CREATE TRIGGER trg_enforce_forwarding_route_visibility
+BEFORE INSERT OR UPDATE OF route_id, route_code, user_id ON public.forwarding_orders
+FOR EACH ROW EXECUTE FUNCTION public.enforce_forwarding_route_visibility();
 
 CREATE OR REPLACE FUNCTION public.quote_forwarding_cad(
   _route_code text,
@@ -82,6 +172,9 @@ BEGIN
   SELECT * INTO v_route FROM public.shipping_routes
    WHERE code = _route_code AND is_active = true;
   IF v_route IS NULL THEN RAISE EXCEPTION 'route unavailable'; END IF;
+  IF NOT public.is_forwarding_route_visible_to_user(v_route.id, auth.uid()) THEN
+    RAISE EXCEPTION 'route unavailable for customer';
+  END IF;
 
   SELECT * INTO v_rule FROM public.freight_rules
    WHERE route_id = v_route.id AND is_active = true AND direction = _direction
@@ -125,10 +218,10 @@ $$;
 REVOKE ALL ON FUNCTION public.quote_forwarding_cad(text, numeric, numeric, numeric, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.quote_forwarding_cad(text, numeric, numeric, numeric, text) TO authenticated;
 
-CREATE OR REPLACE FUNCTION public.confirm_ai_forwarding_draft(_draft_id uuid)
+CREATE OR REPLACE FUNCTION public.confirm_ai_forwarding_draft(_draft_id uuid, _expected_version integer)
 RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -144,6 +237,9 @@ BEGIN
       'id', v_draft.forwarding_id, 'request_no', v_draft.request_no, 'currency', 'CAD');
   END IF;
   IF v_draft.status <> 'active' OR v_draft.expires_at < now() THEN RAISE EXCEPTION 'draft is not active'; END IF;
+  IF _expected_version IS NULL OR v_draft.version <> _expected_version THEN
+    RAISE EXCEPTION 'draft changed; review again';
+  END IF;
   IF COALESCE(v_draft.draft_data->>'currency', '') <> 'CAD' THEN RAISE EXCEPTION 'draft currency must be CAD'; END IF;
 
   v_result := public.place_forwarding(v_draft.draft_data, NULL);
@@ -155,5 +251,20 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.confirm_ai_forwarding_draft(uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.confirm_ai_forwarding_draft(uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.confirm_ai_forwarding_draft(uuid, integer) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.confirm_ai_forwarding_draft(uuid, integer) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.cancel_ai_forwarding_draft(_draft_id uuid)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_updated uuid;
+BEGIN
+  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'not authenticated'; END IF;
+  UPDATE public.ai_forwarding_drafts SET status = 'cancelled'
+   WHERE id = _draft_id AND user_id = auth.uid() AND status = 'active'
+   RETURNING id INTO v_updated;
+  IF v_updated IS NULL THEN RAISE EXCEPTION 'active draft not found'; END IF;
+  RETURN jsonb_build_object('ok', true, 'draft_id', v_updated, 'status', 'cancelled');
+END;
+$$;
+REVOKE ALL ON FUNCTION public.cancel_ai_forwarding_draft(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.cancel_ai_forwarding_draft(uuid) TO authenticated;
