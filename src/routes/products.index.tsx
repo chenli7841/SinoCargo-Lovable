@@ -103,6 +103,17 @@ function ProductsPage() {
         </div>
       </div>
 
+      <div className="mb-6 rounded-2xl border border-brand/20 bg-brand/5 p-4 sm:p-5">
+        <p className="text-sm font-medium text-foreground">
+          <span className="mr-1 text-brand">💡</span>
+          {lang === "zh" ? "推荐好物奖励：联系客服，推荐好物，客服采纳后得 $5 余额。" : "Recommend good products: contact customer service, and earn $5 credit after adoption."}
+        </p>
+        <p className="mt-2 text-sm font-medium text-foreground">
+          <span className="mr-1 text-brand">🏭</span>
+          {lang === "zh" ? "推荐厂家：经由客户推荐并协助接洽的物品，提成该物品销售额的 1%-5%。" : "Recommend a manufacturer: receive 1%-5% commission on sales for items you refer and help us connect with."}
+        </p>
+      </div>
+
       <div className="mb-8 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
         <button
           onClick={() => setCat("all")}

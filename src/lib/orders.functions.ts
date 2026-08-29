@@ -1059,8 +1059,42 @@ export const getWaybillDetail = createServerFn({ method: "POST" })
       unmatched_names = br.unmatched_names;
     }
 
+    // === 目的地：取收件地址的目的地（非线路目的地） ===
+    let address_destination_code: string | null = null;
+    try {
+      if (wb.order_id) {
+        const { data: o } = await supabaseAdmin
+          .from("orders")
+          .select("user_id, address_snapshot")
+          .eq("id", wb.order_id)
+          .maybeSingle();
+        address_destination_code = (o as any)?.address_snapshot?.destination_code ?? null;
+        if (!address_destination_code && (o as any)?.user_id) {
+          const { data: a } = await supabaseAdmin
+            .from("addresses").select("destination_code")
+            .eq("user_id", (o as any).user_id).eq("is_default", true).maybeSingle();
+          address_destination_code = a?.destination_code ?? null;
+        }
+      } else if (wb.forwarding_id) {
+        const { data: f } = await supabaseAdmin
+          .from("forwarding_orders")
+          .select("user_id, address_id, address:address_id(destination_code)")
+          .eq("id", wb.forwarding_id)
+          .maybeSingle();
+        address_destination_code = (f as any)?.address?.destination_code ?? null;
+        if (!address_destination_code && (f as any)?.user_id) {
+          const { data: a } = await supabaseAdmin
+            .from("addresses").select("destination_code")
+            .eq("user_id", (f as any).user_id).eq("is_default", true).maybeSingle();
+          address_destination_code = a?.destination_code ?? null;
+        }
+      }
+    } catch { /* ignore */ }
+
     return {
       waybill: wb,
+      address_destination_code,
+
       events: (eventsR as any).data ?? [],
       logs: logsR.data ?? [],
       surcharges: (scR as any).data ?? [],
@@ -1337,7 +1371,9 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
     fwdIds.length
       ? admin
           .from("forwarding_orders")
-          .select("id, request_no, customer_code, user_id, route_code, route_id, fee_cny, address_snapshot")
+          .select(
+            "id, request_no, customer_code, user_id, route_code, route_id, fee_cny, address_id, address:address_id(postal_code)",
+          )
           .in("id", fwdIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
@@ -2065,7 +2101,8 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
     const dimsOf = (x: any) => [Number(x?.length_cm ?? 0), Number(x?.width_cm ?? 0), Number(x?.height_cm ?? 0)];
     const postalOf = (w: any): string => {
       const p: any = (w.order_id && oMap.get(w.order_id)) || (w.forwarding_id && fMap.get(w.forwarding_id));
-      const snap: any = p?.address_snapshot ?? null;
+      // orders 有 address_snapshot；forwarding_orders 只有 address_id（内联 addresses）
+      const snap: any = p?.address_snapshot ?? p?.address ?? null;
       return String(snap?.postal_code ?? snap?.postal ?? snap?.zip ?? "")
         .replace(/\s+/g, "")
         .toUpperCase();
@@ -3781,7 +3818,19 @@ export const getLabelData = createServerFn({ method: "POST" })
       if (!o) throw new Error("Order not found");
       parent = o;
       entityNo = o.order_no;
-      address = o.address_snapshot;
+      address = (o as any).address_snapshot;
+      // Label destination must come from the recipient address; if the snapshot
+      // predates the destination_code field, fall back to the user's default address.
+      if (address && !(address as any).destination_code && (o as any).user_id) {
+        const { data: a } = await supabaseAdmin
+          .from("addresses")
+          .select("destination_code")
+          .eq("user_id", (o as any).user_id)
+          .eq("is_default", true)
+          .maybeSingle();
+        if (a?.destination_code) address = { ...(address as any), destination_code: a.destination_code };
+      }
+
       const { data: w } = await supabaseAdmin
         .from("waybills")
         .select("*")

@@ -51,7 +51,7 @@ export function encryptHosted(data: Record<string, string>): { data: string; md5
 export function decryptHosted(payload: { data: string; md5: string }): Record<string, any> {
   const cfg = hostedConfig();
   const key = aesKeyFrom(String(payload.md5), cfg.signKey);
-  const decipher = crypto.createDecipheriv("aes-128-ecb", Buffer.from(key, "utf8"), null);
+  const decipher = crypto.createDecipheriv("aes-128-ecb", Buffer.from(key, "utf8"), Buffer.alloc(0));
   decipher.setAutoPadding(true);
   const out = Buffer.concat([
     decipher.update(Buffer.from(payload.data, "base64")),

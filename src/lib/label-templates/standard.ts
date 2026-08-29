@@ -26,11 +26,11 @@ export function standardTemplate(d: LabelData): string {
   <div class="mark">唛头号 · ${markText}</div>
   <div class="std-bc">
     <div class="muted">国内运单号</div>
-    <div class="bc-full">${barcodeSVG(domesticNo || "—", 2.2, 52)}</div>
+    <div class="bc-full">${barcodeSVG(domesticNo || "—", 52)}</div>
   </div>
   <div class="std-bc">
     <div class="muted">运单号 · 箱号 ${aa}/${xx}</div>
-    <div class="bc-full">${barcodeSVG(w.waybill_no || "—", 2.2, 52)}</div>
+    <div class="bc-full">${barcodeSVG(w.waybill_no || "—", 52)}</div>
   </div>
   <div class="std-info">
     <div class="std-col">

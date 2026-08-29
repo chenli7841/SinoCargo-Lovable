@@ -140,6 +140,53 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_forwarding_requests: {
+        Row: {
+          created_at: string
+          domestic_tracking_no: string | null
+          forwarding_id: string | null
+          id: string
+          idempotency_key: string
+          payload: Json | null
+          request_no: string | null
+          source: string
+          user_id: string
+          visitor_biz_id: string
+        }
+        Insert: {
+          created_at?: string
+          domestic_tracking_no?: string | null
+          forwarding_id?: string | null
+          id?: string
+          idempotency_key: string
+          payload?: Json | null
+          request_no?: string | null
+          source?: string
+          user_id: string
+          visitor_biz_id: string
+        }
+        Update: {
+          created_at?: string
+          domestic_tracking_no?: string | null
+          forwarding_id?: string | null
+          id?: string
+          idempotency_key?: string
+          payload?: Json | null
+          request_no?: string | null
+          source?: string
+          user_id?: string
+          visitor_biz_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_forwarding_requests_forwarding_id_fkey"
+            columns: ["forwarding_id"]
+            isOneToOne: false
+            referencedRelation: "forwarding_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_settings: {
         Row: {
           key: string
@@ -2692,6 +2739,8 @@ export type Database = {
           usage_scope: string
           visible_customer_codes: string[]
           visible_vip_levels: Database["public"]["Enums"]["vip_level"][]
+          wechat_ai_enabled: boolean
+          wechat_ai_price_text: string | null
         }
         Insert: {
           blacklist_customer_codes?: string[]
@@ -2725,6 +2774,8 @@ export type Database = {
           usage_scope?: string
           visible_customer_codes?: string[]
           visible_vip_levels?: Database["public"]["Enums"]["vip_level"][]
+          wechat_ai_enabled?: boolean
+          wechat_ai_price_text?: string | null
         }
         Update: {
           blacklist_customer_codes?: string[]
@@ -2758,6 +2809,8 @@ export type Database = {
           usage_scope?: string
           visible_customer_codes?: string[]
           visible_vip_levels?: Database["public"]["Enums"]["vip_level"][]
+          wechat_ai_enabled?: boolean
+          wechat_ai_price_text?: string | null
         }
         Relationships: [
           {
@@ -3329,6 +3382,318 @@ export type Database = {
           },
         ]
       }
+      wechat_ai_admin_audit: {
+        Row: {
+          action: string
+          admin_user_id: string | null
+          after_data: Json
+          before_data: Json
+          created_at: string
+          id: string
+          reason: string | null
+          target_id: string | null
+          target_type: string
+        }
+        Insert: {
+          action: string
+          admin_user_id?: string | null
+          after_data?: Json
+          before_data?: Json
+          created_at?: string
+          id?: string
+          reason?: string | null
+          target_id?: string | null
+          target_type: string
+        }
+        Update: {
+          action?: string
+          admin_user_id?: string | null
+          after_data?: Json
+          before_data?: Json
+          created_at?: string
+          id?: string
+          reason?: string | null
+          target_id?: string | null
+          target_type?: string
+        }
+        Relationships: []
+      }
+      wechat_ai_agent_runs: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          error_code: string | null
+          id: string
+          input_context_summary: string | null
+          intent: string | null
+          model: string | null
+          openai_duration_ms: number | null
+          openai_status: number | null
+          result_status: string | null
+          state_after: Json
+          state_before: Json
+          state_patch: Json
+          tool_requested: string | null
+          total_duration_ms: number | null
+          user_message_id: string | null
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          input_context_summary?: string | null
+          intent?: string | null
+          model?: string | null
+          openai_duration_ms?: number | null
+          openai_status?: number | null
+          result_status?: string | null
+          state_after?: Json
+          state_before?: Json
+          state_patch?: Json
+          tool_requested?: string | null
+          total_duration_ms?: number | null
+          user_message_id?: string | null
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          input_context_summary?: string | null
+          intent?: string | null
+          model?: string | null
+          openai_duration_ms?: number | null
+          openai_status?: number | null
+          result_status?: string | null
+          state_after?: Json
+          state_before?: Json
+          state_patch?: Json
+          tool_requested?: string | null
+          total_duration_ms?: number | null
+          user_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wechat_ai_agent_runs_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "wechat_ai_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wechat_ai_agent_runs_user_message_id_fkey"
+            columns: ["user_message_id"]
+            isOneToOne: false
+            referencedRelation: "wechat_ai_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wechat_ai_bind_codes: {
+        Row: {
+          code: string
+          created_at: string
+          expires_at: string
+          used_at: string | null
+          used_by_visitor_biz_id: string | null
+          user_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          expires_at: string
+          used_at?: string | null
+          used_by_visitor_biz_id?: string | null
+          user_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          expires_at?: string
+          used_at?: string | null
+          used_by_visitor_biz_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wechat_ai_conversations: {
+        Row: {
+          awaiting_field: string | null
+          corp_id_hash: string | null
+          created_at: string
+          current_intent: string | null
+          customer_code: string | null
+          external_userid: string
+          id: string
+          last_message_at: string
+          last_tracking_number: string | null
+          open_kfid: string
+          pending_action: string | null
+          started_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          awaiting_field?: string | null
+          corp_id_hash?: string | null
+          created_at?: string
+          current_intent?: string | null
+          customer_code?: string | null
+          external_userid: string
+          id?: string
+          last_message_at?: string
+          last_tracking_number?: string | null
+          open_kfid: string
+          pending_action?: string | null
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          awaiting_field?: string | null
+          corp_id_hash?: string | null
+          created_at?: string
+          current_intent?: string | null
+          customer_code?: string | null
+          external_userid?: string
+          id?: string
+          last_message_at?: string
+          last_tracking_number?: string | null
+          open_kfid?: string
+          pending_action?: string | null
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      wechat_ai_messages: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          direction: string
+          id: string
+          media_id: string | null
+          message_type: string
+          msgid: string | null
+          ocr_confidence: number | null
+          ocr_text: string | null
+          origin: number | null
+          processing_status: string | null
+          received_at: string
+          reply_to_message_id: string | null
+          send_time: string | null
+          text_content: string | null
+          wechat_errcode: number | null
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          direction: string
+          id?: string
+          media_id?: string | null
+          message_type?: string
+          msgid?: string | null
+          ocr_confidence?: number | null
+          ocr_text?: string | null
+          origin?: number | null
+          processing_status?: string | null
+          received_at?: string
+          reply_to_message_id?: string | null
+          send_time?: string | null
+          text_content?: string | null
+          wechat_errcode?: number | null
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          direction?: string
+          id?: string
+          media_id?: string | null
+          message_type?: string
+          msgid?: string | null
+          ocr_confidence?: number | null
+          ocr_text?: string | null
+          origin?: number | null
+          processing_status?: string | null
+          received_at?: string
+          reply_to_message_id?: string | null
+          send_time?: string | null
+          text_content?: string | null
+          wechat_errcode?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wechat_ai_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "wechat_ai_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wechat_ai_messages_reply_to_message_id_fkey"
+            columns: ["reply_to_message_id"]
+            isOneToOne: false
+            referencedRelation: "wechat_ai_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wechat_ai_tool_runs: {
+        Row: {
+          agent_run_id: string | null
+          conversation_id: string | null
+          created_at: string
+          duration_ms: number | null
+          id: string
+          request_summary: Json
+          response_summary: Json
+          result_code: string | null
+          success: boolean
+          tool_name: string
+        }
+        Insert: {
+          agent_run_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          request_summary?: Json
+          response_summary?: Json
+          result_code?: string | null
+          success?: boolean
+          tool_name: string
+        }
+        Update: {
+          agent_run_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          request_summary?: Json
+          response_summary?: Json
+          result_code?: string | null
+          success?: boolean
+          tool_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wechat_ai_tool_runs_agent_run_id_fkey"
+            columns: ["agent_run_id"]
+            isOneToOne: false
+            referencedRelation: "wechat_ai_agent_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wechat_ai_tool_runs_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "wechat_ai_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wechat_bind_states: {
         Row: {
           created_at: string
@@ -3344,6 +3709,353 @@ export type Database = {
           created_at?: string
           state?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      wechat_callback_dedup: {
+        Row: {
+          created_at: string
+          expires_at: string
+          hash: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          hash: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          hash?: string
+        }
+        Relationships: []
+      }
+      wechat_forwarding_draft_events: {
+        Row: {
+          after_data: Json
+          before_data: Json
+          changed_fields: Json
+          created_at: string
+          draft_id: string
+          id: string
+          message_id: string | null
+        }
+        Insert: {
+          after_data?: Json
+          before_data?: Json
+          changed_fields?: Json
+          created_at?: string
+          draft_id: string
+          id?: string
+          message_id?: string | null
+        }
+        Update: {
+          after_data?: Json
+          before_data?: Json
+          changed_fields?: Json
+          created_at?: string
+          draft_id?: string
+          id?: string
+          message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wechat_forwarding_draft_events_draft_id_fkey"
+            columns: ["draft_id"]
+            isOneToOne: false
+            referencedRelation: "wechat_forwarding_drafts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wechat_forwarding_draft_events_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "wechat_ai_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wechat_forwarding_drafts: {
+        Row: {
+          completed_at: string | null
+          conversation_id: string
+          created_at: string
+          created_fw_tracking_no: string | null
+          customer_code: string | null
+          draft_data: Json
+          draft_status: string
+          expires_at: string
+          failure_reason: string | null
+          id: string
+          idempotency_key: string | null
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          conversation_id: string
+          created_at?: string
+          created_fw_tracking_no?: string | null
+          customer_code?: string | null
+          draft_data?: Json
+          draft_status?: string
+          expires_at?: string
+          failure_reason?: string | null
+          id?: string
+          idempotency_key?: string | null
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          conversation_id?: string
+          created_at?: string
+          created_fw_tracking_no?: string | null
+          customer_code?: string | null
+          draft_data?: Json
+          draft_status?: string
+          expires_at?: string
+          failure_reason?: string | null
+          id?: string
+          idempotency_key?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wechat_forwarding_drafts_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "wechat_ai_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wechat_gpt_session: {
+        Row: {
+          create_order_draft: Json
+          created_at: string
+          current_intent: string | null
+          expires_at: string
+          external_userid: string
+          last_seen_at: string
+          last_tracking_number: string | null
+          open_kfid: string
+          pending_action: string | null
+          updated_at: string
+          welcome_sent: boolean
+        }
+        Insert: {
+          create_order_draft?: Json
+          created_at?: string
+          current_intent?: string | null
+          expires_at?: string
+          external_userid: string
+          last_seen_at?: string
+          last_tracking_number?: string | null
+          open_kfid: string
+          pending_action?: string | null
+          updated_at?: string
+          welcome_sent?: boolean
+        }
+        Update: {
+          create_order_draft?: Json
+          created_at?: string
+          current_intent?: string | null
+          expires_at?: string
+          external_userid?: string
+          last_seen_at?: string
+          last_tracking_number?: string | null
+          open_kfid?: string
+          pending_action?: string | null
+          updated_at?: string
+          welcome_sent?: boolean
+        }
+        Relationships: []
+      }
+      wechat_identity_bindings: {
+        Row: {
+          binding_source: string
+          bound_at: string
+          channel_type: string
+          chat_id: string | null
+          corp_id_hash: string | null
+          created_at: string
+          customer_code: string
+          customer_display_name: string | null
+          display_group_name: string | null
+          external_userid: string | null
+          id: string
+          last_used_at: string | null
+          open_kfid: string | null
+          status: string
+          unbound_at: string | null
+          updated_at: string
+          user_id: string
+          verified: boolean
+          visitor_biz_id: string | null
+        }
+        Insert: {
+          binding_source?: string
+          bound_at?: string
+          channel_type: string
+          chat_id?: string | null
+          corp_id_hash?: string | null
+          created_at?: string
+          customer_code: string
+          customer_display_name?: string | null
+          display_group_name?: string | null
+          external_userid?: string | null
+          id?: string
+          last_used_at?: string | null
+          open_kfid?: string | null
+          status?: string
+          unbound_at?: string | null
+          updated_at?: string
+          user_id: string
+          verified?: boolean
+          visitor_biz_id?: string | null
+        }
+        Update: {
+          binding_source?: string
+          bound_at?: string
+          channel_type?: string
+          chat_id?: string | null
+          corp_id_hash?: string | null
+          created_at?: string
+          customer_code?: string
+          customer_display_name?: string | null
+          display_group_name?: string | null
+          external_userid?: string | null
+          id?: string
+          last_used_at?: string | null
+          open_kfid?: string | null
+          status?: string
+          unbound_at?: string | null
+          updated_at?: string
+          user_id?: string
+          verified?: boolean
+          visitor_biz_id?: string | null
+        }
+        Relationships: []
+      }
+      wechat_kf_cursor: {
+        Row: {
+          cursor: string | null
+          open_kfid: string
+          updated_at: string
+        }
+        Insert: {
+          cursor?: string | null
+          open_kfid: string
+          updated_at?: string
+        }
+        Update: {
+          cursor?: string | null
+          open_kfid?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      wechat_kf_image_cache: {
+        Row: {
+          created_at: string
+          expires_at: string
+          result: Json
+          sha256: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          result: Json
+          sha256: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          result?: Json
+          sha256?: string
+        }
+        Relationships: []
+      }
+      wechat_kf_lock: {
+        Row: {
+          locked_until: string
+          open_kfid: string
+          updated_at: string
+        }
+        Insert: {
+          locked_until?: string
+          open_kfid: string
+          updated_at?: string
+        }
+        Update: {
+          locked_until?: string
+          open_kfid?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      wechat_kf_msg_dedup: {
+        Row: {
+          created_at: string
+          msgid: string
+        }
+        Insert: {
+          created_at?: string
+          msgid: string
+        }
+        Update: {
+          created_at?: string
+          msgid?: string
+        }
+        Relationships: []
+      }
+      wechat_kf_state: {
+        Row: {
+          created_at: string
+          draft: Json
+          expires_at: string
+          external_userid: string
+          open_kfid: string | null
+          state: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          draft?: Json
+          expires_at?: string
+          external_userid: string
+          open_kfid?: string | null
+          state?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          draft?: Json
+          expires_at?: string
+          external_userid?: string
+          open_kfid?: string | null
+          state?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      wechat_kf_token: {
+        Row: {
+          access_token: string
+          expires_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          access_token: string
+          expires_at: string
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string
+          expires_at?: string
+          id?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -3431,6 +4143,10 @@ export type Database = {
         Returns: Json
       }
       admin_ship_shop_order: { Args: { _order_id: string }; Returns: Json }
+      ai_proxy_set_secret: {
+        Args: { _key: string; _value: string }
+        Returns: boolean
+      }
       award_points_for_spend: {
         Args: { _amount_cad: number; _user_id: string }
         Returns: number
@@ -3446,9 +4162,18 @@ export type Database = {
       current_fx_cny_to_cad: { Args: never; Returns: number }
       find_by_any_no: { Args: { _input: string }; Returns: Json }
       gen_customer_code: { Args: never; Returns: string }
+      gen_short_no: {
+        Args: {
+          _at: string
+          _customer_code: string
+          _prefix: string
+          _route_code: string
+        }
+        Returns: string
+      }
       gen_waybill_no: {
         Args: {
-          _customer_code: string
+          _customer_code?: string
           _destination_code?: string
           _route_code?: string
           _shipping_method?: string
@@ -3468,6 +4193,10 @@ export type Database = {
       mark_invoices_overdue: { Args: never; Returns: number }
       normalize_no: { Args: { _input: string }; Returns: string }
       normalize_phone: { Args: { p_phone: string }; Returns: string }
+      openai_responses_proxy: {
+        Args: { _payload: Json; _token: string }
+        Returns: Json
+      }
       pallet_payment_status: { Args: { _pallet_id: string }; Returns: string }
       pay_batch: { Args: { _batch_no: string }; Returns: Json }
       pay_invoice: { Args: { _invoice_id: string }; Returns: Json }
@@ -3521,6 +4250,23 @@ export type Database = {
       waybill_status_rank: {
         Args: { _s: Database["public"]["Enums"]["waybill_status"] }
         Returns: number
+      }
+      wechat_callback_claim: { Args: { _hash: string }; Returns: boolean }
+      wechat_expire_stale_drafts: { Args: never; Returns: number }
+      wechat_gpt_claim_welcome: {
+        Args: { _external_userid: string; _open_kfid: string }
+        Returns: boolean
+      }
+      wechat_gpt_cleanup: { Args: never; Returns: undefined }
+      wechat_kf_image_cache_get: { Args: { _sha256: string }; Returns: Json }
+      wechat_kf_msg_claim: { Args: { _msgid: string }; Returns: boolean }
+      wechat_kf_release_lock: {
+        Args: { _open_kfid: string }
+        Returns: undefined
+      }
+      wechat_kf_try_lock: {
+        Args: { _open_kfid: string; _ttl_seconds?: number }
+        Returns: boolean
       }
     }
     Enums: {

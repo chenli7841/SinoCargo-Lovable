@@ -23,7 +23,10 @@ export function detailedTemplate(d: LabelData): string {
   if (p.shipping_method) extraRows.push(["运输方式", p.shipping_method]);
   if (p.payment_status) extraRows.push(["付款", p.payment_status === "paid" ? "已付款" : p.payment_status === "partial" ? "部分付款" : "未付款"]);
   if (p.note) extraRows.push(["备注", p.note]);
-  if (p.created_at) extraRows.push(["创建", new Date(p.created_at).toLocaleString("zh-CN", { hour12: false })]);
+  if (p.created_at) {
+    const fmt = new Date(p.created_at).toLocaleString("zh-CN", { hour12: false });
+    extraRows.push(["创建", fmt]);
+  }
 
   return list.map((w, i) => {
     const aa = String(i + 1).padStart(2, "0");
@@ -35,11 +38,11 @@ export function detailedTemplate(d: LabelData): string {
     <div class="detailed-left">
       <div class="block">
         <div class="muted">${entityLabel}</div>
-        <div class="bc-lg">${barcodeSVG(d.entityNo || "—", 1.7, 40)}</div>
+        <div class="bc-lg">${barcodeSVG(d.entityNo || "—", 40)}</div>
       </div>
       <div class="block">
         <div class="muted">运单号 · ${aa}/${xx}</div>
-        <div class="bc-lg">${barcodeSVG(w.waybill_no || "—", 1.7, 40)}</div>
+        <div class="bc-lg">${barcodeSVG(w.waybill_no || "—", 40)}</div>
       </div>
       <div class="row"><span class="muted">客户号</span><b class="mono">${u.customer_code ?? "—"}</b></div>
       <div class="row"><span class="muted">重量</span><b>${w.weight_kg ?? "—"} kg</b></div>

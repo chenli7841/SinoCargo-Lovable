@@ -264,6 +264,8 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
     visible_customer_codes: (initial.visible_customer_codes ?? []) as string[],
     blacklist_vip_levels: (initial.blacklist_vip_levels ?? []) as VipLevel[],
     blacklist_customer_codes: (initial.blacklist_customer_codes ?? []) as string[],
+    wechat_ai_enabled: !!initial.wechat_ai_enabled,
+    wechat_ai_price_text: initial.wechat_ai_price_text ?? "",
   });
 
   const [freight, setFreight] = useState<FreightRule>({
@@ -413,6 +415,8 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
             blacklist_customer_codes: (route.blacklist_customer_codes ?? [])
               .filter((s) => s && s.trim())
               .map((s) => s.trim()),
+            wechat_ai_enabled: !!route.wechat_ai_enabled,
+            wechat_ai_price_text: (route.wechat_ai_price_text ?? "").trim() || null,
           },
 
           freight,
@@ -589,6 +593,28 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
                     <span>本线路可双向使用（起点 ↔ 终点）</span>
                   </label>
                 </Field>
+                <Field label="微信 AI 客服" full>
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={!!route.wechat_ai_enabled}
+                      onChange={(e) => setRoute({ ...route, wechat_ai_enabled: e.target.checked })}
+                      className="h-4 w-4 accent-brand"
+                    />
+                    <span>允许微信 AI 客服创建运单时选择本线路</span>
+                  </label>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    仅对起点仓为义乌仓 (YW) 且已启用的集运线路生效。
+                  </p>
+                </Field>
+                <Field label="微信 AI 价格说明" full>
+                  <Input
+                    value={route.wechat_ai_price_text ?? ""}
+                    onChange={(v) => setRoute({ ...route, wechat_ai_price_text: v })}
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">可公开给客户的价格说明，留空则不返回。</p>
+                </Field>
+
                 <Field label="消费税">
                   <label className="inline-flex items-center gap-2 text-sm">
                     <input

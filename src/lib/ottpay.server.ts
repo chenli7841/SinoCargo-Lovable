@@ -69,7 +69,7 @@ export function decryptOttCallback(payload: { data: string; md5: string }): Reco
     .digest("hex")
     .toUpperCase();
   const key = full.slice(8, 24); // 16-bit md5 == middle 16 chars of the 32-char digest
-  const decipher = crypto.createDecipheriv("aes-128-ecb", Buffer.from(key, "utf8"), null);
+  const decipher = crypto.createDecipheriv("aes-128-ecb", Buffer.from(key, "utf8"), Buffer.alloc(0));
   decipher.setAutoPadding(true);
   const out = Buffer.concat([decipher.update(Buffer.from(payload.data, "base64")), decipher.final()]).toString("utf8");
   return JSON.parse(out);

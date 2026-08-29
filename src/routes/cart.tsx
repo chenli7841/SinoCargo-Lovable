@@ -30,6 +30,10 @@ interface RouteInfo {
 
 // Empty/undefined availableRouteCodes means the product isn't restricted — any active route works.
 function allowedCodes(i: CartLine, allCodes: string[]): string[] {
+  // Prefer the routes configured for THIS line's purchase mode (personal vs business),
+  // so a personal item never offers business-only routes and vice versa.
+  const modeCodes = i.purchaseType === "business" ? i.businessRouteCodes : i.personalRouteCodes;
+  if (modeCodes && modeCodes.length > 0) return modeCodes;
   return i.availableRouteCodes && i.availableRouteCodes.length > 0 ? i.availableRouteCodes : allCodes;
 }
 

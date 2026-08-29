@@ -20,12 +20,19 @@ export type LabelData = {
   meta?: Record<string, any>;
 };
 
-function barcodeSVG(text: string, width = 1.6, height = 40, displayValue = true) {
+function barcodeSVG(text: string, height = 46, displayValue = true) {
   if (!text) return "";
   try {
     const svgNS = "http://www.w3.org/2000/svg";
     const doc = document.implementation.createDocument(svgNS, "svg", null);
     const svg = doc.documentElement;
+    // 150mm label - 2*5mm padding at 96dpi, leave 10px left/right barcode margin
+    const labelInnerPx = 529;
+    const marginH = 10;
+    const targetContentPx = Math.max(120, labelInnerPx - marginH * 2);
+    const chars = text.length || 1;
+    const modules = chars * 11 + 35; // CODE128 start + checksum + stop
+    const width = Math.max(1.2, Math.min(4.0, targetContentPx / modules));
     JsBarcode(svg as any, text, {
       format: "CODE128",
       width,
@@ -36,6 +43,8 @@ function barcodeSVG(text: string, width = 1.6, height = 40, displayValue = true)
       fontOptions: "bold",
       lineColor: "#000000",
       margin: 0,
+      marginLeft: marginH,
+      marginRight: marginH,
       background: "#ffffff",
     });
     return new XMLSerializer().serializeToString(svg);
@@ -60,9 +69,14 @@ function renderOrderOrForwarding(d: LabelData): string {
     ]
       .filter(Boolean)
       .join(", ") || "—";
+  // Destination on order/forwarding labels comes from the RECIPIENT ADDRESS,
+  // not from the shipping route (the route may be re-mapped later).
+  const destCode =
+    addr.destination_code ?? addr.destination ?? (d.meta as any)?.address_destination_code ?? "—";
   const list = d.waybills?.length ? d.waybills : [{ waybill_no: "—" } as WaybillEntry];
   const xx = String(d.total || list.length).padStart(2, "0");
   const entityLabel = d.entityType === "order" ? "订单" : "集运单";
+
 
   return list
     .map((w, i) => {
@@ -75,11 +89,11 @@ function renderOrderOrForwarding(d: LabelData): string {
     <div class="barcodes">
       <div class="block">
         <div class="muted">${entityLabel}</div>
-        <div class="bc-lg">${barcodeSVG(d.entityNo || "—", 1.8, 46)}</div>
+        <div class="bc-lg">${barcodeSVG(d.entityNo || "—", 46)}</div>
       </div>
       <div class="block">
         <div class="muted">运单号 · 箱号 ${aa}/${xx}</div>
-        <div class="bc-lg">${barcodeSVG(w.waybill_no || "—", 1.8, 46)}</div>
+        <div class="bc-lg">${barcodeSVG(w.waybill_no || "—", 46)}</div>
       </div>
     </div>
     <div class="info">
@@ -89,9 +103,11 @@ function renderOrderOrForwarding(d: LabelData): string {
         <div class="row"><span class="muted">物品</span><b>${w.items_name ?? d.parent?.items_desc ?? "—"}</b></div>
       </div>
       <div class="colR">
+        <div class="row"><span class="muted">目的地</span><b>${destCode}</b></div>
         <div class="row"><span class="muted">收件人</span><b>${recipient}</b></div>
         <div class="row"><span class="muted">电话</span><b>${phone}</b></div>
         <div class="row addr"><span class="muted">地址</span><b class="addr-body">${addressLine}</b></div>
+
       </div>
     </div>
   </div>
@@ -144,7 +160,7 @@ function renderContainer(d: LabelData): string {
       <div class="block">
         <div class="muted">${title}</div>
         <div class="entity">${d.entityNo}</div>
-        <div class="bc-lg">${barcodeSVG(d.entityNo, 1.8, 46)}</div>
+        <div class="bc-lg">${barcodeSVG(d.entityNo, 46)}</div>
       </div>
     </div>
     <div class="info">
@@ -181,7 +197,7 @@ function renderContainer(d: LabelData): string {
       <div class="block">
         <div class="muted">${title}</div>
         <div class="entity">${d.entityNo}</div>
-        <div class="bc-lg">${barcodeSVG(d.entityNo, 1.8, 46)}</div>
+        <div class="bc-lg">${barcodeSVG(d.entityNo, 46)}</div>
       </div>
     </div>
     <div class="info">
@@ -208,7 +224,7 @@ function renderContainer(d: LabelData): string {
         <div class="muted">${title}</div>
         <div class="entity">${d.entityNo}</div>
       </div>
-      <div class="bc-lg">${barcodeSVG(d.entityNo, 1.8, 46)}</div>
+      <div class="bc-lg">${barcodeSVG(d.entityNo, 46)}</div>
     </div>
     <div class="right"></div>
   </div>
@@ -247,7 +263,7 @@ export function renderLabel(d: LabelData | LabelData[]) {
   .entity { font-size: 18px; font-weight: 800; font-family: ui-monospace, Menlo, monospace; letter-spacing: 0.6px; word-break: break-all; line-height: 1.2; }
   .bc { max-width: 100%; overflow: hidden; }
   .bc svg, .bc-lg svg { max-width: 100%; height: auto; display: block; }
-  .bc-lg { display: flex; justify-content: center; margin-top: 0.5mm; }
+  .bc-lg { display: flex; justify-content: center; margin-top: 0.5mm; width: 100%; }
   .row { display: flex; gap: 3mm; font-size: 13.7px; font-weight: 800; padding: 0.5mm 0; border-bottom: 1px dotted #ccc; align-items: baseline; min-width: 0; }
   .row b { flex: 1; font-weight: 900; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .addr { align-items: flex-start; }

@@ -9,138 +9,107 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TrackRouteImport } from './routes/track'
-import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
-import { Route as ShippingRouteImport } from './routes/shipping'
-import { Route as PromoRouteImport } from './routes/promo'
-import { Route as ProductsRouteImport } from './routes/products'
-import { Route as McpRouteImport } from './routes/mcp'
-import { Route as ContactRouteImport } from './routes/contact'
-import { Route as CartRouteImport } from './routes/cart'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AdminLoginRouteImport } from './routes/admin-login'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
-import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as ProductsIndexRouteImport } from './routes/products.index'
-import { Route as AdminIndexRouteImport } from './routes/admin/index'
-import { Route as ProductsSlugRouteImport } from './routes/products.$slug'
-import { Route as AdminWarehousesRouteImport } from './routes/admin/warehouses'
-import { Route as AdminTrackingPresetsRouteImport } from './routes/admin/tracking-presets'
-import { Route as AdminSystemRouteImport } from './routes/admin/system'
-import { Route as AdminRoutesRouteImport } from './routes/admin/routes'
-import { Route as AdminOversizeRulesRouteImport } from './routes/admin/oversize-rules'
-import { Route as AdminNavSettingsRouteImport } from './routes/admin/nav-settings'
-import { Route as AdminMessagesRouteImport } from './routes/admin/messages'
-import { Route as AdminMeasureRouteImport } from './routes/admin/measure'
-import { Route as AdminLogsRouteImport } from './routes/admin/logs'
-import { Route as AdminIntakeScanRouteImport } from './routes/admin/intake-scan'
-import { Route as AdminHsCodesRouteImport } from './routes/admin/hs-codes'
-import { Route as AdminHistoryRouteImport } from './routes/admin/history'
-import { Route as AdminForbiddenRouteImport } from './routes/admin/forbidden'
-import { Route as AdminDetainedRouteImport } from './routes/admin/detained'
-import { Route as AdminDestinationsRouteImport } from './routes/admin/destinations'
-import { Route as AdminCustomerViewRouteImport } from './routes/admin/customer-view'
-import { Route as AdminCargoTypesRouteImport } from './routes/admin/cargo-types'
-import { Route as AuthenticatedInvoicesRouteImport } from './routes/_authenticated/invoices'
-import { Route as AuthenticatedCheckoutRouteImport } from './routes/_authenticated/checkout'
-import { Route as AuthenticatedAccountRouteImport } from './routes/_authenticated/account'
-import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as AdminLoginRouteImport } from './routes/admin-login'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as CartRouteImport } from './routes/cart'
+import { Route as ContactRouteImport } from './routes/contact'
+import { Route as McpRouteImport } from './routes/mcp'
+import { Route as ProductsRouteImport } from './routes/products'
+import { Route as PromoRouteImport } from './routes/promo'
+import { Route as ShippingRouteImport } from './routes/shipping'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as TrackRouteImport } from './routes/track'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
-import { Route as AdminWaybillsIndexRouteImport } from './routes/admin/waybills.index'
-import { Route as AdminUsersIndexRouteImport } from './routes/admin/users.index'
-import { Route as AdminShopIndexRouteImport } from './routes/admin/shop.index'
-import { Route as AdminReceivingsIndexRouteImport } from './routes/admin/receivings.index'
-import { Route as AdminPalletsIndexRouteImport } from './routes/admin/pallets.index'
-import { Route as AdminOrdersIndexRouteImport } from './routes/admin/orders.index'
-import { Route as AdminInvoicesIndexRouteImport } from './routes/admin/invoices.index'
-import { Route as AdminForwardingsIndexRouteImport } from './routes/admin/forwardings.index'
-import { Route as AdminDeliveryQueueIndexRouteImport } from './routes/admin/delivery-queue.index'
-import { Route as AdminCartonsIndexRouteImport } from './routes/admin/cartons.index'
-import { Route as AdminBatchesIndexRouteImport } from './routes/admin/batches.index'
-import { Route as AuthenticatedForwardingIndexRouteImport } from './routes/_authenticated/forwarding.index'
-import { Route as ApiPublicAiTrackRouteImport } from './routes/api/public/ai-track'
-import { Route as AdminWaybillsWaybillIdRouteImport } from './routes/admin/waybills.$waybillId'
-import { Route as AdminUsersUserIdRouteImport } from './routes/admin/users.$userId'
-import { Route as AdminShopInventoryRouteImport } from './routes/admin/shop.inventory'
-import { Route as AdminShopCouponsRouteImport } from './routes/admin/shop.coupons'
-import { Route as AdminShopCategoriesRouteImport } from './routes/admin/shop.categories'
-import { Route as AdminShopBannersRouteImport } from './routes/admin/shop.banners'
-import { Route as AdminShopArticlesRouteImport } from './routes/admin/shop.articles'
-import { Route as AdminReceivingsReceivingIdRouteImport } from './routes/admin/receivings.$receivingId'
-import { Route as AdminPalletsPalletIdRouteImport } from './routes/admin/pallets.$palletId'
-import { Route as AdminOrdersProcurementRouteImport } from './routes/admin/orders.procurement'
-import { Route as AdminOrdersOrderIdRouteImport } from './routes/admin/orders.$orderId'
-import { Route as AdminInvoicesInvoiceIdRouteImport } from './routes/admin/invoices.$invoiceId'
-import { Route as AdminForwardingsForwardingIdRouteImport } from './routes/admin/forwardings.$forwardingId'
-import { Route as AdminDeliveryQueueCustomerKeyRouteImport } from './routes/admin/delivery-queue.$customerKey'
-import { Route as AdminCartonsCartonIdRouteImport } from './routes/admin/cartons.$cartonId'
-import { Route as AdminBatchesBatchIdRouteImport } from './routes/admin/batches.$batchId'
-import { Route as AuthenticatedPayOrderIdRouteImport } from './routes/_authenticated/pay.$orderId'
-import { Route as AuthenticatedOrdersOrderIdRouteImport } from './routes/_authenticated/orders.$orderId'
-import { Route as AuthenticatedForwardingForwardingIdRouteImport } from './routes/_authenticated/forwarding.$forwardingId'
-import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as AuthenticatedAccountRouteImport } from './routes/_authenticated/account'
+import { Route as AuthenticatedCheckoutRouteImport } from './routes/_authenticated/checkout'
+import { Route as AuthenticatedInvoicesRouteImport } from './routes/_authenticated/invoices'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminCargoTypesRouteImport } from './routes/admin/cargo-types'
+import { Route as AdminCustomerViewRouteImport } from './routes/admin/customer-view'
+import { Route as AdminDestinationsRouteImport } from './routes/admin/destinations'
+import { Route as AdminDetainedRouteImport } from './routes/admin/detained'
+import { Route as AdminForbiddenRouteImport } from './routes/admin/forbidden'
+import { Route as AdminHistoryRouteImport } from './routes/admin/history'
+import { Route as AdminHsCodesRouteImport } from './routes/admin/hs-codes'
+import { Route as AdminIntakeScanRouteImport } from './routes/admin/intake-scan'
+import { Route as AdminLogsRouteImport } from './routes/admin/logs'
+import { Route as AdminMeasureRouteImport } from './routes/admin/measure'
+import { Route as AdminMessagesRouteImport } from './routes/admin/messages'
+import { Route as AdminNavSettingsRouteImport } from './routes/admin/nav-settings'
+import { Route as AdminOversizeRulesRouteImport } from './routes/admin/oversize-rules'
+import { Route as AdminRoutesRouteImport } from './routes/admin/routes'
+import { Route as AdminSystemRouteImport } from './routes/admin/system'
+import { Route as AdminTrackingPresetsRouteImport } from './routes/admin/tracking-presets'
+import { Route as AdminWarehousesRouteImport } from './routes/admin/warehouses'
+import { Route as AdminWechatAiRecordsRouteImport } from './routes/admin/wechat-ai-records'
+import { Route as CgiBinSplatRouteImport } from './routes/cgi-bin/$'
+import { Route as ProductsIndexRouteImport } from './routes/products.index'
+import { Route as ProductsSlugRouteImport } from './routes/products.$slug'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
-import { Route as AdminShopProductsIndexRouteImport } from './routes/admin/shop.products.index'
+import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
+import { Route as AuthenticatedForwardingIndexRouteImport } from './routes/_authenticated/forwarding.index'
+import { Route as AuthenticatedForwardingForwardingIdRouteImport } from './routes/_authenticated/forwarding.$forwardingId'
+import { Route as AuthenticatedOrdersOrderIdRouteImport } from './routes/_authenticated/orders.$orderId'
+import { Route as AuthenticatedPayOrderIdRouteImport } from './routes/_authenticated/pay.$orderId'
+import { Route as AdminBatchesIndexRouteImport } from './routes/admin/batches.index'
+import { Route as AdminBatchesBatchIdRouteImport } from './routes/admin/batches.$batchId'
+import { Route as AdminCartonsIndexRouteImport } from './routes/admin/cartons.index'
+import { Route as AdminCartonsCartonIdRouteImport } from './routes/admin/cartons.$cartonId'
+import { Route as AdminDeliveryQueueIndexRouteImport } from './routes/admin/delivery-queue.index'
+import { Route as AdminDeliveryQueueCustomerKeyRouteImport } from './routes/admin/delivery-queue.$customerKey'
+import { Route as AdminForwardingsIndexRouteImport } from './routes/admin/forwardings.index'
+import { Route as AdminForwardingsForwardingIdRouteImport } from './routes/admin/forwardings.$forwardingId'
+import { Route as AdminInvoicesIndexRouteImport } from './routes/admin/invoices.index'
+import { Route as AdminInvoicesInvoiceIdRouteImport } from './routes/admin/invoices.$invoiceId'
+import { Route as AdminOrdersIndexRouteImport } from './routes/admin/orders.index'
+import { Route as AdminOrdersOrderIdRouteImport } from './routes/admin/orders.$orderId'
+import { Route as AdminOrdersProcurementRouteImport } from './routes/admin/orders.procurement'
+import { Route as AdminPalletsIndexRouteImport } from './routes/admin/pallets.index'
+import { Route as AdminPalletsPalletIdRouteImport } from './routes/admin/pallets.$palletId'
+import { Route as AdminReceivingsIndexRouteImport } from './routes/admin/receivings.index'
+import { Route as AdminReceivingsReceivingIdRouteImport } from './routes/admin/receivings.$receivingId'
+import { Route as AdminShopIndexRouteImport } from './routes/admin/shop.index'
+import { Route as AdminShopArticlesRouteImport } from './routes/admin/shop.articles'
+import { Route as AdminShopBannersRouteImport } from './routes/admin/shop.banners'
+import { Route as AdminShopCategoriesRouteImport } from './routes/admin/shop.categories'
+import { Route as AdminShopCouponsRouteImport } from './routes/admin/shop.coupons'
+import { Route as AdminShopInventoryRouteImport } from './routes/admin/shop.inventory'
+import { Route as AdminUsersIndexRouteImport } from './routes/admin/users.index'
+import { Route as AdminUsersUserIdRouteImport } from './routes/admin/users.$userId'
+import { Route as AdminWaybillsIndexRouteImport } from './routes/admin/waybills.index'
+import { Route as AdminWaybillsWaybillIdRouteImport } from './routes/admin/waybills.$waybillId'
+import { Route as ApiPublicAiBindWechatRouteImport } from './routes/api/public/ai-bind-wechat'
+import { Route as ApiPublicAiCreateForwardingOrderRouteImport } from './routes/api/public/ai-create-forwarding-order'
+import { Route as ApiPublicAiForwardingOptionsRouteImport } from './routes/api/public/ai-forwarding-options'
+import { Route as ApiPublicAiOrderBillingRouteImport } from './routes/api/public/ai-order-billing'
+import { Route as ApiPublicAiResolveWechatCustomerRouteImport } from './routes/api/public/ai-resolve-wechat-customer'
+import { Route as ApiPublicAiTrackRouteImport } from './routes/api/public/ai-track'
+import { Route as ApiPublicAiWarehouseScanRouteImport } from './routes/api/public/ai-warehouse-scan'
 import { Route as AdminShopOrdersIndexRouteImport } from './routes/admin/shop.orders.index'
-import { Route as ApiPublicWechatLoginRouteImport } from './routes/api/public/wechat.login'
-import { Route as ApiPublicWechatCallbackRouteImport } from './routes/api/public/wechat.callback'
-import { Route as ApiPublicHooksOttpayCardRouteImport } from './routes/api/public/hooks/ottpay-card'
-import { Route as ApiPublicHooksOttpayRouteImport } from './routes/api/public/hooks/ottpay'
-import { Route as ApiPublicHooksMarkOverdueRouteImport } from './routes/api/public/hooks/mark-overdue'
-import { Route as AdminShopProductsProductIdRouteImport } from './routes/admin/shop.products.$productId'
-import { Route as AdminShopOrdersProcurementRouteImport } from './routes/admin/shop.orders.procurement'
 import { Route as AdminShopOrdersOrderIdRouteImport } from './routes/admin/shop.orders.$orderId'
+import { Route as AdminShopOrdersProcurementRouteImport } from './routes/admin/shop.orders.procurement'
+import { Route as AdminShopProductsIndexRouteImport } from './routes/admin/shop.products.index'
+import { Route as AdminShopProductsProductIdRouteImport } from './routes/admin/shop.products.$productId'
+import { Route as ApiPublicHooksMarkOverdueRouteImport } from './routes/api/public/hooks/mark-overdue'
+import { Route as ApiPublicHooksOttpayRouteImport } from './routes/api/public/hooks/ottpay'
+import { Route as ApiPublicHooksOttpayCardRouteImport } from './routes/api/public/hooks/ottpay-card'
+import { Route as ApiPublicWechatCallbackRouteImport } from './routes/api/public/wechat.callback'
+import { Route as ApiPublicWechatLoginRouteImport } from './routes/api/public/wechat.login'
+import { Route as IntlChannelCallbackSplatRouteImport } from './routes/intl/channel/callback/$'
+import { Route as IntlChannelCallbackWxkfGptRouteImport } from './routes/intl/channel/callback/wxkf-gpt'
 
-const TrackRoute = TrackRouteImport.update({
-  id: '/track',
-  path: '/track',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
-  id: '/sitemap.xml',
-  path: '/sitemap.xml',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ShippingRoute = ShippingRouteImport.update({
-  id: '/shipping',
-  path: '/shipping',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PromoRoute = PromoRouteImport.update({
-  id: '/promo',
-  path: '/promo',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProductsRoute = ProductsRouteImport.update({
-  id: '/products',
-  path: '/products',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const McpRoute = McpRouteImport.update({
-  id: '/mcp',
-  path: '/mcp',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ContactRoute = ContactRouteImport.update({
-  id: '/contact',
-  path: '/contact',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CartRoute = CartRouteImport.update({
-  id: '/cart',
-  path: '/cart',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminLoginRoute = AdminLoginRouteImport.update({
-  id: '/admin-login',
-  path: '/admin-login',
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AboutRoute = AboutRouteImport.update({
@@ -153,118 +122,71 @@ const AdminRouteRoute = AdminRouteRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
+const AdminLoginRoute = AdminLoginRouteImport.update({
+  id: '/admin-login',
+  path: '/admin-login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProductsIndexRoute = ProductsIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => ProductsRoute,
+const CartRoute = CartRouteImport.update({
+  id: '/cart',
+  path: '/cart',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AdminIndexRoute = AdminIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AdminRouteRoute,
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const ProductsSlugRoute = ProductsSlugRouteImport.update({
-  id: '/$slug',
-  path: '/$slug',
-  getParentRoute: () => ProductsRoute,
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AdminWarehousesRoute = AdminWarehousesRouteImport.update({
-  id: '/warehouses',
-  path: '/warehouses',
-  getParentRoute: () => AdminRouteRoute,
+const ProductsRoute = ProductsRouteImport.update({
+  id: '/products',
+  path: '/products',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AdminTrackingPresetsRoute = AdminTrackingPresetsRouteImport.update({
-  id: '/tracking-presets',
-  path: '/tracking-presets',
-  getParentRoute: () => AdminRouteRoute,
+const PromoRoute = PromoRouteImport.update({
+  id: '/promo',
+  path: '/promo',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AdminSystemRoute = AdminSystemRouteImport.update({
-  id: '/system',
-  path: '/system',
-  getParentRoute: () => AdminRouteRoute,
+const ShippingRoute = ShippingRouteImport.update({
+  id: '/shipping',
+  path: '/shipping',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AdminRoutesRoute = AdminRoutesRouteImport.update({
-  id: '/routes',
-  path: '/routes',
-  getParentRoute: () => AdminRouteRoute,
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AdminOversizeRulesRoute = AdminOversizeRulesRouteImport.update({
-  id: '/oversize-rules',
-  path: '/oversize-rules',
-  getParentRoute: () => AdminRouteRoute,
+const TrackRoute = TrackRouteImport.update({
+  id: '/track',
+  path: '/track',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AdminNavSettingsRoute = AdminNavSettingsRouteImport.update({
-  id: '/nav-settings',
-  path: '/nav-settings',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminMessagesRoute = AdminMessagesRouteImport.update({
-  id: '/messages',
-  path: '/messages',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminMeasureRoute = AdminMeasureRouteImport.update({
-  id: '/measure',
-  path: '/measure',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminLogsRoute = AdminLogsRouteImport.update({
-  id: '/logs',
-  path: '/logs',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminIntakeScanRoute = AdminIntakeScanRouteImport.update({
-  id: '/intake-scan',
-  path: '/intake-scan',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminHsCodesRoute = AdminHsCodesRouteImport.update({
-  id: '/hs-codes',
-  path: '/hs-codes',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminHistoryRoute = AdminHistoryRouteImport.update({
-  id: '/history',
-  path: '/history',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminForbiddenRoute = AdminForbiddenRouteImport.update({
-  id: '/forbidden',
-  path: '/forbidden',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminDetainedRoute = AdminDetainedRouteImport.update({
-  id: '/detained',
-  path: '/detained',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminDestinationsRoute = AdminDestinationsRouteImport.update({
-  id: '/destinations',
-  path: '/destinations',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminCustomerViewRoute = AdminCustomerViewRouteImport.update({
-  id: '/customer-view',
-  path: '/customer-view',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminCargoTypesRoute = AdminCargoTypesRouteImport.update({
-  id: '/cargo-types',
-  path: '/cargo-types',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AuthenticatedInvoicesRoute = AuthenticatedInvoicesRouteImport.update({
-  id: '/invoices',
-  path: '/invoices',
+const Char91DotmcpChar93ListToolsRoute =
+  Char91DotmcpChar93ListToolsRouteImport.update({
+    id: '/.mcp/list-tools',
+    path: '/.mcp/list-tools',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AuthenticatedAccountRoute = AuthenticatedAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedCheckoutRoute = AuthenticatedCheckoutRouteImport.update({
@@ -272,181 +194,136 @@ const AuthenticatedCheckoutRoute = AuthenticatedCheckoutRouteImport.update({
   path: '/checkout',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedAccountRoute = AuthenticatedAccountRouteImport.update({
-  id: '/account',
-  path: '/account',
+const AuthenticatedInvoicesRoute = AuthenticatedInvoicesRouteImport.update({
+  id: '/invoices',
+  path: '/invoices',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const Char91DotwellKnownChar93OauthProtectedResourceRoute =
-  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
-    id: '/.well-known/oauth-protected-resource',
-    path: '/.well-known/oauth-protected-resource',
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminCargoTypesRoute = AdminCargoTypesRouteImport.update({
+  id: '/cargo-types',
+  path: '/cargo-types',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminCustomerViewRoute = AdminCustomerViewRouteImport.update({
+  id: '/customer-view',
+  path: '/customer-view',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminDestinationsRoute = AdminDestinationsRouteImport.update({
+  id: '/destinations',
+  path: '/destinations',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminDetainedRoute = AdminDetainedRouteImport.update({
+  id: '/detained',
+  path: '/detained',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminForbiddenRoute = AdminForbiddenRouteImport.update({
+  id: '/forbidden',
+  path: '/forbidden',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminHistoryRoute = AdminHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminHsCodesRoute = AdminHsCodesRouteImport.update({
+  id: '/hs-codes',
+  path: '/hs-codes',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminIntakeScanRoute = AdminIntakeScanRouteImport.update({
+  id: '/intake-scan',
+  path: '/intake-scan',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminLogsRoute = AdminLogsRouteImport.update({
+  id: '/logs',
+  path: '/logs',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminMeasureRoute = AdminMeasureRouteImport.update({
+  id: '/measure',
+  path: '/measure',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminMessagesRoute = AdminMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminNavSettingsRoute = AdminNavSettingsRouteImport.update({
+  id: '/nav-settings',
+  path: '/nav-settings',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminOversizeRulesRoute = AdminOversizeRulesRouteImport.update({
+  id: '/oversize-rules',
+  path: '/oversize-rules',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminRoutesRoute = AdminRoutesRouteImport.update({
+  id: '/routes',
+  path: '/routes',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminSystemRoute = AdminSystemRouteImport.update({
+  id: '/system',
+  path: '/system',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminTrackingPresetsRoute = AdminTrackingPresetsRouteImport.update({
+  id: '/tracking-presets',
+  path: '/tracking-presets',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminWarehousesRoute = AdminWarehousesRouteImport.update({
+  id: '/warehouses',
+  path: '/warehouses',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminWechatAiRecordsRoute = AdminWechatAiRecordsRouteImport.update({
+  id: '/wechat-ai-records',
+  path: '/wechat-ai-records',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const CgiBinSplatRoute = CgiBinSplatRouteImport.update({
+  id: '/cgi-bin/$',
+  path: '/cgi-bin/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductsIndexRoute = ProductsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProductsRoute,
+} as any)
+const ProductsSlugRoute = ProductsSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => ProductsRoute,
+} as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Char91DotmcpChar93InvokeToolToolRoute =
+  Char91DotmcpChar93InvokeToolToolRouteImport.update({
+    id: '/.mcp/invoke-tool/$tool',
+    path: '/.mcp/invoke-tool/$tool',
     getParentRoute: () => rootRouteImport,
   } as any)
-const Char91DotmcpChar93ListToolsRoute =
-  Char91DotmcpChar93ListToolsRouteImport.update({
-    id: '/.mcp/list-tools',
-    path: '/.mcp/list-tools',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const AdminWaybillsIndexRoute = AdminWaybillsIndexRouteImport.update({
-  id: '/waybills/',
-  path: '/waybills/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminUsersIndexRoute = AdminUsersIndexRouteImport.update({
-  id: '/users/',
-  path: '/users/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminShopIndexRoute = AdminShopIndexRouteImport.update({
-  id: '/shop/',
-  path: '/shop/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminReceivingsIndexRoute = AdminReceivingsIndexRouteImport.update({
-  id: '/receivings/',
-  path: '/receivings/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminPalletsIndexRoute = AdminPalletsIndexRouteImport.update({
-  id: '/pallets/',
-  path: '/pallets/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminOrdersIndexRoute = AdminOrdersIndexRouteImport.update({
-  id: '/orders/',
-  path: '/orders/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminInvoicesIndexRoute = AdminInvoicesIndexRouteImport.update({
-  id: '/invoices/',
-  path: '/invoices/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminForwardingsIndexRoute = AdminForwardingsIndexRouteImport.update({
-  id: '/forwardings/',
-  path: '/forwardings/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminDeliveryQueueIndexRoute = AdminDeliveryQueueIndexRouteImport.update({
-  id: '/delivery-queue/',
-  path: '/delivery-queue/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminCartonsIndexRoute = AdminCartonsIndexRouteImport.update({
-  id: '/cartons/',
-  path: '/cartons/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminBatchesIndexRoute = AdminBatchesIndexRouteImport.update({
-  id: '/batches/',
-  path: '/batches/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
 const AuthenticatedForwardingIndexRoute =
   AuthenticatedForwardingIndexRouteImport.update({
     id: '/forwarding/',
     path: '/forwarding/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const ApiPublicAiTrackRoute = ApiPublicAiTrackRouteImport.update({
-  id: '/api/public/ai-track',
-  path: '/api/public/ai-track',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminWaybillsWaybillIdRoute = AdminWaybillsWaybillIdRouteImport.update({
-  id: '/waybills/$waybillId',
-  path: '/waybills/$waybillId',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminUsersUserIdRoute = AdminUsersUserIdRouteImport.update({
-  id: '/users/$userId',
-  path: '/users/$userId',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminShopInventoryRoute = AdminShopInventoryRouteImport.update({
-  id: '/shop/inventory',
-  path: '/shop/inventory',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminShopCouponsRoute = AdminShopCouponsRouteImport.update({
-  id: '/shop/coupons',
-  path: '/shop/coupons',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminShopCategoriesRoute = AdminShopCategoriesRouteImport.update({
-  id: '/shop/categories',
-  path: '/shop/categories',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminShopBannersRoute = AdminShopBannersRouteImport.update({
-  id: '/shop/banners',
-  path: '/shop/banners',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminShopArticlesRoute = AdminShopArticlesRouteImport.update({
-  id: '/shop/articles',
-  path: '/shop/articles',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminReceivingsReceivingIdRoute =
-  AdminReceivingsReceivingIdRouteImport.update({
-    id: '/receivings/$receivingId',
-    path: '/receivings/$receivingId',
-    getParentRoute: () => AdminRouteRoute,
-  } as any)
-const AdminPalletsPalletIdRoute = AdminPalletsPalletIdRouteImport.update({
-  id: '/pallets/$palletId',
-  path: '/pallets/$palletId',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminOrdersProcurementRoute = AdminOrdersProcurementRouteImport.update({
-  id: '/orders/procurement',
-  path: '/orders/procurement',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminOrdersOrderIdRoute = AdminOrdersOrderIdRouteImport.update({
-  id: '/orders/$orderId',
-  path: '/orders/$orderId',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminInvoicesInvoiceIdRoute = AdminInvoicesInvoiceIdRouteImport.update({
-  id: '/invoices/$invoiceId',
-  path: '/invoices/$invoiceId',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminForwardingsForwardingIdRoute =
-  AdminForwardingsForwardingIdRouteImport.update({
-    id: '/forwardings/$forwardingId',
-    path: '/forwardings/$forwardingId',
-    getParentRoute: () => AdminRouteRoute,
-  } as any)
-const AdminDeliveryQueueCustomerKeyRoute =
-  AdminDeliveryQueueCustomerKeyRouteImport.update({
-    id: '/delivery-queue/$customerKey',
-    path: '/delivery-queue/$customerKey',
-    getParentRoute: () => AdminRouteRoute,
-  } as any)
-const AdminCartonsCartonIdRoute = AdminCartonsCartonIdRouteImport.update({
-  id: '/cartons/$cartonId',
-  path: '/cartons/$cartonId',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminBatchesBatchIdRoute = AdminBatchesBatchIdRouteImport.update({
-  id: '/batches/$batchId',
-  path: '/batches/$batchId',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AuthenticatedPayOrderIdRoute = AuthenticatedPayOrderIdRouteImport.update({
-  id: '/pay/$orderId',
-  path: '/pay/$orderId',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedOrdersOrderIdRoute =
-  AuthenticatedOrdersOrderIdRouteImport.update({
-    id: '/orders/$orderId',
-    path: '/orders/$orderId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedForwardingForwardingIdRoute =
@@ -455,35 +332,230 @@ const AuthenticatedForwardingForwardingIdRoute =
     path: '/forwarding/$forwardingId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const Char91DotmcpChar93InvokeToolToolRoute =
-  Char91DotmcpChar93InvokeToolToolRouteImport.update({
-    id: '/.mcp/invoke-tool/$tool',
-    path: '/.mcp/invoke-tool/$tool',
-    getParentRoute: () => rootRouteImport,
+const AuthenticatedOrdersOrderIdRoute =
+  AuthenticatedOrdersOrderIdRouteImport.update({
+    id: '/orders/$orderId',
+    path: '/orders/$orderId',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
-  id: '/.lovable/oauth/consent',
-  path: '/.lovable/oauth/consent',
-  getParentRoute: () => rootRouteImport,
+const AuthenticatedPayOrderIdRoute = AuthenticatedPayOrderIdRouteImport.update({
+  id: '/pay/$orderId',
+  path: '/pay/$orderId',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AdminShopProductsIndexRoute = AdminShopProductsIndexRouteImport.update({
-  id: '/shop/products/',
-  path: '/shop/products/',
+const AdminBatchesIndexRoute = AdminBatchesIndexRouteImport.update({
+  id: '/batches/',
+  path: '/batches/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminBatchesBatchIdRoute = AdminBatchesBatchIdRouteImport.update({
+  id: '/batches/$batchId',
+  path: '/batches/$batchId',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminCartonsIndexRoute = AdminCartonsIndexRouteImport.update({
+  id: '/cartons/',
+  path: '/cartons/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminCartonsCartonIdRoute = AdminCartonsCartonIdRouteImport.update({
+  id: '/cartons/$cartonId',
+  path: '/cartons/$cartonId',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminDeliveryQueueIndexRoute = AdminDeliveryQueueIndexRouteImport.update({
+  id: '/delivery-queue/',
+  path: '/delivery-queue/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminDeliveryQueueCustomerKeyRoute =
+  AdminDeliveryQueueCustomerKeyRouteImport.update({
+    id: '/delivery-queue/$customerKey',
+    path: '/delivery-queue/$customerKey',
+    getParentRoute: () => AdminRouteRoute,
+  } as any)
+const AdminForwardingsIndexRoute = AdminForwardingsIndexRouteImport.update({
+  id: '/forwardings/',
+  path: '/forwardings/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminForwardingsForwardingIdRoute =
+  AdminForwardingsForwardingIdRouteImport.update({
+    id: '/forwardings/$forwardingId',
+    path: '/forwardings/$forwardingId',
+    getParentRoute: () => AdminRouteRoute,
+  } as any)
+const AdminInvoicesIndexRoute = AdminInvoicesIndexRouteImport.update({
+  id: '/invoices/',
+  path: '/invoices/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminInvoicesInvoiceIdRoute = AdminInvoicesInvoiceIdRouteImport.update({
+  id: '/invoices/$invoiceId',
+  path: '/invoices/$invoiceId',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminOrdersIndexRoute = AdminOrdersIndexRouteImport.update({
+  id: '/orders/',
+  path: '/orders/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminOrdersOrderIdRoute = AdminOrdersOrderIdRouteImport.update({
+  id: '/orders/$orderId',
+  path: '/orders/$orderId',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminOrdersProcurementRoute = AdminOrdersProcurementRouteImport.update({
+  id: '/orders/procurement',
+  path: '/orders/procurement',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminPalletsIndexRoute = AdminPalletsIndexRouteImport.update({
+  id: '/pallets/',
+  path: '/pallets/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminPalletsPalletIdRoute = AdminPalletsPalletIdRouteImport.update({
+  id: '/pallets/$palletId',
+  path: '/pallets/$palletId',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminReceivingsIndexRoute = AdminReceivingsIndexRouteImport.update({
+  id: '/receivings/',
+  path: '/receivings/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminReceivingsReceivingIdRoute =
+  AdminReceivingsReceivingIdRouteImport.update({
+    id: '/receivings/$receivingId',
+    path: '/receivings/$receivingId',
+    getParentRoute: () => AdminRouteRoute,
+  } as any)
+const AdminShopIndexRoute = AdminShopIndexRouteImport.update({
+  id: '/shop/',
+  path: '/shop/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminShopArticlesRoute = AdminShopArticlesRouteImport.update({
+  id: '/shop/articles',
+  path: '/shop/articles',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminShopBannersRoute = AdminShopBannersRouteImport.update({
+  id: '/shop/banners',
+  path: '/shop/banners',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminShopCategoriesRoute = AdminShopCategoriesRouteImport.update({
+  id: '/shop/categories',
+  path: '/shop/categories',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminShopCouponsRoute = AdminShopCouponsRouteImport.update({
+  id: '/shop/coupons',
+  path: '/shop/coupons',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminShopInventoryRoute = AdminShopInventoryRouteImport.update({
+  id: '/shop/inventory',
+  path: '/shop/inventory',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminUsersIndexRoute = AdminUsersIndexRouteImport.update({
+  id: '/users/',
+  path: '/users/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminUsersUserIdRoute = AdminUsersUserIdRouteImport.update({
+  id: '/users/$userId',
+  path: '/users/$userId',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminWaybillsIndexRoute = AdminWaybillsIndexRouteImport.update({
+  id: '/waybills/',
+  path: '/waybills/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminWaybillsWaybillIdRoute = AdminWaybillsWaybillIdRouteImport.update({
+  id: '/waybills/$waybillId',
+  path: '/waybills/$waybillId',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const ApiPublicAiBindWechatRoute = ApiPublicAiBindWechatRouteImport.update({
+  id: '/api/public/ai-bind-wechat',
+  path: '/api/public/ai-bind-wechat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicAiCreateForwardingOrderRoute =
+  ApiPublicAiCreateForwardingOrderRouteImport.update({
+    id: '/api/public/ai-create-forwarding-order',
+    path: '/api/public/ai-create-forwarding-order',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicAiForwardingOptionsRoute =
+  ApiPublicAiForwardingOptionsRouteImport.update({
+    id: '/api/public/ai-forwarding-options',
+    path: '/api/public/ai-forwarding-options',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicAiOrderBillingRoute = ApiPublicAiOrderBillingRouteImport.update({
+  id: '/api/public/ai-order-billing',
+  path: '/api/public/ai-order-billing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicAiResolveWechatCustomerRoute =
+  ApiPublicAiResolveWechatCustomerRouteImport.update({
+    id: '/api/public/ai-resolve-wechat-customer',
+    path: '/api/public/ai-resolve-wechat-customer',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicAiTrackRoute = ApiPublicAiTrackRouteImport.update({
+  id: '/api/public/ai-track',
+  path: '/api/public/ai-track',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicAiWarehouseScanRoute =
+  ApiPublicAiWarehouseScanRouteImport.update({
+    id: '/api/public/ai-warehouse-scan',
+    path: '/api/public/ai-warehouse-scan',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AdminShopOrdersIndexRoute = AdminShopOrdersIndexRouteImport.update({
   id: '/shop/orders/',
   path: '/shop/orders/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
-const ApiPublicWechatLoginRoute = ApiPublicWechatLoginRouteImport.update({
-  id: '/api/public/wechat/login',
-  path: '/api/public/wechat/login',
-  getParentRoute: () => rootRouteImport,
+const AdminShopOrdersOrderIdRoute = AdminShopOrdersOrderIdRouteImport.update({
+  id: '/shop/orders/$orderId',
+  path: '/shop/orders/$orderId',
+  getParentRoute: () => AdminRouteRoute,
 } as any)
-const ApiPublicWechatCallbackRoute = ApiPublicWechatCallbackRouteImport.update({
-  id: '/api/public/wechat/callback',
-  path: '/api/public/wechat/callback',
+const AdminShopOrdersProcurementRoute =
+  AdminShopOrdersProcurementRouteImport.update({
+    id: '/shop/orders/procurement',
+    path: '/shop/orders/procurement',
+    getParentRoute: () => AdminRouteRoute,
+  } as any)
+const AdminShopProductsIndexRoute = AdminShopProductsIndexRouteImport.update({
+  id: '/shop/products/',
+  path: '/shop/products/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminShopProductsProductIdRoute =
+  AdminShopProductsProductIdRouteImport.update({
+    id: '/shop/products/$productId',
+    path: '/shop/products/$productId',
+    getParentRoute: () => AdminRouteRoute,
+  } as any)
+const ApiPublicHooksMarkOverdueRoute =
+  ApiPublicHooksMarkOverdueRouteImport.update({
+    id: '/api/public/hooks/mark-overdue',
+    path: '/api/public/hooks/mark-overdue',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksOttpayRoute = ApiPublicHooksOttpayRouteImport.update({
+  id: '/api/public/hooks/ottpay',
+  path: '/api/public/hooks/ottpay',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicHooksOttpayCardRoute =
@@ -492,34 +564,28 @@ const ApiPublicHooksOttpayCardRoute =
     path: '/api/public/hooks/ottpay-card',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicHooksOttpayRoute = ApiPublicHooksOttpayRouteImport.update({
-  id: '/api/public/hooks/ottpay',
-  path: '/api/public/hooks/ottpay',
+const ApiPublicWechatCallbackRoute = ApiPublicWechatCallbackRouteImport.update({
+  id: '/api/public/wechat/callback',
+  path: '/api/public/wechat/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicHooksMarkOverdueRoute =
-  ApiPublicHooksMarkOverdueRouteImport.update({
-    id: '/api/public/hooks/mark-overdue',
-    path: '/api/public/hooks/mark-overdue',
+const ApiPublicWechatLoginRoute = ApiPublicWechatLoginRouteImport.update({
+  id: '/api/public/wechat/login',
+  path: '/api/public/wechat/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IntlChannelCallbackSplatRoute =
+  IntlChannelCallbackSplatRouteImport.update({
+    id: '/intl/channel/callback/$',
+    path: '/intl/channel/callback/$',
     getParentRoute: () => rootRouteImport,
   } as any)
-const AdminShopProductsProductIdRoute =
-  AdminShopProductsProductIdRouteImport.update({
-    id: '/shop/products/$productId',
-    path: '/shop/products/$productId',
-    getParentRoute: () => AdminRouteRoute,
+const IntlChannelCallbackWxkfGptRoute =
+  IntlChannelCallbackWxkfGptRouteImport.update({
+    id: '/intl/channel/callback/wxkf-gpt',
+    path: '/intl/channel/callback/wxkf-gpt',
+    getParentRoute: () => rootRouteImport,
   } as any)
-const AdminShopOrdersProcurementRoute =
-  AdminShopOrdersProcurementRouteImport.update({
-    id: '/shop/orders/procurement',
-    path: '/shop/orders/procurement',
-    getParentRoute: () => AdminRouteRoute,
-  } as any)
-const AdminShopOrdersOrderIdRoute = AdminShopOrdersOrderIdRouteImport.update({
-  id: '/shop/orders/$orderId',
-  path: '/shop/orders/$orderId',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -557,6 +623,8 @@ export interface FileRoutesByFullPath {
   '/admin/system': typeof AdminSystemRoute
   '/admin/tracking-presets': typeof AdminTrackingPresetsRoute
   '/admin/warehouses': typeof AdminWarehousesRoute
+  '/admin/wechat-ai-records': typeof AdminWechatAiRecordsRoute
+  '/cgi-bin/$': typeof CgiBinSplatRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/products/': typeof ProductsIndexRoute
@@ -581,7 +649,13 @@ export interface FileRoutesByFullPath {
   '/admin/shop/inventory': typeof AdminShopInventoryRoute
   '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/admin/waybills/$waybillId': typeof AdminWaybillsWaybillIdRoute
+  '/api/public/ai-bind-wechat': typeof ApiPublicAiBindWechatRoute
+  '/api/public/ai-create-forwarding-order': typeof ApiPublicAiCreateForwardingOrderRoute
+  '/api/public/ai-forwarding-options': typeof ApiPublicAiForwardingOptionsRoute
+  '/api/public/ai-order-billing': typeof ApiPublicAiOrderBillingRoute
+  '/api/public/ai-resolve-wechat-customer': typeof ApiPublicAiResolveWechatCustomerRoute
   '/api/public/ai-track': typeof ApiPublicAiTrackRoute
+  '/api/public/ai-warehouse-scan': typeof ApiPublicAiWarehouseScanRoute
   '/forwarding/': typeof AuthenticatedForwardingIndexRoute
   '/admin/batches/': typeof AdminBatchesIndexRoute
   '/admin/cartons/': typeof AdminCartonsIndexRoute
@@ -602,6 +676,8 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/ottpay-card': typeof ApiPublicHooksOttpayCardRoute
   '/api/public/wechat/callback': typeof ApiPublicWechatCallbackRoute
   '/api/public/wechat/login': typeof ApiPublicWechatLoginRoute
+  '/intl/channel/callback/$': typeof IntlChannelCallbackSplatRoute
+  '/intl/channel/callback/wxkf-gpt': typeof IntlChannelCallbackWxkfGptRoute
   '/admin/shop/orders/': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products/': typeof AdminShopProductsIndexRoute
 }
@@ -639,6 +715,8 @@ export interface FileRoutesByTo {
   '/admin/system': typeof AdminSystemRoute
   '/admin/tracking-presets': typeof AdminTrackingPresetsRoute
   '/admin/warehouses': typeof AdminWarehousesRoute
+  '/admin/wechat-ai-records': typeof AdminWechatAiRecordsRoute
+  '/cgi-bin/$': typeof CgiBinSplatRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/admin': typeof AdminIndexRoute
   '/products': typeof ProductsIndexRoute
@@ -663,7 +741,13 @@ export interface FileRoutesByTo {
   '/admin/shop/inventory': typeof AdminShopInventoryRoute
   '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/admin/waybills/$waybillId': typeof AdminWaybillsWaybillIdRoute
+  '/api/public/ai-bind-wechat': typeof ApiPublicAiBindWechatRoute
+  '/api/public/ai-create-forwarding-order': typeof ApiPublicAiCreateForwardingOrderRoute
+  '/api/public/ai-forwarding-options': typeof ApiPublicAiForwardingOptionsRoute
+  '/api/public/ai-order-billing': typeof ApiPublicAiOrderBillingRoute
+  '/api/public/ai-resolve-wechat-customer': typeof ApiPublicAiResolveWechatCustomerRoute
   '/api/public/ai-track': typeof ApiPublicAiTrackRoute
+  '/api/public/ai-warehouse-scan': typeof ApiPublicAiWarehouseScanRoute
   '/forwarding': typeof AuthenticatedForwardingIndexRoute
   '/admin/batches': typeof AdminBatchesIndexRoute
   '/admin/cartons': typeof AdminCartonsIndexRoute
@@ -684,6 +768,8 @@ export interface FileRoutesByTo {
   '/api/public/hooks/ottpay-card': typeof ApiPublicHooksOttpayCardRoute
   '/api/public/wechat/callback': typeof ApiPublicWechatCallbackRoute
   '/api/public/wechat/login': typeof ApiPublicWechatLoginRoute
+  '/intl/channel/callback/$': typeof IntlChannelCallbackSplatRoute
+  '/intl/channel/callback/wxkf-gpt': typeof IntlChannelCallbackWxkfGptRoute
   '/admin/shop/orders': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products': typeof AdminShopProductsIndexRoute
 }
@@ -725,6 +811,8 @@ export interface FileRoutesById {
   '/admin/system': typeof AdminSystemRoute
   '/admin/tracking-presets': typeof AdminTrackingPresetsRoute
   '/admin/warehouses': typeof AdminWarehousesRoute
+  '/admin/wechat-ai-records': typeof AdminWechatAiRecordsRoute
+  '/cgi-bin/$': typeof CgiBinSplatRoute
   '/products/$slug': typeof ProductsSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/products/': typeof ProductsIndexRoute
@@ -749,7 +837,13 @@ export interface FileRoutesById {
   '/admin/shop/inventory': typeof AdminShopInventoryRoute
   '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/admin/waybills/$waybillId': typeof AdminWaybillsWaybillIdRoute
+  '/api/public/ai-bind-wechat': typeof ApiPublicAiBindWechatRoute
+  '/api/public/ai-create-forwarding-order': typeof ApiPublicAiCreateForwardingOrderRoute
+  '/api/public/ai-forwarding-options': typeof ApiPublicAiForwardingOptionsRoute
+  '/api/public/ai-order-billing': typeof ApiPublicAiOrderBillingRoute
+  '/api/public/ai-resolve-wechat-customer': typeof ApiPublicAiResolveWechatCustomerRoute
   '/api/public/ai-track': typeof ApiPublicAiTrackRoute
+  '/api/public/ai-warehouse-scan': typeof ApiPublicAiWarehouseScanRoute
   '/_authenticated/forwarding/': typeof AuthenticatedForwardingIndexRoute
   '/admin/batches/': typeof AdminBatchesIndexRoute
   '/admin/cartons/': typeof AdminCartonsIndexRoute
@@ -770,6 +864,8 @@ export interface FileRoutesById {
   '/api/public/hooks/ottpay-card': typeof ApiPublicHooksOttpayCardRoute
   '/api/public/wechat/callback': typeof ApiPublicWechatCallbackRoute
   '/api/public/wechat/login': typeof ApiPublicWechatLoginRoute
+  '/intl/channel/callback/$': typeof IntlChannelCallbackSplatRoute
+  '/intl/channel/callback/wxkf-gpt': typeof IntlChannelCallbackWxkfGptRoute
   '/admin/shop/orders/': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products/': typeof AdminShopProductsIndexRoute
 }
@@ -811,6 +907,8 @@ export interface FileRouteTypes {
     | '/admin/system'
     | '/admin/tracking-presets'
     | '/admin/warehouses'
+    | '/admin/wechat-ai-records'
+    | '/cgi-bin/$'
     | '/products/$slug'
     | '/admin/'
     | '/products/'
@@ -835,7 +933,13 @@ export interface FileRouteTypes {
     | '/admin/shop/inventory'
     | '/admin/users/$userId'
     | '/admin/waybills/$waybillId'
+    | '/api/public/ai-bind-wechat'
+    | '/api/public/ai-create-forwarding-order'
+    | '/api/public/ai-forwarding-options'
+    | '/api/public/ai-order-billing'
+    | '/api/public/ai-resolve-wechat-customer'
     | '/api/public/ai-track'
+    | '/api/public/ai-warehouse-scan'
     | '/forwarding/'
     | '/admin/batches/'
     | '/admin/cartons/'
@@ -856,6 +960,8 @@ export interface FileRouteTypes {
     | '/api/public/hooks/ottpay-card'
     | '/api/public/wechat/callback'
     | '/api/public/wechat/login'
+    | '/intl/channel/callback/$'
+    | '/intl/channel/callback/wxkf-gpt'
     | '/admin/shop/orders/'
     | '/admin/shop/products/'
   fileRoutesByTo: FileRoutesByTo
@@ -893,6 +999,8 @@ export interface FileRouteTypes {
     | '/admin/system'
     | '/admin/tracking-presets'
     | '/admin/warehouses'
+    | '/admin/wechat-ai-records'
+    | '/cgi-bin/$'
     | '/products/$slug'
     | '/admin'
     | '/products'
@@ -917,7 +1025,13 @@ export interface FileRouteTypes {
     | '/admin/shop/inventory'
     | '/admin/users/$userId'
     | '/admin/waybills/$waybillId'
+    | '/api/public/ai-bind-wechat'
+    | '/api/public/ai-create-forwarding-order'
+    | '/api/public/ai-forwarding-options'
+    | '/api/public/ai-order-billing'
+    | '/api/public/ai-resolve-wechat-customer'
     | '/api/public/ai-track'
+    | '/api/public/ai-warehouse-scan'
     | '/forwarding'
     | '/admin/batches'
     | '/admin/cartons'
@@ -938,6 +1052,8 @@ export interface FileRouteTypes {
     | '/api/public/hooks/ottpay-card'
     | '/api/public/wechat/callback'
     | '/api/public/wechat/login'
+    | '/intl/channel/callback/$'
+    | '/intl/channel/callback/wxkf-gpt'
     | '/admin/shop/orders'
     | '/admin/shop/products'
   id:
@@ -978,6 +1094,8 @@ export interface FileRouteTypes {
     | '/admin/system'
     | '/admin/tracking-presets'
     | '/admin/warehouses'
+    | '/admin/wechat-ai-records'
+    | '/cgi-bin/$'
     | '/products/$slug'
     | '/admin/'
     | '/products/'
@@ -1002,7 +1120,13 @@ export interface FileRouteTypes {
     | '/admin/shop/inventory'
     | '/admin/users/$userId'
     | '/admin/waybills/$waybillId'
+    | '/api/public/ai-bind-wechat'
+    | '/api/public/ai-create-forwarding-order'
+    | '/api/public/ai-forwarding-options'
+    | '/api/public/ai-order-billing'
+    | '/api/public/ai-resolve-wechat-customer'
     | '/api/public/ai-track'
+    | '/api/public/ai-warehouse-scan'
     | '/_authenticated/forwarding/'
     | '/admin/batches/'
     | '/admin/cartons/'
@@ -1023,6 +1147,8 @@ export interface FileRouteTypes {
     | '/api/public/hooks/ottpay-card'
     | '/api/public/wechat/callback'
     | '/api/public/wechat/login'
+    | '/intl/channel/callback/$'
+    | '/intl/channel/callback/wxkf-gpt'
     | '/admin/shop/orders/'
     | '/admin/shop/products/'
   fileRoutesById: FileRoutesById
@@ -1044,86 +1170,39 @@ export interface RootRouteChildren {
   TrackRoute: typeof TrackRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  CgiBinSplatRoute: typeof CgiBinSplatRoute
   DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
   Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
+  ApiPublicAiBindWechatRoute: typeof ApiPublicAiBindWechatRoute
+  ApiPublicAiCreateForwardingOrderRoute: typeof ApiPublicAiCreateForwardingOrderRoute
+  ApiPublicAiForwardingOptionsRoute: typeof ApiPublicAiForwardingOptionsRoute
+  ApiPublicAiOrderBillingRoute: typeof ApiPublicAiOrderBillingRoute
+  ApiPublicAiResolveWechatCustomerRoute: typeof ApiPublicAiResolveWechatCustomerRoute
   ApiPublicAiTrackRoute: typeof ApiPublicAiTrackRoute
+  ApiPublicAiWarehouseScanRoute: typeof ApiPublicAiWarehouseScanRoute
   ApiPublicHooksMarkOverdueRoute: typeof ApiPublicHooksMarkOverdueRoute
   ApiPublicHooksOttpayRoute: typeof ApiPublicHooksOttpayRoute
   ApiPublicHooksOttpayCardRoute: typeof ApiPublicHooksOttpayCardRoute
   ApiPublicWechatCallbackRoute: typeof ApiPublicWechatCallbackRoute
   ApiPublicWechatLoginRoute: typeof ApiPublicWechatLoginRoute
+  IntlChannelCallbackSplatRoute: typeof IntlChannelCallbackSplatRoute
+  IntlChannelCallbackWxkfGptRoute: typeof IntlChannelCallbackWxkfGptRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/track': {
-      id: '/track'
-      path: '/track'
-      fullPath: '/track'
-      preLoaderRoute: typeof TrackRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/sitemap.xml': {
-      id: '/sitemap.xml'
-      path: '/sitemap.xml'
-      fullPath: '/sitemap.xml'
-      preLoaderRoute: typeof SitemapDotxmlRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/shipping': {
-      id: '/shipping'
-      path: '/shipping'
-      fullPath: '/shipping'
-      preLoaderRoute: typeof ShippingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/promo': {
-      id: '/promo'
-      path: '/promo'
-      fullPath: '/promo'
-      preLoaderRoute: typeof PromoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/products': {
-      id: '/products'
-      path: '/products'
-      fullPath: '/products'
-      preLoaderRoute: typeof ProductsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/mcp': {
-      id: '/mcp'
-      path: '/mcp'
-      fullPath: '/mcp'
-      preLoaderRoute: typeof McpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/contact': {
-      id: '/contact'
-      path: '/contact'
-      fullPath: '/contact'
-      preLoaderRoute: typeof ContactRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/cart': {
-      id: '/cart'
-      path: '/cart'
-      fullPath: '/cart'
-      preLoaderRoute: typeof CartRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin-login': {
-      id: '/admin-login'
-      path: '/admin-login'
-      fullPath: '/admin-login'
-      preLoaderRoute: typeof AdminLoginRouteImport
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/about': {
@@ -1140,186 +1219,74 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated': {
-      id: '/_authenticated'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+    '/admin-login': {
+      id: '/admin-login'
+      path: '/admin-login'
+      fullPath: '/admin-login'
+      preLoaderRoute: typeof AdminLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/products/': {
-      id: '/products/'
-      path: '/'
-      fullPath: '/products/'
-      preLoaderRoute: typeof ProductsIndexRouteImport
-      parentRoute: typeof ProductsRoute
+    '/cart': {
+      id: '/cart'
+      path: '/cart'
+      fullPath: '/cart'
+      preLoaderRoute: typeof CartRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/admin/': {
-      id: '/admin/'
-      path: '/'
-      fullPath: '/admin/'
-      preLoaderRoute: typeof AdminIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/products/$slug': {
-      id: '/products/$slug'
-      path: '/$slug'
-      fullPath: '/products/$slug'
-      preLoaderRoute: typeof ProductsSlugRouteImport
-      parentRoute: typeof ProductsRoute
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/admin/warehouses': {
-      id: '/admin/warehouses'
-      path: '/warehouses'
-      fullPath: '/admin/warehouses'
-      preLoaderRoute: typeof AdminWarehousesRouteImport
-      parentRoute: typeof AdminRouteRoute
+    '/products': {
+      id: '/products'
+      path: '/products'
+      fullPath: '/products'
+      preLoaderRoute: typeof ProductsRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/admin/tracking-presets': {
-      id: '/admin/tracking-presets'
-      path: '/tracking-presets'
-      fullPath: '/admin/tracking-presets'
-      preLoaderRoute: typeof AdminTrackingPresetsRouteImport
-      parentRoute: typeof AdminRouteRoute
+    '/promo': {
+      id: '/promo'
+      path: '/promo'
+      fullPath: '/promo'
+      preLoaderRoute: typeof PromoRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/admin/system': {
-      id: '/admin/system'
-      path: '/system'
-      fullPath: '/admin/system'
-      preLoaderRoute: typeof AdminSystemRouteImport
-      parentRoute: typeof AdminRouteRoute
+    '/shipping': {
+      id: '/shipping'
+      path: '/shipping'
+      fullPath: '/shipping'
+      preLoaderRoute: typeof ShippingRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/admin/routes': {
-      id: '/admin/routes'
-      path: '/routes'
-      fullPath: '/admin/routes'
-      preLoaderRoute: typeof AdminRoutesRouteImport
-      parentRoute: typeof AdminRouteRoute
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/admin/oversize-rules': {
-      id: '/admin/oversize-rules'
-      path: '/oversize-rules'
-      fullPath: '/admin/oversize-rules'
-      preLoaderRoute: typeof AdminOversizeRulesRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/nav-settings': {
-      id: '/admin/nav-settings'
-      path: '/nav-settings'
-      fullPath: '/admin/nav-settings'
-      preLoaderRoute: typeof AdminNavSettingsRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/messages': {
-      id: '/admin/messages'
-      path: '/messages'
-      fullPath: '/admin/messages'
-      preLoaderRoute: typeof AdminMessagesRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/measure': {
-      id: '/admin/measure'
-      path: '/measure'
-      fullPath: '/admin/measure'
-      preLoaderRoute: typeof AdminMeasureRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/logs': {
-      id: '/admin/logs'
-      path: '/logs'
-      fullPath: '/admin/logs'
-      preLoaderRoute: typeof AdminLogsRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/intake-scan': {
-      id: '/admin/intake-scan'
-      path: '/intake-scan'
-      fullPath: '/admin/intake-scan'
-      preLoaderRoute: typeof AdminIntakeScanRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/hs-codes': {
-      id: '/admin/hs-codes'
-      path: '/hs-codes'
-      fullPath: '/admin/hs-codes'
-      preLoaderRoute: typeof AdminHsCodesRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/history': {
-      id: '/admin/history'
-      path: '/history'
-      fullPath: '/admin/history'
-      preLoaderRoute: typeof AdminHistoryRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/forbidden': {
-      id: '/admin/forbidden'
-      path: '/forbidden'
-      fullPath: '/admin/forbidden'
-      preLoaderRoute: typeof AdminForbiddenRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/detained': {
-      id: '/admin/detained'
-      path: '/detained'
-      fullPath: '/admin/detained'
-      preLoaderRoute: typeof AdminDetainedRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/destinations': {
-      id: '/admin/destinations'
-      path: '/destinations'
-      fullPath: '/admin/destinations'
-      preLoaderRoute: typeof AdminDestinationsRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/customer-view': {
-      id: '/admin/customer-view'
-      path: '/customer-view'
-      fullPath: '/admin/customer-view'
-      preLoaderRoute: typeof AdminCustomerViewRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/cargo-types': {
-      id: '/admin/cargo-types'
-      path: '/cargo-types'
-      fullPath: '/admin/cargo-types'
-      preLoaderRoute: typeof AdminCargoTypesRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/_authenticated/invoices': {
-      id: '/_authenticated/invoices'
-      path: '/invoices'
-      fullPath: '/invoices'
-      preLoaderRoute: typeof AuthenticatedInvoicesRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/checkout': {
-      id: '/_authenticated/checkout'
-      path: '/checkout'
-      fullPath: '/checkout'
-      preLoaderRoute: typeof AuthenticatedCheckoutRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/account': {
-      id: '/_authenticated/account'
-      path: '/account'
-      fullPath: '/account'
-      preLoaderRoute: typeof AuthenticatedAccountRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/.well-known/oauth-protected-resource': {
-      id: '/.well-known/oauth-protected-resource'
-      path: '/.well-known/oauth-protected-resource'
-      fullPath: '/.well-known/oauth-protected-resource'
-      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
+    '/track': {
+      id: '/track'
+      path: '/track'
+      fullPath: '/track'
+      preLoaderRoute: typeof TrackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/.mcp/list-tools': {
@@ -1329,221 +1296,207 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91DotmcpChar93ListToolsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/waybills/': {
-      id: '/admin/waybills/'
-      path: '/waybills'
-      fullPath: '/admin/waybills/'
-      preLoaderRoute: typeof AdminWaybillsIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/admin/users/': {
-      id: '/admin/users/'
-      path: '/users'
-      fullPath: '/admin/users/'
-      preLoaderRoute: typeof AdminUsersIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+    '/_authenticated/account': {
+      id: '/_authenticated/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AuthenticatedAccountRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/admin/shop/': {
-      id: '/admin/shop/'
-      path: '/shop'
-      fullPath: '/admin/shop/'
-      preLoaderRoute: typeof AdminShopIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+    '/_authenticated/checkout': {
+      id: '/_authenticated/checkout'
+      path: '/checkout'
+      fullPath: '/checkout'
+      preLoaderRoute: typeof AuthenticatedCheckoutRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/admin/receivings/': {
-      id: '/admin/receivings/'
-      path: '/receivings'
-      fullPath: '/admin/receivings/'
-      preLoaderRoute: typeof AdminReceivingsIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/pallets/': {
-      id: '/admin/pallets/'
-      path: '/pallets'
-      fullPath: '/admin/pallets/'
-      preLoaderRoute: typeof AdminPalletsIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/orders/': {
-      id: '/admin/orders/'
-      path: '/orders'
-      fullPath: '/admin/orders/'
-      preLoaderRoute: typeof AdminOrdersIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/invoices/': {
-      id: '/admin/invoices/'
+    '/_authenticated/invoices': {
+      id: '/_authenticated/invoices'
       path: '/invoices'
-      fullPath: '/admin/invoices/'
-      preLoaderRoute: typeof AdminInvoicesIndexRouteImport
+      fullPath: '/invoices'
+      preLoaderRoute: typeof AuthenticatedInvoicesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
-    '/admin/forwardings/': {
-      id: '/admin/forwardings/'
-      path: '/forwardings'
-      fullPath: '/admin/forwardings/'
-      preLoaderRoute: typeof AdminForwardingsIndexRouteImport
+    '/admin/cargo-types': {
+      id: '/admin/cargo-types'
+      path: '/cargo-types'
+      fullPath: '/admin/cargo-types'
+      preLoaderRoute: typeof AdminCargoTypesRouteImport
       parentRoute: typeof AdminRouteRoute
     }
-    '/admin/delivery-queue/': {
-      id: '/admin/delivery-queue/'
-      path: '/delivery-queue'
-      fullPath: '/admin/delivery-queue/'
-      preLoaderRoute: typeof AdminDeliveryQueueIndexRouteImport
+    '/admin/customer-view': {
+      id: '/admin/customer-view'
+      path: '/customer-view'
+      fullPath: '/admin/customer-view'
+      preLoaderRoute: typeof AdminCustomerViewRouteImport
       parentRoute: typeof AdminRouteRoute
     }
-    '/admin/cartons/': {
-      id: '/admin/cartons/'
-      path: '/cartons'
-      fullPath: '/admin/cartons/'
-      preLoaderRoute: typeof AdminCartonsIndexRouteImport
+    '/admin/destinations': {
+      id: '/admin/destinations'
+      path: '/destinations'
+      fullPath: '/admin/destinations'
+      preLoaderRoute: typeof AdminDestinationsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
-    '/admin/batches/': {
-      id: '/admin/batches/'
-      path: '/batches'
-      fullPath: '/admin/batches/'
-      preLoaderRoute: typeof AdminBatchesIndexRouteImport
+    '/admin/detained': {
+      id: '/admin/detained'
+      path: '/detained'
+      fullPath: '/admin/detained'
+      preLoaderRoute: typeof AdminDetainedRouteImport
       parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/forbidden': {
+      id: '/admin/forbidden'
+      path: '/forbidden'
+      fullPath: '/admin/forbidden'
+      preLoaderRoute: typeof AdminForbiddenRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/history': {
+      id: '/admin/history'
+      path: '/history'
+      fullPath: '/admin/history'
+      preLoaderRoute: typeof AdminHistoryRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/hs-codes': {
+      id: '/admin/hs-codes'
+      path: '/hs-codes'
+      fullPath: '/admin/hs-codes'
+      preLoaderRoute: typeof AdminHsCodesRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/intake-scan': {
+      id: '/admin/intake-scan'
+      path: '/intake-scan'
+      fullPath: '/admin/intake-scan'
+      preLoaderRoute: typeof AdminIntakeScanRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/logs': {
+      id: '/admin/logs'
+      path: '/logs'
+      fullPath: '/admin/logs'
+      preLoaderRoute: typeof AdminLogsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/measure': {
+      id: '/admin/measure'
+      path: '/measure'
+      fullPath: '/admin/measure'
+      preLoaderRoute: typeof AdminMeasureRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/messages': {
+      id: '/admin/messages'
+      path: '/messages'
+      fullPath: '/admin/messages'
+      preLoaderRoute: typeof AdminMessagesRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/nav-settings': {
+      id: '/admin/nav-settings'
+      path: '/nav-settings'
+      fullPath: '/admin/nav-settings'
+      preLoaderRoute: typeof AdminNavSettingsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/oversize-rules': {
+      id: '/admin/oversize-rules'
+      path: '/oversize-rules'
+      fullPath: '/admin/oversize-rules'
+      preLoaderRoute: typeof AdminOversizeRulesRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/routes': {
+      id: '/admin/routes'
+      path: '/routes'
+      fullPath: '/admin/routes'
+      preLoaderRoute: typeof AdminRoutesRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/system': {
+      id: '/admin/system'
+      path: '/system'
+      fullPath: '/admin/system'
+      preLoaderRoute: typeof AdminSystemRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/tracking-presets': {
+      id: '/admin/tracking-presets'
+      path: '/tracking-presets'
+      fullPath: '/admin/tracking-presets'
+      preLoaderRoute: typeof AdminTrackingPresetsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/warehouses': {
+      id: '/admin/warehouses'
+      path: '/warehouses'
+      fullPath: '/admin/warehouses'
+      preLoaderRoute: typeof AdminWarehousesRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/wechat-ai-records': {
+      id: '/admin/wechat-ai-records'
+      path: '/wechat-ai-records'
+      fullPath: '/admin/wechat-ai-records'
+      preLoaderRoute: typeof AdminWechatAiRecordsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/cgi-bin/$': {
+      id: '/cgi-bin/$'
+      path: '/cgi-bin/$'
+      fullPath: '/cgi-bin/$'
+      preLoaderRoute: typeof CgiBinSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/products/': {
+      id: '/products/'
+      path: '/'
+      fullPath: '/products/'
+      preLoaderRoute: typeof ProductsIndexRouteImport
+      parentRoute: typeof ProductsRoute
+    }
+    '/products/$slug': {
+      id: '/products/$slug'
+      path: '/$slug'
+      fullPath: '/products/$slug'
+      preLoaderRoute: typeof ProductsSlugRouteImport
+      parentRoute: typeof ProductsRoute
+    }
+    '/.lovable/oauth/consent': {
+      id: '/.lovable/oauth/consent'
+      path: '/.lovable/oauth/consent'
+      fullPath: '/.lovable/oauth/consent'
+      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.mcp/invoke-tool/$tool': {
+      id: '/.mcp/invoke-tool/$tool'
+      path: '/.mcp/invoke-tool/$tool'
+      fullPath: '/.mcp/invoke-tool/$tool'
+      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/forwarding/': {
       id: '/_authenticated/forwarding/'
       path: '/forwarding'
       fullPath: '/forwarding/'
       preLoaderRoute: typeof AuthenticatedForwardingIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/api/public/ai-track': {
-      id: '/api/public/ai-track'
-      path: '/api/public/ai-track'
-      fullPath: '/api/public/ai-track'
-      preLoaderRoute: typeof ApiPublicAiTrackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/waybills/$waybillId': {
-      id: '/admin/waybills/$waybillId'
-      path: '/waybills/$waybillId'
-      fullPath: '/admin/waybills/$waybillId'
-      preLoaderRoute: typeof AdminWaybillsWaybillIdRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/users/$userId': {
-      id: '/admin/users/$userId'
-      path: '/users/$userId'
-      fullPath: '/admin/users/$userId'
-      preLoaderRoute: typeof AdminUsersUserIdRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/shop/inventory': {
-      id: '/admin/shop/inventory'
-      path: '/shop/inventory'
-      fullPath: '/admin/shop/inventory'
-      preLoaderRoute: typeof AdminShopInventoryRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/shop/coupons': {
-      id: '/admin/shop/coupons'
-      path: '/shop/coupons'
-      fullPath: '/admin/shop/coupons'
-      preLoaderRoute: typeof AdminShopCouponsRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/shop/categories': {
-      id: '/admin/shop/categories'
-      path: '/shop/categories'
-      fullPath: '/admin/shop/categories'
-      preLoaderRoute: typeof AdminShopCategoriesRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/shop/banners': {
-      id: '/admin/shop/banners'
-      path: '/shop/banners'
-      fullPath: '/admin/shop/banners'
-      preLoaderRoute: typeof AdminShopBannersRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/shop/articles': {
-      id: '/admin/shop/articles'
-      path: '/shop/articles'
-      fullPath: '/admin/shop/articles'
-      preLoaderRoute: typeof AdminShopArticlesRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/receivings/$receivingId': {
-      id: '/admin/receivings/$receivingId'
-      path: '/receivings/$receivingId'
-      fullPath: '/admin/receivings/$receivingId'
-      preLoaderRoute: typeof AdminReceivingsReceivingIdRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/pallets/$palletId': {
-      id: '/admin/pallets/$palletId'
-      path: '/pallets/$palletId'
-      fullPath: '/admin/pallets/$palletId'
-      preLoaderRoute: typeof AdminPalletsPalletIdRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/orders/procurement': {
-      id: '/admin/orders/procurement'
-      path: '/orders/procurement'
-      fullPath: '/admin/orders/procurement'
-      preLoaderRoute: typeof AdminOrdersProcurementRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/orders/$orderId': {
-      id: '/admin/orders/$orderId'
-      path: '/orders/$orderId'
-      fullPath: '/admin/orders/$orderId'
-      preLoaderRoute: typeof AdminOrdersOrderIdRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/invoices/$invoiceId': {
-      id: '/admin/invoices/$invoiceId'
-      path: '/invoices/$invoiceId'
-      fullPath: '/admin/invoices/$invoiceId'
-      preLoaderRoute: typeof AdminInvoicesInvoiceIdRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/forwardings/$forwardingId': {
-      id: '/admin/forwardings/$forwardingId'
-      path: '/forwardings/$forwardingId'
-      fullPath: '/admin/forwardings/$forwardingId'
-      preLoaderRoute: typeof AdminForwardingsForwardingIdRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/delivery-queue/$customerKey': {
-      id: '/admin/delivery-queue/$customerKey'
-      path: '/delivery-queue/$customerKey'
-      fullPath: '/admin/delivery-queue/$customerKey'
-      preLoaderRoute: typeof AdminDeliveryQueueCustomerKeyRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/cartons/$cartonId': {
-      id: '/admin/cartons/$cartonId'
-      path: '/cartons/$cartonId'
-      fullPath: '/admin/cartons/$cartonId'
-      preLoaderRoute: typeof AdminCartonsCartonIdRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/batches/$batchId': {
-      id: '/admin/batches/$batchId'
-      path: '/batches/$batchId'
-      fullPath: '/admin/batches/$batchId'
-      preLoaderRoute: typeof AdminBatchesBatchIdRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/_authenticated/pay/$orderId': {
-      id: '/_authenticated/pay/$orderId'
-      path: '/pay/$orderId'
-      fullPath: '/pay/$orderId'
-      preLoaderRoute: typeof AuthenticatedPayOrderIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/orders/$orderId': {
-      id: '/_authenticated/orders/$orderId'
-      path: '/orders/$orderId'
-      fullPath: '/orders/$orderId'
-      preLoaderRoute: typeof AuthenticatedOrdersOrderIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/forwarding/$forwardingId': {
@@ -1553,26 +1506,257 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedForwardingForwardingIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/.mcp/invoke-tool/$tool': {
-      id: '/.mcp/invoke-tool/$tool'
-      path: '/.mcp/invoke-tool/$tool'
-      fullPath: '/.mcp/invoke-tool/$tool'
-      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
-      parentRoute: typeof rootRouteImport
+    '/_authenticated/orders/$orderId': {
+      id: '/_authenticated/orders/$orderId'
+      path: '/orders/$orderId'
+      fullPath: '/orders/$orderId'
+      preLoaderRoute: typeof AuthenticatedOrdersOrderIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/.lovable/oauth/consent': {
-      id: '/.lovable/oauth/consent'
-      path: '/.lovable/oauth/consent'
-      fullPath: '/.lovable/oauth/consent'
-      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
-      parentRoute: typeof rootRouteImport
+    '/_authenticated/pay/$orderId': {
+      id: '/_authenticated/pay/$orderId'
+      path: '/pay/$orderId'
+      fullPath: '/pay/$orderId'
+      preLoaderRoute: typeof AuthenticatedPayOrderIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/admin/shop/products/': {
-      id: '/admin/shop/products/'
-      path: '/shop/products'
-      fullPath: '/admin/shop/products/'
-      preLoaderRoute: typeof AdminShopProductsIndexRouteImport
+    '/admin/batches/': {
+      id: '/admin/batches/'
+      path: '/batches'
+      fullPath: '/admin/batches/'
+      preLoaderRoute: typeof AdminBatchesIndexRouteImport
       parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/batches/$batchId': {
+      id: '/admin/batches/$batchId'
+      path: '/batches/$batchId'
+      fullPath: '/admin/batches/$batchId'
+      preLoaderRoute: typeof AdminBatchesBatchIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/cartons/': {
+      id: '/admin/cartons/'
+      path: '/cartons'
+      fullPath: '/admin/cartons/'
+      preLoaderRoute: typeof AdminCartonsIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/cartons/$cartonId': {
+      id: '/admin/cartons/$cartonId'
+      path: '/cartons/$cartonId'
+      fullPath: '/admin/cartons/$cartonId'
+      preLoaderRoute: typeof AdminCartonsCartonIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/delivery-queue/': {
+      id: '/admin/delivery-queue/'
+      path: '/delivery-queue'
+      fullPath: '/admin/delivery-queue/'
+      preLoaderRoute: typeof AdminDeliveryQueueIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/delivery-queue/$customerKey': {
+      id: '/admin/delivery-queue/$customerKey'
+      path: '/delivery-queue/$customerKey'
+      fullPath: '/admin/delivery-queue/$customerKey'
+      preLoaderRoute: typeof AdminDeliveryQueueCustomerKeyRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/forwardings/': {
+      id: '/admin/forwardings/'
+      path: '/forwardings'
+      fullPath: '/admin/forwardings/'
+      preLoaderRoute: typeof AdminForwardingsIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/forwardings/$forwardingId': {
+      id: '/admin/forwardings/$forwardingId'
+      path: '/forwardings/$forwardingId'
+      fullPath: '/admin/forwardings/$forwardingId'
+      preLoaderRoute: typeof AdminForwardingsForwardingIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/invoices/': {
+      id: '/admin/invoices/'
+      path: '/invoices'
+      fullPath: '/admin/invoices/'
+      preLoaderRoute: typeof AdminInvoicesIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/invoices/$invoiceId': {
+      id: '/admin/invoices/$invoiceId'
+      path: '/invoices/$invoiceId'
+      fullPath: '/admin/invoices/$invoiceId'
+      preLoaderRoute: typeof AdminInvoicesInvoiceIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/orders/': {
+      id: '/admin/orders/'
+      path: '/orders'
+      fullPath: '/admin/orders/'
+      preLoaderRoute: typeof AdminOrdersIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/orders/$orderId': {
+      id: '/admin/orders/$orderId'
+      path: '/orders/$orderId'
+      fullPath: '/admin/orders/$orderId'
+      preLoaderRoute: typeof AdminOrdersOrderIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/orders/procurement': {
+      id: '/admin/orders/procurement'
+      path: '/orders/procurement'
+      fullPath: '/admin/orders/procurement'
+      preLoaderRoute: typeof AdminOrdersProcurementRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/pallets/': {
+      id: '/admin/pallets/'
+      path: '/pallets'
+      fullPath: '/admin/pallets/'
+      preLoaderRoute: typeof AdminPalletsIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/pallets/$palletId': {
+      id: '/admin/pallets/$palletId'
+      path: '/pallets/$palletId'
+      fullPath: '/admin/pallets/$palletId'
+      preLoaderRoute: typeof AdminPalletsPalletIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/receivings/': {
+      id: '/admin/receivings/'
+      path: '/receivings'
+      fullPath: '/admin/receivings/'
+      preLoaderRoute: typeof AdminReceivingsIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/receivings/$receivingId': {
+      id: '/admin/receivings/$receivingId'
+      path: '/receivings/$receivingId'
+      fullPath: '/admin/receivings/$receivingId'
+      preLoaderRoute: typeof AdminReceivingsReceivingIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/shop/': {
+      id: '/admin/shop/'
+      path: '/shop'
+      fullPath: '/admin/shop/'
+      preLoaderRoute: typeof AdminShopIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/shop/articles': {
+      id: '/admin/shop/articles'
+      path: '/shop/articles'
+      fullPath: '/admin/shop/articles'
+      preLoaderRoute: typeof AdminShopArticlesRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/shop/banners': {
+      id: '/admin/shop/banners'
+      path: '/shop/banners'
+      fullPath: '/admin/shop/banners'
+      preLoaderRoute: typeof AdminShopBannersRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/shop/categories': {
+      id: '/admin/shop/categories'
+      path: '/shop/categories'
+      fullPath: '/admin/shop/categories'
+      preLoaderRoute: typeof AdminShopCategoriesRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/shop/coupons': {
+      id: '/admin/shop/coupons'
+      path: '/shop/coupons'
+      fullPath: '/admin/shop/coupons'
+      preLoaderRoute: typeof AdminShopCouponsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/shop/inventory': {
+      id: '/admin/shop/inventory'
+      path: '/shop/inventory'
+      fullPath: '/admin/shop/inventory'
+      preLoaderRoute: typeof AdminShopInventoryRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/users/': {
+      id: '/admin/users/'
+      path: '/users'
+      fullPath: '/admin/users/'
+      preLoaderRoute: typeof AdminUsersIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/users/$userId': {
+      id: '/admin/users/$userId'
+      path: '/users/$userId'
+      fullPath: '/admin/users/$userId'
+      preLoaderRoute: typeof AdminUsersUserIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/waybills/': {
+      id: '/admin/waybills/'
+      path: '/waybills'
+      fullPath: '/admin/waybills/'
+      preLoaderRoute: typeof AdminWaybillsIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/waybills/$waybillId': {
+      id: '/admin/waybills/$waybillId'
+      path: '/waybills/$waybillId'
+      fullPath: '/admin/waybills/$waybillId'
+      preLoaderRoute: typeof AdminWaybillsWaybillIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/api/public/ai-bind-wechat': {
+      id: '/api/public/ai-bind-wechat'
+      path: '/api/public/ai-bind-wechat'
+      fullPath: '/api/public/ai-bind-wechat'
+      preLoaderRoute: typeof ApiPublicAiBindWechatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/ai-create-forwarding-order': {
+      id: '/api/public/ai-create-forwarding-order'
+      path: '/api/public/ai-create-forwarding-order'
+      fullPath: '/api/public/ai-create-forwarding-order'
+      preLoaderRoute: typeof ApiPublicAiCreateForwardingOrderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/ai-forwarding-options': {
+      id: '/api/public/ai-forwarding-options'
+      path: '/api/public/ai-forwarding-options'
+      fullPath: '/api/public/ai-forwarding-options'
+      preLoaderRoute: typeof ApiPublicAiForwardingOptionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/ai-order-billing': {
+      id: '/api/public/ai-order-billing'
+      path: '/api/public/ai-order-billing'
+      fullPath: '/api/public/ai-order-billing'
+      preLoaderRoute: typeof ApiPublicAiOrderBillingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/ai-resolve-wechat-customer': {
+      id: '/api/public/ai-resolve-wechat-customer'
+      path: '/api/public/ai-resolve-wechat-customer'
+      fullPath: '/api/public/ai-resolve-wechat-customer'
+      preLoaderRoute: typeof ApiPublicAiResolveWechatCustomerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/ai-track': {
+      id: '/api/public/ai-track'
+      path: '/api/public/ai-track'
+      fullPath: '/api/public/ai-track'
+      preLoaderRoute: typeof ApiPublicAiTrackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/ai-warehouse-scan': {
+      id: '/api/public/ai-warehouse-scan'
+      path: '/api/public/ai-warehouse-scan'
+      fullPath: '/api/public/ai-warehouse-scan'
+      preLoaderRoute: typeof ApiPublicAiWarehouseScanRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/shop/orders/': {
       id: '/admin/shop/orders/'
@@ -1581,46 +1765,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminShopOrdersIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
-    '/api/public/wechat/login': {
-      id: '/api/public/wechat/login'
-      path: '/api/public/wechat/login'
-      fullPath: '/api/public/wechat/login'
-      preLoaderRoute: typeof ApiPublicWechatLoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/wechat/callback': {
-      id: '/api/public/wechat/callback'
-      path: '/api/public/wechat/callback'
-      fullPath: '/api/public/wechat/callback'
-      preLoaderRoute: typeof ApiPublicWechatCallbackRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/ottpay-card': {
-      id: '/api/public/hooks/ottpay-card'
-      path: '/api/public/hooks/ottpay-card'
-      fullPath: '/api/public/hooks/ottpay-card'
-      preLoaderRoute: typeof ApiPublicHooksOttpayCardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/ottpay': {
-      id: '/api/public/hooks/ottpay'
-      path: '/api/public/hooks/ottpay'
-      fullPath: '/api/public/hooks/ottpay'
-      preLoaderRoute: typeof ApiPublicHooksOttpayRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/hooks/mark-overdue': {
-      id: '/api/public/hooks/mark-overdue'
-      path: '/api/public/hooks/mark-overdue'
-      fullPath: '/api/public/hooks/mark-overdue'
-      preLoaderRoute: typeof ApiPublicHooksMarkOverdueRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/shop/products/$productId': {
-      id: '/admin/shop/products/$productId'
-      path: '/shop/products/$productId'
-      fullPath: '/admin/shop/products/$productId'
-      preLoaderRoute: typeof AdminShopProductsProductIdRouteImport
+    '/admin/shop/orders/$orderId': {
+      id: '/admin/shop/orders/$orderId'
+      path: '/shop/orders/$orderId'
+      fullPath: '/admin/shop/orders/$orderId'
+      preLoaderRoute: typeof AdminShopOrdersOrderIdRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/shop/orders/procurement': {
@@ -1630,12 +1779,68 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminShopOrdersProcurementRouteImport
       parentRoute: typeof AdminRouteRoute
     }
-    '/admin/shop/orders/$orderId': {
-      id: '/admin/shop/orders/$orderId'
-      path: '/shop/orders/$orderId'
-      fullPath: '/admin/shop/orders/$orderId'
-      preLoaderRoute: typeof AdminShopOrdersOrderIdRouteImport
+    '/admin/shop/products/': {
+      id: '/admin/shop/products/'
+      path: '/shop/products'
+      fullPath: '/admin/shop/products/'
+      preLoaderRoute: typeof AdminShopProductsIndexRouteImport
       parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/shop/products/$productId': {
+      id: '/admin/shop/products/$productId'
+      path: '/shop/products/$productId'
+      fullPath: '/admin/shop/products/$productId'
+      preLoaderRoute: typeof AdminShopProductsProductIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/api/public/hooks/mark-overdue': {
+      id: '/api/public/hooks/mark-overdue'
+      path: '/api/public/hooks/mark-overdue'
+      fullPath: '/api/public/hooks/mark-overdue'
+      preLoaderRoute: typeof ApiPublicHooksMarkOverdueRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/ottpay': {
+      id: '/api/public/hooks/ottpay'
+      path: '/api/public/hooks/ottpay'
+      fullPath: '/api/public/hooks/ottpay'
+      preLoaderRoute: typeof ApiPublicHooksOttpayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/ottpay-card': {
+      id: '/api/public/hooks/ottpay-card'
+      path: '/api/public/hooks/ottpay-card'
+      fullPath: '/api/public/hooks/ottpay-card'
+      preLoaderRoute: typeof ApiPublicHooksOttpayCardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/wechat/callback': {
+      id: '/api/public/wechat/callback'
+      path: '/api/public/wechat/callback'
+      fullPath: '/api/public/wechat/callback'
+      preLoaderRoute: typeof ApiPublicWechatCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/wechat/login': {
+      id: '/api/public/wechat/login'
+      path: '/api/public/wechat/login'
+      fullPath: '/api/public/wechat/login'
+      preLoaderRoute: typeof ApiPublicWechatLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/intl/channel/callback/$': {
+      id: '/intl/channel/callback/$'
+      path: '/intl/channel/callback/$'
+      fullPath: '/intl/channel/callback/$'
+      preLoaderRoute: typeof IntlChannelCallbackSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/intl/channel/callback/wxkf-gpt': {
+      id: '/intl/channel/callback/wxkf-gpt'
+      path: '/intl/channel/callback/wxkf-gpt'
+      fullPath: '/intl/channel/callback/wxkf-gpt'
+      preLoaderRoute: typeof IntlChannelCallbackWxkfGptRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -1682,6 +1887,7 @@ interface AdminRouteRouteChildren {
   AdminSystemRoute: typeof AdminSystemRoute
   AdminTrackingPresetsRoute: typeof AdminTrackingPresetsRoute
   AdminWarehousesRoute: typeof AdminWarehousesRoute
+  AdminWechatAiRecordsRoute: typeof AdminWechatAiRecordsRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminBatchesBatchIdRoute: typeof AdminBatchesBatchIdRoute
   AdminCartonsCartonIdRoute: typeof AdminCartonsCartonIdRoute
@@ -1735,6 +1941,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminSystemRoute: AdminSystemRoute,
   AdminTrackingPresetsRoute: AdminTrackingPresetsRoute,
   AdminWarehousesRoute: AdminWarehousesRoute,
+  AdminWechatAiRecordsRoute: AdminWechatAiRecordsRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminBatchesBatchIdRoute: AdminBatchesBatchIdRoute,
   AdminCartonsCartonIdRoute: AdminCartonsCartonIdRoute,
@@ -1806,14 +2013,23 @@ const rootRouteChildren: RootRouteChildren = {
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  CgiBinSplatRoute: CgiBinSplatRoute,
   DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
   Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
+  ApiPublicAiBindWechatRoute: ApiPublicAiBindWechatRoute,
+  ApiPublicAiCreateForwardingOrderRoute: ApiPublicAiCreateForwardingOrderRoute,
+  ApiPublicAiForwardingOptionsRoute: ApiPublicAiForwardingOptionsRoute,
+  ApiPublicAiOrderBillingRoute: ApiPublicAiOrderBillingRoute,
+  ApiPublicAiResolveWechatCustomerRoute: ApiPublicAiResolveWechatCustomerRoute,
   ApiPublicAiTrackRoute: ApiPublicAiTrackRoute,
+  ApiPublicAiWarehouseScanRoute: ApiPublicAiWarehouseScanRoute,
   ApiPublicHooksMarkOverdueRoute: ApiPublicHooksMarkOverdueRoute,
   ApiPublicHooksOttpayRoute: ApiPublicHooksOttpayRoute,
   ApiPublicHooksOttpayCardRoute: ApiPublicHooksOttpayCardRoute,
   ApiPublicWechatCallbackRoute: ApiPublicWechatCallbackRoute,
   ApiPublicWechatLoginRoute: ApiPublicWechatLoginRoute,
+  IntlChannelCallbackSplatRoute: IntlChannelCallbackSplatRoute,
+  IntlChannelCallbackWxkfGptRoute: IntlChannelCallbackWxkfGptRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

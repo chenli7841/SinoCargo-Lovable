@@ -6,6 +6,25 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
+import { fileURLToPath } from "node:url";
+import type { Plugin } from "vite";
+
+const cloudflareWorkersDevShimPath = fileURLToPath(
+  new URL("./src/lib/cloudflare-workers-dev.ts", import.meta.url),
+);
+
+const cloudflareWorkersDevShim: Plugin = {
+  name: "cloudflare-workers-dev-shim",
+  enforce: "pre",
+  resolveId(id) {
+    if (id !== "cloudflare:workers") return null;
+    // Dev (Node) has no workerd runtime: use a local no-op shim.
+    // Build: keep it external so the deployed Worker resolves it natively.
+    return this.environment?.mode === "build"
+      ? { id, external: true }
+      : cloudflareWorkersDevShimPath;
+  },
+};
 
 export default defineConfig({
   tanstackStart: {
@@ -14,6 +33,6 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
-    plugins: [mcpPlugin()],
+    plugins: [cloudflareWorkersDevShim, mcpPlugin()],
   },
 });

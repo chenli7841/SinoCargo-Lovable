@@ -153,6 +153,16 @@ function AuthPage() {
           {company.name}
         </Link>
 
+        <div className="mb-4 rounded-2xl border-2 border-warning/50 bg-warning/10 p-4 text-sm">
+          <p className="mb-1 font-bold text-foreground">{tr("老客户通知", "Notice for existing customers")}</p>
+          <p className="text-ink-soft">
+            {tr(
+              "老客户请使用原有的登录名 + 密码 123456 登录。登录后请到「个人资料 → 账号安全」修改密码。",
+              "Existing customers: sign in with your original login name and the password 123456, then change it under Profile → Account Security.",
+            )}
+          </p>
+        </div>
+
         <div className="rounded-3xl border border-border bg-surface p-6 shadow-elevated sm:p-8">
           <div className="mb-6 grid grid-cols-2 gap-1 rounded-full bg-accent p-1 text-sm font-medium">
             <button
@@ -195,18 +205,8 @@ function AuthPage() {
             {tr("使用 Google 继续", "Continue with Google")}
           </button>
 
-          <button
-            onClick={() => {
-              window.location.href = "/api/public/wechat/login";
-            }}
-            disabled={busy}
-            className="mb-3 flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium transition hover:bg-accent disabled:opacity-50"
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="#07C160">
-              <path d="M8.5 4C4.36 4 1 6.91 1 10.5c0 2.08 1.13 3.92 2.88 5.12L3 18l2.5-1.32c.79.21 1.63.32 2.5.32.2 0 .4-.01.6-.02-.06-.32-.1-.65-.1-.98 0-3.31 3.13-6 7-6 .27 0 .53.01.79.04C15.92 6.97 12.55 4 8.5 4zM6 8.5a1 1 0 110 2 1 1 0 010-2zm5 0a1 1 0 110 2 1 1 0 010-2zM16 10c-3.31 0-6 2.24-6 5s2.69 5 6 5c.74 0 1.45-.11 2.1-.32L20 21l-.5-1.8C21.07 18.27 22 16.74 22 15c0-2.76-2.69-5-6-5zm-2 4a.75.75 0 110 1.5.75.75 0 010-1.5zm4 0a.75.75 0 110 1.5.75.75 0 010-1.5z" />
-            </svg>
-            {tr("使用微信登录", "Continue with WeChat")}
-          </button>
+          {/* WeChat sign-in hidden until the WeChat Open Platform app is approved. */}
+
 
           <form onSubmit={handleSubmit} className="space-y-3">
             {mode === "signup" ? (

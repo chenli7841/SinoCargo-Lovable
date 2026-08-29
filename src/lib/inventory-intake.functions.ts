@@ -53,10 +53,11 @@ export const listInventoryIntakeOrders = createServerFn({ method: "POST" })
     const { data: invItems } = await supabaseAdmin
       .from("forwarding_items")
       .select("id, forwarding_id, name, quantity, extras")
-      .not("extras->inv_box_count", "is", null)
+      .not("extras->>inv_box_count", "is", null)
       .order("created_at", { ascending: false })
       .limit(600);
-    const rows = (invItems ?? []) as any[];
+    // extras 里可能存在 inv_box_count: null（普通集运单也会写入该键），必须排除
+    const rows = ((invItems ?? []) as any[]).filter((r) => Number(r.extras?.inv_box_count ?? 0) > 0);
     const ids = Array.from(new Set(rows.map((r) => r.forwarding_id)));
     if (!ids.length) return { orders: [] as any[] };
     const { data: orders } = await supabaseAdmin

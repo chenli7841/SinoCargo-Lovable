@@ -139,7 +139,9 @@ function WaybillDetail() {
                 </>
               )}
             </div>
+            <div>目的地：{(detailQ.data as any)?.address_destination_code ?? "—"}<span className="ml-1 text-slate-500">（收件地址）</span></div>
             <div>重量：{wb.weight_kg ?? "—"} kg</div>
+
 
             <div>尺寸：{wb.length_cm ?? "—"} × {wb.width_cm ?? "—"} × {wb.height_cm ?? "—"} cm</div>
             <div>箱号：{wb.box_no ?? "—"} · 板号：{wb.pallet_no ?? "—"}</div>

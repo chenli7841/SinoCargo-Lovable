@@ -43,7 +43,7 @@ export function containerTemplate(d: LabelData): string {
         <div class="muted">${title}</div>
         <div class="entity">${d.entityNo}</div>
       </div>
-      <div class="bc-lg">${barcodeSVG(d.entityNo, 1.8, 46)}</div>
+      <div class="bc-lg">${barcodeSVG(d.entityNo, 46)}</div>
     </div>
     <div class="right">
       ${rows.map(([k, v]) => `<div class="row"><span class="muted">${k}</span><b class="clip">${v}</b></div>`).join("")}

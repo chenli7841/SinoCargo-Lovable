@@ -31,6 +31,8 @@ export function adaptProduct(p: PublicProduct): Product {
     packQty: p.pack_qty ?? 1,
     packWeightKg: p.pack_weight_kg ?? undefined,
     availableRouteCodes: Array.isArray(p.available_route_codes) ? p.available_route_codes : [],
+    personalRouteCodes: [p.personal_sea_route_code, p.personal_air_route_code].filter(Boolean) as string[],
+    businessRouteCodes: [p.business_sea_route_code, p.business_air_route_code].filter(Boolean) as string[],
   } as Product;
 }
 

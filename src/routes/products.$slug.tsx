@@ -188,7 +188,13 @@ function ProductDetail() {
   const { data: routesData } = useSuspenseQuery(routesQO);
   const allowedRoutes = useMemo(() => {
     const all = routesData?.items ?? [];
-    const allow = (dp as any).available_route_codes as string[] | null;
+    const d = dp as any;
+    const modeCodes = (
+      d.purchase_type === "business"
+        ? [d.business_sea_route_code, d.business_air_route_code]
+        : [d.personal_sea_route_code, d.personal_air_route_code]
+    ).filter(Boolean) as string[];
+    const allow = modeCodes.length > 0 ? modeCodes : ((d.available_route_codes as string[] | null) ?? null);
     if (!allow || allow.length === 0) return all;
     return all.filter((r: any) => allow.includes(r.code));
   }, [routesData, dp]);

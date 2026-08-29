@@ -19,7 +19,7 @@ export function minimalTemplate(d: LabelData): string {
     <div class="minimal-dest">${p.destination_code ?? "—"}</div>
   </div>
   <div class="minimal-body">
-    <div class="bc-xl">${barcodeSVG(w.waybill_no || "—", 2.4, 70)}</div>
+    <div class="bc-xl">${barcodeSVG(w.waybill_no || "—", 70)}</div>
     <div class="minimal-meta">
       <div><span class="muted">客户号</span><b class="mono">${u.customer_code ?? "—"}</b></div>
       <div><span class="muted">重量</span><b>${w.weight_kg ?? "—"} kg</b></div>

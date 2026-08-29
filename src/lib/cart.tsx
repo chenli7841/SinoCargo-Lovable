@@ -33,6 +33,9 @@ export interface CartLine {
   packWeightKg?: number;
   /** Shipping routes this product is restricted to; empty = all routes allowed */
   availableRouteCodes?: string[];
+  /** Routes configured for this product in personal / business purchase mode */
+  personalRouteCodes?: string[];
+  businessRouteCodes?: string[];
   quantity: number;
   /** Present when this line is a specific SKU rather than the product's default. */
   variantId?: string;
@@ -125,6 +128,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
           packQty: variant?.packQty ?? p.packQty,
           packWeightKg: variant?.packWeightKg ?? p.packWeightKg,
           availableRouteCodes: p.availableRouteCodes ?? [],
+          personalRouteCodes: p.personalRouteCodes ?? [],
+          businessRouteCodes: p.businessRouteCodes ?? [],
           quantity: minQty,
           variantId: variant?.id,
           variantSku: variant?.sku,

@@ -76,6 +76,8 @@ export type ShippingRoute = {
   visible_customer_codes: string[];
   blacklist_vip_levels: VipLevel[];
   blacklist_customer_codes: string[];
+  wechat_ai_enabled: boolean;
+  wechat_ai_price_text: string | null;
 };
 
 export type FreightDirection = "forward" | "reverse";
@@ -184,7 +186,8 @@ export const listWarehouses = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertStaff(context.supabase, context.userId);
-    const { data, error } = await context.supabase
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
       .from("warehouses")
       .select("*")
       .order("sort_order", { ascending: true })

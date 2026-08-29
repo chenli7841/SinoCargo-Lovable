@@ -36,6 +36,7 @@ import {
   PackageCheck,
   Mail,
   UserSearch,
+  Bot,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
@@ -87,6 +88,7 @@ const NAV_ICONS: Record<string, any> = {
   Mail,
   UserSearch,
   ShieldCheck,
+  Bot,
 };
 
 // Fallback only — used before admin_nav_items has loaded (or if it's ever
@@ -159,6 +161,7 @@ const DEFAULT_NAV_GROUPS: NavGroup[] = [
       { to: "/admin/users", label: "用户管理", icon: Users },
       { to: "/admin/messages", label: "留言信息", icon: Mail },
       { to: "/admin/logs", label: "操作日志", icon: History },
+      { to: "/admin/wechat-ai-records", label: "微信 AI 客服记录", icon: Bot },
       { to: "/admin/system", label: "系统设置", icon: SettingsIcon },
       { to: "/admin/warehouses", label: "仓库管理", icon: Warehouse },
       { to: "/admin/routes", label: "线路 / 运费", icon: RouteIcon },

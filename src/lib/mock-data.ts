@@ -37,6 +37,10 @@ export interface Product {
   packWeightKg?: number;
   /** Shipping routes this product is restricted to; empty/undefined = all routes allowed */
   availableRouteCodes?: string[];
+  /** Routes configured for personal-purchase mode (sea/air); empty = fall back to availableRouteCodes */
+  personalRouteCodes?: string[];
+  /** Routes configured for business-purchase mode (sea/air); empty = fall back to availableRouteCodes */
+  businessRouteCodes?: string[];
   /** Business-only: tiered/wholesale pricing hint */
   wholesaleNote?: { zh: string; en: string };
 }
