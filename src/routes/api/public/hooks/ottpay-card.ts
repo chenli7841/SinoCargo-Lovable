@@ -6,7 +6,9 @@ export const Route = createFileRoute("/api/public/hooks/ottpay-card")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const { decryptHosted, HOSTED_PAID_STATES, HOSTED_FAILED_STATES } = await import("@/lib/ottpay-hosted.server");
+        const { decryptHosted, hostedMd5Matches, HOSTED_PAID_STATES, HOSTED_FAILED_STATES } = await import(
+          "@/lib/ottpay-hosted.server"
+        );
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
         let payload: any;
@@ -23,6 +25,13 @@ export const Route = createFileRoute("/api/public/hooks/ottpay-card")({
           info = decryptHosted({ data: String(payload.data), md5: String(payload.md5) });
         } catch (e: any) {
           console.error("[ottpay-card] decrypt failed", e?.message);
+          return new Response("invalid signature", { status: 401 });
+        }
+
+        // Pin the decrypted body to the signKey-derived md5 so a captured
+        // genuine (data, md5) pair can't be replayed with a tampered envelope.
+        if (!hostedMd5Matches(String(payload.md5), info)) {
+          console.error("[ottpay-card] md5 mismatch — rejecting callback", info.order_id ?? info.orderId);
           return new Response("invalid signature", { status: 401 });
         }
 

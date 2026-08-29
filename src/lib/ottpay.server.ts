@@ -75,4 +75,33 @@ export function decryptOttCallback(payload: { data: string; md5: string }): Reco
   return JSON.parse(out);
 }
 
+/**
+ * Recompute the callback md5 (sort keys asc, concat values, MD5, upper-case)
+ * and check it against the client-supplied `payload.md5`. The AES key is
+ * derived from that supplied md5, so this is what actually pins the plaintext
+ * body to something signed with OTTPAY_SIGN_KEY. Returns true on match.
+ *
+ * NOTE: if legitimate wallet callbacks start failing signature check, OTT Pay
+ * may sign a different field set — loosen in the caller, not here.
+ */
+export function ottCallbackMd5Matches(suppliedMd5: string, decrypted: Record<string, unknown>): boolean {
+  const flat: Record<string, string> = {};
+  for (const k of Object.keys(decrypted)) {
+    const v = decrypted[k];
+    flat[k] = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+  }
+  const recomputed = crypto
+    .createHash("md5")
+    .update(
+      Object.keys(flat)
+        .sort()
+        .map((k) => flat[k])
+        .join(""),
+      "utf8",
+    )
+    .digest("hex")
+    .toUpperCase();
+  return String(suppliedMd5).toUpperCase() === recomputed;
+}
+
 export const OTT_SUCCESS_STATES = new Set(["success", "captured", "authorised", "authorized"]);

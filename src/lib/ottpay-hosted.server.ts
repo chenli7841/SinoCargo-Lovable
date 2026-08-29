@@ -60,10 +60,32 @@ export function decryptHosted(payload: { data: string; md5: string }): Record<st
   return JSON.parse(out);
 }
 
-/** yyyyMMddHHmmss (UTC-based is accepted; format is what matters) */
+/**
+ * Recompute the payload md5 exactly the way encryptHosted signs outbound
+ * requests (sort keys asc, concat values, MD5, upper-case). The inbound
+ * callback derives its AES key from the *client-supplied* `payload.md5`, so
+ * without this check a captured genuine `(data, md5)` pair could be replayed
+ * with the plaintext envelope tampered. Returns true when the supplied md5
+ * matches the decrypted body.
+ *
+ * NOTE: if legitimate card callbacks ever start returning 401 "invalid
+ * signature", this is the first suspect — OTT Pay may sign a different field
+ * set. Loosening back to accept-and-log is a one-line change in the caller.
+ */
+export function hostedMd5Matches(suppliedMd5: string, decrypted: Record<string, unknown>): boolean {
+  const flat: Record<string, string> = {};
+  for (const k of Object.keys(decrypted)) {
+    const v = decrypted[k];
+    flat[k] = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+  }
+  return String(suppliedMd5).toUpperCase() === md5Upper(joinSorted(flat));
+}
+
+/** yyyyMMddHHmmss in UTC — must not depend on the host's local timezone,
+ * or a non-UTC deploy sends a stale/future timestamp and the gateway rejects it. */
 export function txnTime(d = new Date()): string {
   const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}`;
 }
 
 export async function hostedPost(action: string, version: string, data: Record<string, string>): Promise<any> {
