@@ -1,17 +1,33 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { detectScanKind, type ScanKind } from "@/lib/scan-detect";
 
 async function assertStaff(supabase: any, userId: string) {
   const { data } = await supabase.rpc("is_staff", { _user_id: userId });
   if (!data) throw new Error("Forbidden");
 }
 
-function detectKind(code: string): "carton" | "pallet" | "waybill" {
-  const c = code.trim().toUpperCase();
-  if (c.startsWith("BOX")) return "carton";
-  if (c.startsWith("PAL")) return "pallet";
-  return "waybill";
+// Resolve a scanned code against cartons / pallets / batches / waybills regardless of prefix guess
+async function resolveScanCode(
+  supabaseAdmin: any,
+  code: string,
+  guess: ScanKind,
+): Promise<ScanKind> {
+  const check = async (kind: ScanKind) => {
+    const table =
+      kind === "carton" ? "cartons" : kind === "pallet" ? "pallets" : kind === "batch" ? "batches" : "waybills";
+    const col =
+      kind === "carton" ? "carton_no" : kind === "pallet" ? "pallet_no" : kind === "batch" ? "batch_no" : "waybill_no";
+    const { data } = await supabaseAdmin.from(table).select("id").eq(col, code).maybeSingle();
+    return !!data;
+  };
+  if (await check(guess)) return guess;
+  for (const k of ["carton", "pallet", "batch", "waybill"] as const) {
+    if (k !== guess && (await check(k))) return k;
+  }
+  return guess;
 }
+
 
 // ====== Unified scan-add: add waybill / carton / pallet code to a batch or pallet container ======
 export const scanAddToContainer = createServerFn({ method: "POST" })
@@ -22,7 +38,10 @@ export const scanAddToContainer = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const code = data.code.trim();
     if (!code) throw new Error("空扫描");
-    const kind = detectKind(code);
+    const kind = await resolveScanCode(supabaseAdmin, code, detectScanKind(code));
+    if (kind === "batch") {
+      throw new Error(`扫描到的是批次号 ${code}（批次不能加入容器），请改扫运单号 / 箱号 / 托盘号`);
+    }
     const operatorName = await getOperatorName(supabaseAdmin, context.userId);
 
     const writeLog = async (rows: any[]) => {

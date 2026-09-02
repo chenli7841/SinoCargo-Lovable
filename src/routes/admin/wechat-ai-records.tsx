@@ -4,40 +4,43 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   getWechatConversation,
+  getAiSupportThread,
+  listAiSupportThreads,
   listWechatAiAudit,
   listWechatBindings,
   listWechatConversations,
   updateWechatBinding,
 } from "@/lib/wechat-ai-records.functions";
 import { Pagination } from "@/components/admin/Pagination";
-import { Bot, Loader2, MessageSquare, Link2, ShieldCheck } from "lucide-react";
+import { Bot, Loader2, MessageSquare, Link2, ShieldCheck, Bell } from "lucide-react";
 
 export const Route = createFileRoute("/admin/wechat-ai-records")({
   head: () => ({
-    meta: [{ title: "微信 AI 客服记录 — SinoCargo Admin" }, { name: "robots", content: "noindex,nofollow" }],
+    meta: [{ title: "AI 客服记录 — SinoCargo Admin" }, { name: "robots", content: "noindex,nofollow" }],
   }),
   component: WechatAiRecordsPage,
 });
 
 const fmt = (v?: string | null) => (v ? new Date(v).toLocaleString("zh-CN") : "-");
 
-type Tab = "conversations" | "bindings" | "audit";
+type Tab = "support" | "conversations" | "bindings" | "audit";
 
 function WechatAiRecordsPage() {
-  const [tab, setTab] = useState<Tab>("conversations");
+  const [tab, setTab] = useState<Tab>("support");
 
   return (
     <div className="mx-auto max-w-7xl p-6">
       <div className="mb-5 flex items-center gap-2">
         <Bot className="h-5 w-5 text-primary" />
-        <h1 className="text-xl font-semibold">微信 AI 客服记录</h1>
+        <h1 className="text-xl font-semibold">AI 客服记录</h1>
       </div>
 
       <div className="mb-4 flex gap-2">
         {(
           [
-            ["conversations", "会话与对话记录", MessageSquare],
-            ["bindings", "客户绑定关系", Link2],
+            ["support", "GPT / 站内留言", Bell],
+            ["conversations", "历史微信会话", MessageSquare],
+            ["bindings", "微信客户绑定", Link2],
             ["audit", "管理操作审计", ShieldCheck],
           ] as Array<[Tab, string, any]>
         ).map(([key, label, Icon]) => (
@@ -54,9 +57,81 @@ function WechatAiRecordsPage() {
         ))}
       </div>
 
+      {tab === "support" && <SupportMessagesTab />}
       {tab === "conversations" && <ConversationsTab />}
       {tab === "bindings" && <BindingsTab />}
       {tab === "audit" && <AuditTab />}
+    </div>
+  );
+}
+
+function SupportMessagesTab() {
+  const fetchThreads = useServerFn(listAiSupportThreads);
+  const fetchThread = useServerFn(getAiSupportThread);
+  const [qIn, setQIn] = useState("");
+  const [q, setQ] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  const threadsQ = useQuery({
+    queryKey: ["ai-support-threads", q],
+    queryFn: () => fetchThreads({ data: { q: q || undefined, limit: 100 } }),
+    refetchInterval: 15_000,
+  });
+  const detailQ = useQuery({
+    queryKey: ["ai-support-thread", openId],
+    queryFn: () => fetchThread({ data: { id: openId! } }),
+    enabled: Boolean(openId),
+    refetchInterval: openId ? 10_000 : false,
+  });
+  const threads = (threadsQ.data ?? []) as any[];
+  const unread = threads.reduce((sum, thread) => sum + Number(thread.unread_for_staff ?? 0), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-2">
+          <input value={qIn} onChange={(e) => setQIn(e.target.value)} onKeyDown={(e) => e.key === "Enter" && setQ(qIn)} placeholder="搜索客户号" className="w-64 rounded-md border border-border bg-background px-3 py-1.5 text-sm" />
+          <button onClick={() => setQ(qIn)} className="rounded-md border border-border px-3 py-1.5 text-sm">搜索</button>
+        </div>
+        <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm ${unread ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}>
+          <Bell className="h-4 w-4" />{unread ? `${unread} 条新消息` : "暂无新消息"}
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
+        <div className="max-h-[650px] overflow-y-auto rounded-lg border border-border">
+          {threadsQ.isLoading && <Loader2 className="m-6 h-4 w-4 animate-spin" />}
+          {threads.map((thread) => (
+            <button key={thread.id} onClick={() => setOpenId(thread.id)} className={`block w-full border-b border-border p-3 text-left last:border-b-0 ${openId === thread.id ? "bg-primary/10" : "hover:bg-muted/50"}`}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-medium">客户 {thread.customer_code}</span>
+                {thread.unread_for_staff > 0 && <span className="rounded-full bg-destructive px-2 py-0.5 text-xs text-destructive-foreground">{thread.unread_for_staff}</span>}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">最近消息：{fmt(thread.last_message_at)}</div>
+            </button>
+          ))}
+          {!threadsQ.isLoading && !threads.length && <div className="p-8 text-center text-sm text-muted-foreground">暂无 GPT / 站内留言</div>}
+        </div>
+
+        <div className="min-h-72 rounded-lg border border-border p-4">
+          {!openId && <div className="grid h-64 place-items-center text-sm text-muted-foreground">选择一个客户查看留言</div>}
+          {detailQ.isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {detailQ.data && (
+            <>
+              <div className="mb-3 border-b border-border pb-3 font-semibold">客户 {detailQ.data.thread?.customer_code}</div>
+              <div className="max-h-[560px] space-y-3 overflow-y-auto">
+                {((detailQ.data.messages ?? []) as any[]).map((message) => (
+                  <div key={message.id} className={message.sender_role === "customer" ? "pr-10" : "pl-10"}>
+                    <div className="mb-1 text-xs text-muted-foreground">{message.sender_role === "customer" ? "客户" : "EPLUS 客服"} · {message.source} · {fmt(message.created_at)}</div>
+                    <div className="whitespace-pre-wrap rounded-md bg-muted/60 p-3 text-sm">{message.body}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">这里按 EPLUS OAuth 客户账号分组，只保存通过 EPLUS 工具或站内系统产生的留言，不会复制客户私人 ChatGPT 对话。</p>
     </div>
   );
 }

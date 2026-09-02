@@ -295,7 +295,7 @@ function CopyRow({ label, value }: { label: string; value: string }) {
 // ===================== Overview =====================
 interface UnpaidBatch {
   batch_no: string;
-  total_cad: number;
+  total_cad: number | null;
   shipping_method: string | null;
 }
 
@@ -354,7 +354,7 @@ function OverviewTab({
     });
   }, []);
 
-  const unpaidTotalCad = unpaidBatches.reduce((s, b) => s + b.total_cad, 0);
+  const unpaidTotalCad = unpaidBatches.reduce((s, b) => s + (b.total_cad ?? 0), 0);
 
   return (
     <div className="space-y-6">
@@ -488,8 +488,10 @@ function OverviewTab({
                   {b.shipping_method === "air" ? <Plane className="h-3 w-3" /> : <Ship className="h-3 w-3" />}
                 </span>
                 <span className="font-mono text-xs font-semibold">{b.batch_no}</span>
-                <span className="ml-auto font-display text-base font-bold text-foreground">
-                  CA${b.total_cad.toFixed(2)}
+                <span className="ml-auto text-right font-display text-base font-bold text-foreground">
+                  {b.total_cad == null
+                    ? <span className="text-xs font-medium text-amber-600">{tr("等待客服确认费用", "Awaiting fee confirmation")}</span>
+                    : `CA$${b.total_cad.toFixed(2)}`}
                 </span>
               </li>
             ))}

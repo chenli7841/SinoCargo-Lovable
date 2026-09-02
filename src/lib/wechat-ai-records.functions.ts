@@ -225,3 +225,40 @@ export const listWechatAiAudit = createServerFn({ method: "POST" })
       .limit(Math.min(200, data.limit ?? 50));
     return rows ?? [];
   });
+
+/** GPT / website support messages grouped by the OAuth customer account. */
+export const listAiSupportThreads = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { q?: string; limit?: number } = {}) => d)
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    let query = supabaseAdmin
+      .from("ai_support_threads")
+      .select("*")
+      .order("last_message_at", { ascending: false })
+      .limit(Math.min(100, Math.max(1, data.limit ?? 50)));
+    if (data.q?.trim()) query = query.ilike("customer_code", `%${data.q.trim()}%`);
+    const { data: threads, error } = await query;
+    if (error) throw new Error(error.message);
+    return threads ?? [];
+  });
+
+export const getAiSupportThread = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const [thread, messages] = await Promise.all([
+      supabaseAdmin.from("ai_support_threads").select("*").eq("id", data.id).maybeSingle(),
+      supabaseAdmin.from("ai_support_messages").select("*").eq("thread_id", data.id).order("created_at", { ascending: true }).limit(500),
+    ]);
+    if (thread.error) throw new Error(thread.error.message);
+    if (messages.error) throw new Error(messages.error.message);
+    await Promise.all([
+      supabaseAdmin.from("ai_support_messages").update({ read_by_staff_at: new Date().toISOString() }).eq("thread_id", data.id).is("read_by_staff_at", null),
+      supabaseAdmin.from("ai_support_threads").update({ unread_for_staff: 0, updated_at: new Date().toISOString() }).eq("id", data.id),
+    ]);
+    return { thread: thread.data, messages: messages.data ?? [] };
+  });

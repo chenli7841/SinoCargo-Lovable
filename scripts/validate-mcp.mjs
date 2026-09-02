@@ -18,6 +18,9 @@ assert.match(mcpSource, /more than 5 records/, "MCP must limit bulk result prese
 assert.match(mcpSource, /For images, files, or spoken input/, "MCP must define multimodal handoff rules");
 assert.match(mcpSource, /Never invent unreadable text/, "MCP must reject uncertain media extraction");
 assert.match(mcpSource, /never automatically repeat a non-idempotent write/, "MCP must not retry uncertain writes");
+assert.match(mcpSource, /Identity always comes from EPLUS OAuth/, "Customer identity must come from OAuth");
+assert.match(mcpSource, /automatically use the address marked is_default=true/, "Forwarding creation must use the default saved address");
+assert.match(mcpSource, /show only the returned routes/, "Forwarding creation must use permission-filtered route options");
 
 const requiredTools = [
   "get_current_customer",
@@ -35,6 +38,10 @@ const requiredTools = [
   "get_owner_dashboard",
   "search_customers_owner",
   "set_waybill_status_manager",
+  "search_eplus_knowledge",
+  "list_my_support_messages",
+  "send_my_support_message",
+  "send_customer_support_message_admin",
 ];
 for (const name of requiredTools) assert.ok(byName.has(name), `Required MCP tool is missing: ${name}`);
 
@@ -45,11 +52,12 @@ assert.deepEqual(forbiddenTools, [], `Payment mutation tools are forbidden: ${fo
 for (const name of ["delete_my_item", "delete_my_address", "cancel_forwarding_draft", "set_waybill_status_manager"]) {
   assert.equal(byName.get(name)?.annotations?.destructiveHint, true, `${name} must remain marked destructive`);
 }
-for (const name of ["confirm_forwarding_draft", "delete_my_item", "delete_my_address", "cancel_forwarding_draft", "update_forwarding_basic_info_owner", "set_waybill_status_manager"]) {
+for (const name of ["confirm_forwarding_draft", "delete_my_item", "delete_my_address", "cancel_forwarding_draft", "update_forwarding_basic_info_owner", "set_waybill_status_manager", "send_my_support_message", "send_customer_support_message_admin"]) {
   assert.ok(byName.get(name)?.inputSchema?.properties?.confirmation, `${name} must require a confirmation token`);
 }
 assert.ok(byName.get("confirm_forwarding_draft")?.inputSchema?.properties?.expected_version, "Draft confirmation must bind to the reviewed version");
 assert.equal(byName.get("save_forwarding_draft")?.annotations?.idempotentHint, false, "Draft creation is not idempotent without a draft_id");
+assert.ok(!byName.get("save_forwarding_draft")?.inputSchema?.required?.includes("warehouse"), "Warehouse must not be requested from the customer");
 
 assert.ok(evals.cases.length >= 20, "Regression suite must cover at least 20 cases");
 const evalIds = new Set();

@@ -27,6 +27,9 @@ const STATUS_COLORS: Record<string, string> = {
   void: "border-slate-500/30 bg-slate-500/10 text-slate-400",
 };
 const STATUS_LABEL: Record<string, string> = { unpaid: "待付", paid: "已付", overdue: "逾期", void: "作废" };
+const invoiceTotalCad = (invoice: any) => Number(invoice.total_cny ?? 0) * Number(invoice.fx_rate ?? 0.19);
+const formatCad = (value: number) =>
+  `CA$${value.toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 function InvoicesPage() {
   const fetchList = useServerFn(listInvoices);
@@ -102,14 +105,13 @@ function InvoicesPage() {
         rows.push(...r.items);
         if (rows.length >= r.total || r.items.length === 0) break;
       }
-      const header = ["账单号", "客户", "客户号", "类型", "金额CNY", "折合CAD", "状态", "到期日", "创建时间"];
+      const header = ["账单号", "客户", "客户号", "类型", "金额CAD", "状态", "到期日", "创建时间"];
       const csvRows = rows.map((r: any) => [
         r.invoice_no,
         r.customer?.full_name ?? r.customer?.email ?? "",
         r.customer?.customer_code ?? "",
         r.type,
-        Number(r.total_cny).toFixed(2),
-        (Number(r.total_cny) * Number(r.fx_rate ?? 0.19)).toFixed(2),
+        invoiceTotalCad(r).toFixed(2),
         STATUS_LABEL[r.status] ?? r.status,
         r.due_date ?? "",
         new Date(r.created_at).toLocaleString("zh-CN"),
@@ -162,10 +164,10 @@ function InvoicesPage() {
 
       {/* Finance summary */}
       <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="近30天开票额" value={`¥${(sumQ.data?.total_cny ?? 0).toLocaleString()}`} />
-        <Stat label="已收款" value={`¥${(sumQ.data?.paid_cny ?? 0).toLocaleString()}`} color="text-emerald-300" />
-        <Stat label="待收款" value={`¥${(sumQ.data?.unpaid_cny ?? 0).toLocaleString()}`} color="text-amber-300" />
-        <Stat label="逾期金额" value={`¥${(sumQ.data?.overdue_cny ?? 0).toLocaleString()}`} color="text-rose-300" />
+        <Stat label="近30天开票额" value={formatCad(sumQ.data?.total_cad ?? 0)} />
+        <Stat label="已收款" value={formatCad(sumQ.data?.paid_cad ?? 0)} color="text-emerald-300" />
+        <Stat label="待收款" value={formatCad(sumQ.data?.unpaid_cad ?? 0)} color="text-amber-300" />
+        <Stat label="逾期金额" value={formatCad(sumQ.data?.overdue_cad ?? 0)} color="text-rose-300" />
       </div>
 
       {userId && (
@@ -255,7 +257,7 @@ function InvoicesPage() {
               <th className="px-4 py-2.5">账单号</th>
               <th className="px-4 py-2.5">客户</th>
               <th className="px-4 py-2.5">类型</th>
-              <th className="px-4 py-2.5">金额 (CNY)</th>
+              <th className="px-4 py-2.5">金额 (CAD)</th>
               <th className="px-4 py-2.5">状态</th>
               <th className="px-4 py-2.5">到期</th>
               <th className="px-4 py-2.5">创建</th>
@@ -314,7 +316,7 @@ function InvoicesPage() {
                   {r.type}
                   {r.batch_no ? <div className="font-mono text-[10px] text-slate-500">{r.batch_no}</div> : null}
                 </td>
-                <td className="px-4 py-3 text-sm font-semibold">¥{Number(r.total_cny).toFixed(2)}</td>
+                <td className="px-4 py-3 text-sm font-semibold">{formatCad(invoiceTotalCad(r))}</td>
                 <td className="px-4 py-3">
                   <span
                     className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[r.status]}`}

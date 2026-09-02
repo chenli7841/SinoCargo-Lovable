@@ -7,12 +7,7 @@ async function assertStaff(supabase: any, userId: string) {
   if (!data) throw new Error("Forbidden");
 }
 
-function detectKind(code: string): "carton" | "pallet" | "waybill" {
-  const c = code.trim().toUpperCase();
-  if (c.startsWith("BOX")) return "carton";
-  if (c.startsWith("PAL")) return "pallet";
-  return "waybill";
-}
+import { detectScanKind, SCAN_KIND_LABEL } from "@/lib/scan-detect";
 
 // ===== List receivings =====
 export const listReceivings = createServerFn({ method: "GET" })
@@ -103,7 +98,30 @@ export const scanReceive = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const code = data.code.trim();
     if (!code) throw new Error("空扫描");
-    const kind = detectKind(code);
+    const kind = detectScanKind(code);
+
+    // 扫描批次号 → 直接把本次入库匹配到该批次
+    if (kind === "batch") {
+      const { data: b } = await supabaseAdmin
+        .from("batches")
+        .select("id, batch_no")
+        .eq("batch_no", code)
+        .maybeSingle();
+      if (!b) throw new Error(`批次 ${code} 不存在`);
+      await supabaseAdmin
+        .from("receivings")
+        .update({ batch_id: b.id, status: "matched" })
+        .eq("id", data.receivingId);
+      await recordAdminLog(supabaseAdmin, {
+        entity_type: "receiving",
+        entity_id: data.receivingId,
+        action: "scan_match_batch",
+        after: { batch_id: b.id, batch_no: b.batch_no },
+        operator_id: context.userId,
+        note: `扫码匹配批次 ${b.batch_no}`,
+      });
+      return { ok: true, kind, extra: false, scan_id: null, info: `批次 ${b.batch_no} 已匹配` };
+    }
 
     let ref_id: string | null = null;
     let label: string = code;
@@ -205,7 +223,7 @@ export const scanReceive = createServerFn({ method: "POST" })
       kind,
       extra,
       scan_id: scanRow?.id ?? null,
-      info: `${kind === "waybill" ? "运单" : kind === "carton" ? "箱号" : "托盘"} ${label} ${extra ? "⚠ 不属于当前批次" : "已记录"}`,
+      info: `${SCAN_KIND_LABEL[kind]} ${label} ${extra ? "⚠ 不属于当前批次" : "已记录"}`,
     };
   });
 

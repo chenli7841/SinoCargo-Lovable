@@ -78,6 +78,8 @@ export type ShippingRoute = {
   blacklist_customer_codes: string[];
   wechat_ai_enabled: boolean;
   wechat_ai_price_text: string | null;
+  allowed_items_text: string | null;
+  prohibited_items_text: string | null;
 };
 
 export type FreightDirection = "forward" | "reverse";

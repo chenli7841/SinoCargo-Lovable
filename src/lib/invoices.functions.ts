@@ -348,7 +348,7 @@ export const financeSummary = createServerFn({ method: "POST" })
     const since = new Date(Date.now() - (data.days ?? 30) * 86400000).toISOString();
     let q = supabaseAdmin
       .from("invoices")
-      .select("status, total_cny, paid_cny, created_at, user_id")
+      .select("status, total_cny, paid_cny, paid_cad, fx_rate, created_at, user_id")
       .gte("created_at", since);
     if (data.userId) q = q.eq("user_id", data.userId);
     const { data: rows, error } = await q;
@@ -360,19 +360,23 @@ export const financeSummary = createServerFn({ method: "POST" })
       count = 0,
       paidCount = 0;
     for (const r of rows ?? []) {
-      total += Number(r.total_cny);
+      const fx = Number(r.fx_rate ?? 0.19);
+      const totalCad = Number(r.total_cny ?? 0) * fx;
+      const paidCad = Number(r.paid_cad ?? 0) > 0 ? Number(r.paid_cad) : Number(r.paid_cny ?? 0) * fx;
+      total += totalCad;
       count++;
       if (r.status === "paid") {
-        paid += Number(r.paid_cny || r.total_cny);
+        paid += paidCad > 0 ? paidCad : totalCad;
         paidCount++;
-      } else if (r.status === "overdue") overdue += Number(r.total_cny);
-      else if (r.status === "unpaid") unpaid += Number(r.total_cny);
+      } else if (r.status === "overdue") overdue += totalCad;
+      else if (r.status === "unpaid") unpaid += totalCad;
     }
     return {
-      total_cny: +total.toFixed(2),
-      paid_cny: +paid.toFixed(2),
-      unpaid_cny: +unpaid.toFixed(2),
-      overdue_cny: +overdue.toFixed(2),
+      currency: "CAD",
+      total_cad: +total.toFixed(2),
+      paid_cad: +paid.toFixed(2),
+      unpaid_cad: +unpaid.toFixed(2),
+      overdue_cad: +overdue.toFixed(2),
       count,
       paid_count: paidCount,
     };

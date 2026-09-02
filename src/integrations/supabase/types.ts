@@ -257,6 +257,16 @@ export type Database = {
           eta_date: string | null
           fee_breakdown: Json | null
           grand_total_cny: number
+          hbl_extracted: Json
+          hbl_file_name: string | null
+          hbl_file_path: string | null
+          customs_shipper: Json
+          customs_consignee: Json
+          actual_ship_date: string | null
+          container_no: string | null
+          hbl_total_weight_kg: number | null
+          hbl_total_volume_m3: number | null
+          hbl_goods_description: string | null
           id: string
           notes: string | null
           planned_ship_date: string
@@ -280,6 +290,16 @@ export type Database = {
           eta_date?: string | null
           fee_breakdown?: Json | null
           grand_total_cny?: number
+          hbl_extracted?: Json
+          hbl_file_name?: string | null
+          hbl_file_path?: string | null
+          customs_shipper?: Json
+          customs_consignee?: Json
+          actual_ship_date?: string | null
+          container_no?: string | null
+          hbl_total_weight_kg?: number | null
+          hbl_total_volume_m3?: number | null
+          hbl_goods_description?: string | null
           id?: string
           notes?: string | null
           planned_ship_date: string
@@ -303,6 +323,16 @@ export type Database = {
           eta_date?: string | null
           fee_breakdown?: Json | null
           grand_total_cny?: number
+          hbl_extracted?: Json
+          hbl_file_name?: string | null
+          hbl_file_path?: string | null
+          customs_shipper?: Json
+          customs_consignee?: Json
+          actual_ship_date?: string | null
+          container_no?: string | null
+          hbl_total_weight_kg?: number | null
+          hbl_total_volume_m3?: number | null
+          hbl_goods_description?: string | null
           id?: string
           notes?: string | null
           planned_ship_date?: string

@@ -6,6 +6,9 @@ const migrationFiles = [
   "20260828100000_chatgpt_owner_read_tools.sql",
   "20260828110000_chatgpt_owner_actions.sql",
   "20260828120000_chatgpt_waybill_status.sql",
+  "20260830170000_chatgpt_support_messages.sql",
+  "20260830173000_route_item_transport_guidance.sql",
+  "20260901120000_chatgpt_pending_intake_diagnosis.sql",
 ];
 
 const sources = [];

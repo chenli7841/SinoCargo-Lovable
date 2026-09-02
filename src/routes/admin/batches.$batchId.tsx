@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   getBatchDetail,
   updateBatchStatus,
@@ -40,10 +40,19 @@ import { CustomerDrawer } from "@/components/admin/CustomerDrawer";
 import { WaybillCompactList, CartonCompactList, PalletCompactList } from "@/components/admin/ContainerChildList";
 import { renderLabel } from "@/lib/label-render";
 import { LabelSizeToggle } from "@/components/admin/LabelSizeToggle";
-import { Loader2, X, Wand2, Printer, ScanLine, ChevronRight, AlertCircle, Wallet } from "lucide-react";
+import { Loader2, X, Wand2, Printer, ScanLine, ChevronRight, AlertCircle, Wallet, Upload, Download, Sparkles, FileText } from "lucide-react";
 import { ScanAddDialog } from "@/components/admin/ScanAddDialog";
 import { DateInput } from "@/components/admin/DateInput";
 import { WorkflowStepper, BATCH_FLOW } from "@/components/admin/WorkflowStepper";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import {
+  autoMatchBatchHsCodes,
+  extractBatchHbl,
+  getBatchCustomsReadiness,
+  getBatchInvoiceExport,
+} from "@/lib/batch-customs.functions";
+import { downloadBatchInvoiceWorkbook } from "@/lib/batch-invoice-xls";
 
 export const Route = createFileRoute("/admin/batches/$batchId")({ component: BatchDetail });
 
@@ -77,6 +86,10 @@ function BatchDetail() {
   const deduct = useServerFn(deductWalletForBatch);
   const deductOffline = useServerFn(deductBatchOffline);
   const doSplitPallet = useServerFn(splitPallet);
+  const fetchCustomsReadiness = useServerFn(getBatchCustomsReadiness);
+  const matchHsCodes = useServerFn(autoMatchBatchHsCodes);
+  const parseHbl = useServerFn(extractBatchHbl);
+  const fetchInvoiceExport = useServerFn(getBatchInvoiceExport);
 
   const detailQ = useQuery({ queryKey: ["admin-batch", batchId], queryFn: () => fetchDetail({ data: { batchId } }) });
   const cartonsQ = useQuery({
@@ -89,6 +102,10 @@ function BatchDetail() {
   });
   const meQ = useQuery({ queryKey: ["my-roles"], queryFn: () => fetchRoles(), staleTime: 60_000 });
   const canEdit = (meQ.data?.roles ?? []).some((r) => r === "owner" || r === "manager");
+  const customsQ = useQuery({
+    queryKey: ["batch-customs-readiness", batchId],
+    queryFn: () => fetchCustomsReadiness({ data: { batchId } }),
+  });
 
   const [tab, setTab] = useState<"waybills" | "cartons" | "pallets">("waybills");
   const [showAssign, setShowAssign] = useState(false);
@@ -114,9 +131,62 @@ function BatchDetail() {
   });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [hblBusy, setHblBusy] = useState(false);
+  const [hsBusy, setHsBusy] = useState(false);
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const hblInputRef = useRef<HTMLInputElement>(null);
   const onPrintLabel = async () => {
     const d = await fetchLabel({ data: { kind: "batch", id: batchId } });
     renderLabel(d as any);
+  };
+
+  const onUploadHbl = async (file: File) => {
+    if (!canEdit) return;
+    if (file.size > 25 * 1024 * 1024) return toast.error("提单文件不能超过 25MB");
+    if (file.type !== "application/pdf" && !file.type.startsWith("image/")) return toast.error("请上传 PDF 或图片提单");
+    setHblBusy(true);
+    try {
+      const safe = file.name.replace(/[^\w.\-]+/g, "_");
+      const filePath = `batches/${batchId}/${Date.now()}_${safe}`;
+      const { error } = await (supabase as any).storage.from("batch-documents").upload(filePath, file, {
+        contentType: file.type || undefined,
+        upsert: false,
+      });
+      if (error) throw error;
+      await parseHbl({ data: { batchId, filePath, fileName: file.name } });
+      toast.success("提单已上传并解析，请检查自动填写结果");
+      await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "提单上传或解析失败");
+    } finally {
+      setHblBusy(false);
+      if (hblInputRef.current) hblInputRef.current.value = "";
+    }
+  };
+
+  const onAutoMatchHs = async () => {
+    setHsBusy(true);
+    try {
+      const result = await matchHsCodes({ data: { batchId } });
+      toast.success(`本地匹配 ${result.local_matched} 条，AI匹配 ${result.ai_matched} 条，剩余 ${result.missing_count} 条`);
+      await qc.invalidateQueries({ queryKey: ["batch-customs-readiness", batchId] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "HS Code 自动匹配失败");
+    } finally {
+      setHsBusy(false);
+    }
+  };
+
+  const onDownloadInvoice = async () => {
+    setInvoiceBusy(true);
+    try {
+      const exportData = await fetchInvoiceExport({ data: { batchId } });
+      downloadBatchInvoiceWorkbook(exportData);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Invoice 生成失败");
+    } finally {
+      setInvoiceBusy(false);
+    }
   };
 
   // meta edit
@@ -232,6 +302,15 @@ function BatchDetail() {
             <Printer className="h-3 w-3" />
             打印面单
           </button>
+          <button
+            onClick={onDownloadInvoice}
+            disabled={invoiceBusy || Number(customsQ.data?.missing_count ?? 0) > 0}
+            title={customsQ.data?.missing_count ? `仍有 ${customsQ.data.missing_count} 个商品缺少有效 HS Code` : "下载 Invoice / Packing List"}
+            className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {invoiceBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+            下载 Invoice
+          </button>
           {canEdit && (
             <>
               <button
@@ -320,6 +399,43 @@ function BatchDetail() {
                 className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100"
               />
             </label>
+            <div className="rounded-md border border-dashed border-white/10 bg-white/[0.02] p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-1.5 font-semibold text-slate-200">
+                    <FileText className="h-3.5 w-3.5" /> 上传提单并抓取信息
+                  </div>
+                  <div className="mt-1 text-[10px] leading-relaxed text-slate-500">
+                    自动提取收发货人、发运日期、船名/航次、集装箱、总体积、总重量和提单品名；解析后仍可人工修改。
+                  </div>
+                  {batch.hbl_file_name && <div className="mt-1 text-[10px] text-emerald-300">已上传：{batch.hbl_file_name}</div>}
+                </div>
+                {canEdit && (
+                  <button
+                    onClick={() => hblInputRef.current?.click()}
+                    disabled={hblBusy}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-md bg-brand px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {hblBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                    {hblBusy ? "解析中" : "上传提单"}
+                  </button>
+                )}
+                <input
+                  ref={hblInputRef}
+                  type="file"
+                  accept="application/pdf,image/png,image/jpeg"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && onUploadHbl(e.target.files[0])}
+                />
+              </div>
+              {(batch.container_no || batch.hbl_total_weight_kg || batch.hbl_total_volume_m3) && (
+                <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] text-slate-400">
+                  <span>集装箱：<b className="text-slate-200">{batch.container_no ?? "—"}</b></span>
+                  <span>提单重量：<b className="text-slate-200">{batch.hbl_total_weight_kg ?? "—"} kg</b></span>
+                  <span>提单体积：<b className="text-slate-200">{batch.hbl_total_volume_m3 ?? "—"} m³</b></span>
+                </div>
+              )}
+            </div>
             {canEdit && (
               <button
                 onClick={onSaveMeta}
@@ -337,6 +453,40 @@ function BatchDetail() {
           </div>
         </Card>
       </div>
+
+      <Card title="独立清关 · HS 编码检查">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            {customsQ.isLoading ? (
+              <span className="text-xs text-slate-500">正在检查批次商品…</span>
+            ) : customsQ.data?.missing_count ? (
+              <>
+                <div className="text-sm font-semibold text-amber-300">
+                  批次内有 {customsQ.data.missing_count} 个商品缺少有效 HS Code
+                </div>
+                <div className="mt-1 text-[10px] text-slate-500">
+                  {customsQ.data.missing_names?.slice(0, 8).join("、") || "请检查商品明细"}
+                </div>
+              </>
+            ) : (
+              <div className="text-sm font-semibold text-emerald-300">批次商品 HS Code 已齐全</div>
+            )}
+            <div className="mt-1 text-[10px] text-slate-500">
+              优先匹配本地 HS 库；无法可靠匹配时调用 OpenAI。AI返回编码必须存在于本地库且置信度达到要求才会回填。
+            </div>
+          </div>
+          {canEdit && Number(customsQ.data?.missing_count ?? 0) > 0 && (
+            <button
+              onClick={onAutoMatchHs}
+              disabled={hsBusy}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-amber-500/20 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/30 disabled:opacity-50"
+            >
+              {hsBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              自动匹配 HS Code
+            </button>
+          )}
+        </div>
+      </Card>
 
       {independent_clearance && independent_clearance.groups?.length > 0 && (
         <Card title={`独立清关 × ${independent_clearance.customer_count} 个客户号`}>
@@ -404,9 +554,24 @@ function BatchDetail() {
               <span className="text-[10px] text-emerald-300">
                 已锁定 · 已写入 CA${storedTotal.toFixed(2)}
                 {totalDrift && (
-                  <span className="ml-2 text-amber-300">
-                    ⚠ 与实时计算不一致：CA${liveTotal.toFixed(2)}（解锁后重算）
-                  </span>
+                  <>
+                    <span className="ml-2 text-amber-300">
+                      ⚠ 与实时计算不一致：CA${liveTotal.toFixed(2)}
+                    </span>
+                    {canEdit && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`将已写入金额从 CA$${storedTotal.toFixed(2)} 重算为 CA$${liveTotal.toFixed(2)}？`)) return;
+                          await setBatchStatus({ data: { batchId, status: batch.status } });
+                          await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
+                          await qc.invalidateQueries({ queryKey: ["admin-batches"] });
+                        }}
+                        className="ml-2 rounded bg-amber-500/20 px-2 py-0.5 text-amber-200 hover:bg-amber-500/30"
+                      >
+                        重算并写入
+                      </button>
+                    )}
+                  </>
                 )}
               </span>
             ) : (

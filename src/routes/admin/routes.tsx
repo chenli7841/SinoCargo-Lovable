@@ -266,6 +266,8 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
     blacklist_customer_codes: (initial.blacklist_customer_codes ?? []) as string[],
     wechat_ai_enabled: !!initial.wechat_ai_enabled,
     wechat_ai_price_text: initial.wechat_ai_price_text ?? "",
+    allowed_items_text: initial.allowed_items_text ?? "",
+    prohibited_items_text: initial.prohibited_items_text ?? "",
   });
 
   const [freight, setFreight] = useState<FreightRule>({
@@ -417,6 +419,8 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
               .map((s) => s.trim()),
             wechat_ai_enabled: !!route.wechat_ai_enabled,
             wechat_ai_price_text: (route.wechat_ai_price_text ?? "").trim() || null,
+            allowed_items_text: (route.allowed_items_text ?? "").trim() || null,
+            prohibited_items_text: (route.prohibited_items_text ?? "").trim() || null,
           },
 
           freight,
@@ -613,6 +617,32 @@ function RouteEditor({ initial, warehouses, onClose }: { initial: any; warehouse
                     onChange={(v) => setRoute({ ...route, wechat_ai_price_text: v })}
                   />
                   <p className="mt-1 text-[11px] text-slate-500">可公开给客户的价格说明，留空则不返回。</p>
+                </Field>
+
+                <Field label="线路运输物品说明" full>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div>
+                      <div className="mb-1 text-xs font-medium text-emerald-300">可以运输的物品</div>
+                      <textarea
+                        value={route.allowed_items_text ?? ""}
+                        onChange={(e) => setRoute({ ...route, allowed_items_text: e.target.value })}
+                        rows={5}
+                        placeholder="例如：普通衣物、鞋帽、家居用品。按本线路实际规则填写。"
+                        className="w-full rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm placeholder:text-slate-500 focus:border-emerald-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <div className="mb-1 text-xs font-medium text-rose-300">禁止运输的物品</div>
+                      <textarea
+                        value={route.prohibited_items_text ?? ""}
+                        onChange={(e) => setRoute({ ...route, prohibited_items_text: e.target.value })}
+                        rows={5}
+                        placeholder="例如：易燃易爆品、武器、毒品。按本线路实际规则填写。"
+                        className="w-full rounded-md border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-sm placeholder:text-slate-500 focus:border-rose-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500">仅说明当前线路。GPT 会按客户权限返回的线路回答；留空时不会自行推测。</p>
                 </Field>
 
                 <Field label="消费税">

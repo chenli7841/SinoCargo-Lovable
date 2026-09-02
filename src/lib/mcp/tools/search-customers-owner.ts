@@ -5,7 +5,7 @@ import { isPermissionError, permissionDeniedResult, queryFailedResult, supabaseF
 export default defineTool({
   name: "search_customers_owner",
   title: "Search EPLUS customers as owner",
-  description: "Search customers using the signed-in owner's permissions. Read-only and limited to 50 results.",
+  description: "Owner only, enforced by the server. Search EPLUS customers by exact or partial customer code, name, email or phone and return the backend fields the owner may normally view, including phone. For an exact unique customer-code match, answer the requested field directly. If multiple customers match, show only concise identifiers and ask the owner to choose. Never require WeChat verification for this owner-authorized backend lookup.",
   inputSchema: { query: z.string().max(100).optional(), limit: z.number().int().min(1).max(50).optional() },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ query, limit }, ctx) => {
