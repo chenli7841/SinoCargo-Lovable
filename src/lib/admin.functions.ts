@@ -94,8 +94,28 @@ export const listUsers = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
 
     const payload = (res ?? {}) as { users?: any[]; total?: number };
+    const payloadUsers = payload.users ?? [];
+    const userIds = payloadUsers.map((u: any) => u.id).filter(Boolean);
+    const unpaidByUser = new Map<string, { count: number; amount_cad: number }>();
+    if (userIds.length) {
+      const { data: invoices, error: invoiceError } = await supabaseAdmin
+        .from("invoices")
+        .select("user_id, total_cny, paid_cny, paid_cad, fx_rate, status")
+        .in("user_id", userIds)
+        .in("status", ["unpaid", "overdue"]);
+      if (invoiceError) throw new Error(invoiceError.message);
+      for (const inv of (invoices ?? []) as any[]) {
+        const fx = Number(inv.fx_rate ?? 0.19);
+        const totalCad = Number(inv.total_cny ?? 0) * fx;
+        const paidCad = Number(inv.paid_cad ?? 0) > 0 ? Number(inv.paid_cad) : Number(inv.paid_cny ?? 0) * fx;
+        const current = unpaidByUser.get(inv.user_id) ?? { count: 0, amount_cad: 0 };
+        current.count += 1;
+        current.amount_cad += Math.max(0, totalCad - paidCad);
+        unpaidByUser.set(inv.user_id, current);
+      }
+    }
     return {
-      users: (payload.users ?? []).map((u: any) => ({
+      users: payloadUsers.map((u: any) => ({
         id: u.id,
         email: u.email,
         full_name: u.full_name,
@@ -108,7 +128,10 @@ export const listUsers = createServerFn({ method: "POST" })
         blacklist_reason: u.blacklist_reason ?? null,
         roles: (u.roles ?? []) as AppRole[],
         wallet: { balance_cad: Number(u.wallet?.balance_cad ?? 0) },
-        unpaid: { count: Number(u.unpaid?.count ?? 0), amount_cny: Number(u.unpaid?.amount_cny ?? 0) },
+        unpaid: {
+          count: unpaidByUser.get(u.id)?.count ?? 0,
+          amount_cad: +(unpaidByUser.get(u.id)?.amount_cad ?? 0).toFixed(2),
+        },
       })),
       total: Number(payload.total ?? 0),
       page,
@@ -137,7 +160,7 @@ export const getUserDetail = createServerFn({ method: "POST" })
       supabaseAdmin.from("orders").select("id", { count: "exact", head: true }).eq("user_id", data.userId),
       supabaseAdmin
         .from("invoices")
-        .select("id, invoice_no, total_cny, paid_cny, status, due_date, created_at")
+        .select("id, invoice_no, total_cny, paid_cny, paid_cad, fx_rate, status, due_date, created_at")
         .eq("user_id", data.userId)
         .in("status", ["unpaid", "overdue"])
         .order("created_at", { ascending: false }),
@@ -157,8 +180,13 @@ export const getUserDetail = createServerFn({ method: "POST" })
         .limit(50),
     ]);
     if (!profile) throw new Error("User not found");
-    const unpaidAmountCny = (unpaidInvoices ?? []).reduce(
-      (sum: number, inv: any) => sum + Math.max(0, Number(inv.total_cny ?? 0) - Number(inv.paid_cny ?? 0)),
+    const unpaidAmountCad = (unpaidInvoices ?? []).reduce(
+      (sum: number, inv: any) => {
+        const fx = Number(inv.fx_rate ?? 0.19);
+        const totalCad = Number(inv.total_cny ?? 0) * fx;
+        const paidCad = Number(inv.paid_cad ?? 0) > 0 ? Number(inv.paid_cad) : Number(inv.paid_cny ?? 0) * fx;
+        return sum + Math.max(0, totalCad - paidCad);
+      },
       0,
     );
     return {
@@ -169,7 +197,7 @@ export const getUserDetail = createServerFn({ method: "POST" })
       unpaidInvoices: unpaidInvoices ?? [],
       unpaidOrders: unpaidOrders ?? [],
       unpaidForwardings: unpaidForwardings ?? [],
-      unpaidAmountCny,
+      unpaidAmountCad: +unpaidAmountCad.toFixed(2),
     };
   });
 

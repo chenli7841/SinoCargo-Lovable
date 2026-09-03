@@ -183,7 +183,7 @@ function UsersPage() {
                   {u.unpaid.count > 0 ? (
                     <>
                       <div className="font-semibold text-rose-300">{u.unpaid.count} 笔</div>
-                      <div className="text-rose-200/80">¥{u.unpaid.amount_cny.toFixed(2)}</div>
+                      <div className="text-rose-200/80">CA${u.unpaid.amount_cad.toFixed(2)}</div>
                     </>
                   ) : (
                     <span className="text-slate-500">—</span>

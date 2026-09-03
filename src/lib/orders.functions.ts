@@ -1449,6 +1449,7 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
   // 检查费 / 派送费 存为带标记的批次附加费，单独提取，不计入普通附加费
   const inspectionByCustomer = new Map<string, number>();
   const deliveryByCustomer = new Map<string, number>();
+  const discountByCustomer = new Map<string, number>();
   const [scWb, scCt, scPl, scBt, settleR] = await Promise.all([
     allWbIds.length
       ? admin.from("surcharges").select("waybill_id, amount_cny").eq("scope", "waybill").in("waybill_id", allWbIds)
@@ -1481,6 +1482,10 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
     }
     if (code && note.startsWith("[delivery]")) {
       deliveryByCustomer.set(code, (deliveryByCustomer.get(code) ?? 0) + amt);
+      continue;
+    }
+    if (code && note.startsWith("[discount]")) {
+      discountByCustomer.set(code, (discountByCustomer.get(code) ?? 0) + Math.max(0, amt));
       continue;
     }
     if (code) surchargeMap.batchByCustomer.set(code, (surchargeMap.batchByCustomer.get(code) ?? 0) + amt);
@@ -1613,6 +1618,7 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
     surcharge: number;
     inspection: number;
     delivery: number;
+    discount: number;
     delivery_suggested: number;
     delivery_note: string | null;
     warnings: { kind: "oversize" | "overweight" | "remote"; ref: string; detail: string }[];
@@ -1667,6 +1673,7 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
         surcharge: 0,
         inspection: 0,
         delivery: 0,
+        discount: 0,
         delivery_suggested: 0,
         delivery_note: null,
         warnings: [],
@@ -1816,6 +1823,7 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
   }
   for (const [code, amt] of inspectionByCustomer) firstBucketOf(code).inspection += amt;
   for (const [code, amt] of deliveryByCustomer) firstBucketOf(code).delivery += amt;
+  for (const [code, amt] of discountByCustomer) firstBucketOf(code).discount += amt;
 
   // === 8. Top-level display items with scheme-aware weight/volume/freight ===
   function pushWbDisplay(w: any, source: "direct" | "carton" | "pallet") {
@@ -2170,7 +2178,8 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
     total_clearance = 0,
     total_surcharge = 0,
     total_delivery = 0,
-    total_inspection = 0;
+    total_inspection = 0,
+    total_discount = 0;
   for (const b of buckets.values()) {
     total_freight += b.freight;
     total_customs += b.customs;
@@ -2179,6 +2188,7 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
     total_surcharge += b.surcharge;
     total_delivery += b.delivery;
     total_inspection += b.inspection;
+    total_discount += b.discount;
   }
   total_surcharge += surchargeMap.batchUnassigned;
   const totals = {
@@ -2190,6 +2200,7 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
     total_delivery_cny: +total_delivery.toFixed(2),
     total_inspection_cny: +total_inspection.toFixed(2),
     total_surcharge_cny: +total_surcharge.toFixed(2),
+    total_discount_cny: +total_discount.toFixed(2),
   };
   const grand_total_cny = +(
     totals.total_freight_cny +
@@ -2198,13 +2209,14 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
     totals.total_clearance_cny +
     totals.total_delivery_cny +
     totals.total_inspection_cny +
-    totals.total_surcharge_cny
+    totals.total_surcharge_cny -
+    totals.total_discount_cny
   ).toFixed(2);
 
   const per_customer = [...buckets.entries()]
     .filter(([_k, b]) => !!b.customer_code)
     .map(([k, b]) => {
-      const subtotal = +(
+      const grossSubtotal = +(
         b.freight +
         b.customs +
         b.insurance +
@@ -2213,6 +2225,8 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
         b.delivery +
         b.inspection
       ).toFixed(2);
+      const discount = Math.min(grossSubtotal, Math.max(0, +b.discount.toFixed(2)));
+      const subtotal = Math.max(0, +(grossSubtotal - discount).toFixed(2));
       const scheme = schemeOf(b.customer_code);
       const items = itemsMapMerged.get(k) ?? [];
       return {
@@ -2234,6 +2248,8 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
         fee_storage_cny: 0,
         fee_delivery_cny: +b.delivery.toFixed(2),
         fee_inspection_cny: +b.inspection.toFixed(2),
+        fee_discount_cny: discount,
+        gross_subtotal_cny: grossSubtotal,
         fee_surcharge_cny: +b.surcharge.toFixed(2),
         subtotal_cny: subtotal,
         fee_freight_cad: +b.freight.toFixed(2),
@@ -2243,6 +2259,8 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
         fee_surcharge_cad: +b.surcharge.toFixed(2),
         fee_delivery_cad: +b.delivery.toFixed(2),
         fee_inspection_cad: +b.inspection.toFixed(2),
+        fee_discount_cad: discount,
+        gross_subtotal_cad: grossSubtotal,
         delivery_suggested_cad: +b.delivery_suggested.toFixed(2),
         delivery_note: b.delivery_note,
         warnings: b.warnings,
@@ -2319,20 +2337,22 @@ async function batchExtraFeesCad(
   admin: any,
   batchId: string,
   customerCode: string,
-): Promise<{ delivery: number; inspection: number }> {
-  if (!customerCode) return { delivery: 0, inspection: 0 };
+): Promise<{ delivery: number; inspection: number; discount: number }> {
+  if (!customerCode) return { delivery: 0, inspection: 0, discount: 0 };
   try {
     const summary: any = await computeBatchFeeSummary(admin, batchId);
     let delivery = 0,
-      inspection = 0;
+      inspection = 0,
+      discount = 0;
     for (const p of (summary?.per_customer ?? []) as any[]) {
       if (p.customer_code !== customerCode) continue;
       delivery += Number(p.fee_delivery_cad ?? 0);
       inspection += Number(p.fee_inspection_cad ?? 0);
+      discount += Number(p.fee_discount_cad ?? 0);
     }
-    return { delivery: +delivery.toFixed(2), inspection: +inspection.toFixed(2) };
+    return { delivery: +delivery.toFixed(2), inspection: +inspection.toFixed(2), discount: +discount.toFixed(2) };
   } catch {
-    return { delivery: 0, inspection: 0 };
+    return { delivery: 0, inspection: 0, discount: 0 };
   }
 }
 
@@ -2540,17 +2560,8 @@ async function settleBatchForCustomer(
   });
   if (txErr) throw new Error(txErr.message);
 
-  // 4) Discount → surcharge (batch scope, customer_code, negative) so future fee summaries reflect it
-  if (discount > 0 && customerCode) {
-    await admin.from("surcharges").insert({
-      scope: "batch",
-      batch_id: batchId,
-      customer_code: customerCode,
-      amount_cny: -+(discount / FX).toFixed(2),
-      note: `折扣（${methodLabel} · CA$${discount.toFixed(2)}）`,
-      created_by: params.operatorId,
-    });
-  }
+  // 4) Discount is already persisted by saveBatchCustomerFeeDraft. Do not add a
+  // second negative surcharge during payment, otherwise the batch total is reduced twice.
 
   // 5) Invoice + items — 价格确认时可能已经生成过一张未付账单（每批次每客户一张），
   // 这里优先复用并把它改成已付，避免同一批次出现两张账单。
@@ -3198,6 +3209,66 @@ export const saveDeliveryFee = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// Save all editable customer charges as an unconfirmed draft. Saving never changes
+// price confirmation; it only refreshes the authoritative batch calculation.
+export const saveBatchCustomerFeeDraft = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (d: { batchId: string; customerCode: string; deliveryCad: number; inspectionCad: number; discountCad: number }) => d,
+  )
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const values = [
+      { marker: "[delivery]", label: "末端派送费", amount: Math.max(0, Number(data.deliveryCad || 0)) },
+      { marker: "[inspection]", label: "检查费", amount: Math.max(0, Number(data.inspectionCad || 0)) },
+      { marker: "[discount]", label: "折扣", amount: Math.max(0, Number(data.discountCad || 0)) },
+    ];
+    for (const value of values) {
+      const { error: deleteError } = await supabaseAdmin
+        .from("surcharges")
+        .delete()
+        .eq("scope", "batch")
+        .eq("batch_id", data.batchId)
+        .eq("customer_code", data.customerCode)
+        .like("note", `${value.marker}%`);
+      if (deleteError) throw new Error(deleteError.message);
+      const amount = +value.amount.toFixed(2);
+      if (amount > 0) {
+        const { error: insertError } = await supabaseAdmin.from("surcharges").insert({
+          scope: "batch",
+          batch_id: data.batchId,
+          customer_code: data.customerCode,
+          amount_cny: amount,
+          note: `${value.marker} ${value.label}`,
+          created_by: context.userId,
+        });
+        if (insertError) throw new Error(insertError.message);
+      }
+    }
+    const summary = await computeBatchFeeSummary(supabaseAdmin, data.batchId);
+    const customer = (summary.per_customer as any[]).find((x) => x.customer_code === data.customerCode) ?? null;
+    const { error: batchUpdateError } = await supabaseAdmin
+      .from("batches")
+      .update({ grand_total_cny: summary.grand_total_cny, fee_breakdown: { ...summary, computed_at: new Date().toISOString() } })
+      .eq("id", data.batchId);
+    if (batchUpdateError) throw new Error(batchUpdateError.message);
+    const { data: settlement } = await supabaseAdmin
+      .from("batch_settlements")
+      .select("confirmed")
+      .eq("batch_id", data.batchId)
+      .eq("customer_code", data.customerCode)
+      .maybeSingle();
+    if ((settlement as any)?.confirmed) {
+      await ensureUnpaidBatchInvoice(supabaseAdmin, {
+        batchId: data.batchId,
+        customerCode: data.customerCode,
+        operatorId: context.userId,
+      });
+    }
+    return { ok: true, customer, totals: summary.totals, grand_total_cny: summary.grand_total_cny };
+  });
+
 // 每个批次 × 每位客户一张账单：价格确认时自动生成（未付）。
 // 金额与 settleBatchForCustomer 使用完全相同的运单 CAD 列，付款时该账单会被复用并改为已付。
 async function ensureUnpaidBatchInvoice(
@@ -3315,6 +3386,20 @@ async function ensureUnpaidBatchInvoice(
   }
   const subCny = +(f + cst + ins + other).toFixed(2);
 
+  const discountCad = Math.min(+(subCny * FX).toFixed(2), Math.max(0, extras.discount));
+  const discountCny = +(discountCad / FX).toFixed(2);
+  if (discountCny > 0) {
+    lineItems.push({
+      description: `折扣 · 批次 ${batchNo}`,
+      freight_cny: 0,
+      customs_cny: 0,
+      insurance_cny: 0,
+      other_cny: -discountCny,
+      amount_cny: -discountCny,
+      meta: { fee_type: "折扣", batch_no: batchNo, amount_cad: -discountCad },
+    });
+  }
+
   if (subCny <= 0) return { ok: false, reason: "nothing_to_bill" };
 
   const payload = {
@@ -3324,8 +3409,8 @@ async function ensureUnpaidBatchInvoice(
     freight_cny: +f.toFixed(2),
     customs_cny: +cst.toFixed(2),
     insurance_cny: +ins.toFixed(2),
-    other_cny: +other.toFixed(2),
-    total_cny: subCny,
+    other_cny: +(other - discountCny).toFixed(2),
+    total_cny: +(subCny - discountCny).toFixed(2),
     status: "unpaid",
     fx_rate: FX,
     batch_no: batchNo,
@@ -3415,6 +3500,42 @@ export const setBatchPriceConfirmed = createServerFn({ method: "POST" })
       }
     }
     return { ok: true, confirmed: data.confirmed, invoice_no };
+  });
+
+// Confirm every customer price in one batch. This does not collect payment.
+export const confirmAllBatchPrices = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { batchId: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const summary = await computeBatchFeeSummary(supabaseAdmin, data.batchId);
+    const customerCodes = Array.from(
+      new Set((summary.per_customer as any[]).map((x) => String(x.customer_code || "")).filter(Boolean)),
+    );
+    if (!customerCodes.length) throw new Error("批次内没有可确认的客户账单");
+    const confirmedAt = new Date().toISOString();
+    const { error } = await supabaseAdmin.from("batch_settlements").upsert(
+      customerCodes.map((customerCode) => ({
+        batch_id: data.batchId,
+        customer_code: customerCode,
+        confirmed: true,
+        confirmed_by: context.userId,
+        confirmed_at: confirmedAt,
+      })),
+      { onConflict: "batch_id,customer_code" },
+    );
+    if (error) throw new Error(error.message);
+    const invoices: any[] = [];
+    for (const customerCode of customerCodes) {
+      const result = await ensureUnpaidBatchInvoice(supabaseAdmin, {
+        batchId: data.batchId,
+        customerCode,
+        operatorId: context.userId,
+      });
+      invoices.push({ customer_code: customerCode, ...result });
+    }
+    return { ok: true, confirmed_count: customerCodes.length, invoices };
   });
 
 

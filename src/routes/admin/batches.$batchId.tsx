@@ -11,6 +11,7 @@ import {
   batchUpdateWaybillsByBatch,
   deductWalletForBatch,
   deductBatchOffline,
+  confirmAllBatchPrices,
   type BatchStatus,
   type WaybillStatus,
 } from "@/lib/orders.functions";
@@ -40,7 +41,7 @@ import { CustomerDrawer } from "@/components/admin/CustomerDrawer";
 import { WaybillCompactList, CartonCompactList, PalletCompactList } from "@/components/admin/ContainerChildList";
 import { renderLabel } from "@/lib/label-render";
 import { LabelSizeToggle } from "@/components/admin/LabelSizeToggle";
-import { Loader2, X, Wand2, Printer, ScanLine, ChevronRight, AlertCircle, Wallet, Upload, Download, Sparkles, FileText } from "lucide-react";
+import { Loader2, X, Wand2, Printer, ScanLine, ChevronRight, AlertCircle, Wallet, Upload, Download, Sparkles, FileText, CheckCheck } from "lucide-react";
 import { ScanAddDialog } from "@/components/admin/ScanAddDialog";
 import { DateInput } from "@/components/admin/DateInput";
 import { WorkflowStepper, BATCH_FLOW } from "@/components/admin/WorkflowStepper";
@@ -85,6 +86,7 @@ function BatchDetail() {
   const fetchLabel = useServerFn(getContainerLabelData);
   const deduct = useServerFn(deductWalletForBatch);
   const deductOffline = useServerFn(deductBatchOffline);
+  const confirmAllPrices = useServerFn(confirmAllBatchPrices);
   const doSplitPallet = useServerFn(splitPallet);
   const fetchCustomsReadiness = useServerFn(getBatchCustomsReadiness);
   const matchHsCodes = useServerFn(autoMatchBatchHsCodes);
@@ -134,6 +136,7 @@ function BatchDetail() {
   const [hblBusy, setHblBusy] = useState(false);
   const [hsBusy, setHsBusy] = useState(false);
   const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const [confirmAllBusy, setConfirmAllBusy] = useState(false);
   const hblInputRef = useRef<HTMLInputElement>(null);
   const onPrintLabel = async () => {
     const d = await fetchLabel({ data: { kind: "batch", id: batchId } });
@@ -186,6 +189,24 @@ function BatchDetail() {
       toast.error(e?.message ?? "Invoice 生成失败");
     } finally {
       setInvoiceBusy(false);
+    }
+  };
+
+  const onConfirmAllPrices = async () => {
+    const customers = fee_summary?.per_customer ?? [];
+    const pendingCount = customers.filter((c: any) => !c.price_confirmed).length;
+    if (!pendingCount) return toast.info("批次内客户价格均已确认");
+    if (!window.confirm(`确认批次内 ${pendingCount} 位客户的价格？此操作只确认价格并生成未付账单，不会扣款。`)) return;
+    setConfirmAllBusy(true);
+    try {
+      const result = await confirmAllPrices({ data: { batchId } });
+      toast.success(`已批量确认 ${result.confirmed_count} 位客户，未执行扣款`);
+      await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
+      await qc.invalidateQueries({ queryKey: ["batch-invoices", batch.batch_no ?? ""] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "批量确认失败");
+    } finally {
+      setConfirmAllBusy(false);
     }
   };
 
@@ -588,6 +609,7 @@ function BatchDetail() {
             <FeeStat label="总派送费" value={fee_summary.totals.total_delivery_cny} pending />
             <FeeStat label="总检查费" value={fee_summary.totals.total_inspection_cny} pending />
             <FeeStat label="总附加费" value={fee_summary.totals.total_surcharge_cny} />
+            <FeeStat label="总折扣" value={-Number(fee_summary.totals.total_discount_cny ?? 0)} />
           </div>
           <div className="mt-3 flex items-baseline justify-end gap-2 border-t border-white/5 pt-3">
             <span className="text-xs text-slate-400">合计：</span>
@@ -600,7 +622,22 @@ function BatchDetail() {
       {fee_summary && (
         <Card
           title={`按客户号账单（${fee_summary.per_customer.length} 个客户）`}
-          action={<span className="text-[10px] text-slate-500">点击客户号查看明细 · 批次附加费在此层级归集</span>}
+          action={
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-500">点击客户号查看明细 · 批次附加费在此层级归集</span>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={onConfirmAllPrices}
+                  disabled={confirmAllBusy || fee_summary.per_customer.every((c: any) => c.price_confirmed)}
+                  className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {confirmAllBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="h-3.5 w-3.5" />}
+                  {fee_summary.per_customer.every((c: any) => c.price_confirmed) ? "已全部确认" : "批量确认价格"}
+                </button>
+              )}
+            </div>
+          }
         >
           {fee_summary.per_customer.length === 0 && !fee_summary.unassigned ? (
             <div className="py-6 text-center text-xs text-slate-500">
@@ -670,9 +707,9 @@ function BatchDetail() {
                               user_id: c.user_id,
                               customer_code: c.customer_code,
                               balance: Number(c.balance_cad ?? 0),
-                              subtotal: Number(c.subtotal_cny ?? 0),
+                              subtotal: Number(c.gross_subtotal_cny ?? c.subtotal_cny ?? 0),
                             });
-                            setDeductDiscount("0");
+                            setDeductDiscount(String(Number(c.fee_discount_cad ?? 0)));
                           }}
                           className="inline-flex items-center gap-1 rounded-md border border-rose-500/30 px-2 py-0.5 text-[10px] text-rose-300 hover:bg-rose-500/10"
                         >

@@ -279,7 +279,7 @@ function UserDetailPage() {
             invoices={d.unpaidInvoices ?? []}
             orders={d.unpaidOrders ?? []}
             forwardings={d.unpaidForwardings ?? []}
-            unpaidAmountCny={Number(d.unpaidAmountCny ?? 0)}
+            unpaidAmountCad={Number(d.unpaidAmountCad ?? 0)}
           />
 
           {/* Customer HS library */}
@@ -622,12 +622,12 @@ function UnpaidPanel({
   invoices,
   orders,
   forwardings,
-  unpaidAmountCny,
+  unpaidAmountCad,
 }: {
   invoices: any[];
   orders: any[];
   forwardings: any[];
-  unpaidAmountCny: number;
+  unpaidAmountCad: number;
 }) {
   return (
     <section className="rounded-2xl border border-white/5 bg-white/[0.03] p-5">
@@ -638,7 +638,7 @@ function UnpaidPanel({
         </h2>
         <div className="text-xs">
           <span className="text-slate-400">未付总额 </span>
-          <span className="font-bold text-rose-300">¥{unpaidAmountCny.toFixed(2)}</span>
+          <span className="font-bold text-rose-300">CA${unpaidAmountCad.toFixed(2)}</span>
         </div>
       </div>
 
@@ -652,7 +652,10 @@ function UnpaidPanel({
           ) : (
             <ul className="divide-y divide-white/5 rounded-md border border-white/5 bg-white/[0.02]">
               {invoices.map((inv: any) => {
-                const due = Math.max(0, Number(inv.total_cny ?? 0) - Number(inv.paid_cny ?? 0));
+                const fx = Number(inv.fx_rate ?? 0.19);
+                const totalCad = Number(inv.total_cny ?? 0) * fx;
+                const paidCad = Number(inv.paid_cad ?? 0) > 0 ? Number(inv.paid_cad) : Number(inv.paid_cny ?? 0) * fx;
+                const due = Math.max(0, totalCad - paidCad);
                 return (
                   <li key={inv.id} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
                     <div className="min-w-0">
@@ -669,8 +672,8 @@ function UnpaidPanel({
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-rose-300">¥{due.toFixed(2)}</div>
-                      <div className="text-[10px] text-slate-500">/ ¥{Number(inv.total_cny ?? 0).toFixed(2)}</div>
+                      <div className="font-bold text-rose-300">CA${due.toFixed(2)}</div>
+                      <div className="text-[10px] text-slate-500">/ CA${totalCad.toFixed(2)}</div>
                     </div>
                   </li>
                 );

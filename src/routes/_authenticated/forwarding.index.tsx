@@ -486,7 +486,18 @@ function ForwardingPage() {
             },
           })),
       };
-      const { data, error } = await sb.rpc("place_forwarding", { _payload: payload });
+      let { data, error } = await sb.rpc("place_forwarding", { _payload: payload });
+      const isStatementTimeout = error?.code === "57014" || /statement timeout/i.test(error?.message ?? "");
+      // PostgreSQL statement_timeout aborts and rolls back the whole RPC, so one
+      // bounded retry is safe. Do not retry unknown network failures because the
+      // first request may have committed and a blind retry could duplicate a job.
+      if (isStatementTimeout) {
+        toast.info(tr("数据库繁忙，正在自动重试一次…", "Database busy; retrying once…"));
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        const retry = await sb.rpc("place_forwarding", { _payload: payload });
+        data = retry.data;
+        error = retry.error;
+      }
       if (error) {
         toast.error(`${t}: ${error.message}`);
         continue;

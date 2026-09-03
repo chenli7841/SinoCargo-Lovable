@@ -1,11 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Card } from "@/lib/admin-shared";
 import {
-  saveInspectionFee,
-  saveDeliveryFee,
+  saveBatchCustomerFeeDraft,
   setBatchPriceConfirmed,
   deductWalletForBatch,
   deductBatchOffline,
@@ -24,8 +23,7 @@ const cad = (n: any) => `CA$${Number(n ?? 0).toFixed(2)}`;
 
 export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, onClose }: Props) {
   const qc = useQueryClient();
-  const saveInspection = useServerFn(saveInspectionFee);
-  const saveDelivery = useServerFn(saveDeliveryFee);
+  const saveDraft = useServerFn(saveBatchCustomerFeeDraft);
   const setConfirmedFn = useServerFn(setBatchPriceConfirmed);
   const deduct = useServerFn(deductWalletForBatch);
   const deductOffline = useServerFn(deductBatchOffline);
@@ -55,11 +53,18 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
   const [delivery, setDelivery] = useState(
     String(Number(c.fee_delivery_cad ?? 0) || Number(c.delivery_suggested_cad ?? 0)),
   );
-  const [discount, setDiscount] = useState("0");
+  const [discount, setDiscount] = useState(String(Number(c.fee_discount_cad ?? 0)));
   const [method, setMethod] = useState<"wallet" | "emt" | "cash">("wallet");
   const [refNo, setRefNo] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState<boolean>(!!c.price_confirmed);
+
+  useEffect(() => {
+    setInspection(String(Number(c.fee_inspection_cad ?? 0)));
+    setDelivery(String(Number(c.fee_delivery_cad ?? 0) || Number(c.delivery_suggested_cad ?? 0)));
+    setDiscount(String(Number(c.fee_discount_cad ?? 0)));
+    setConfirmed(!!c.price_confirmed);
+  }, [c.fee_inspection_cad, c.fee_delivery_cad, c.delivery_suggested_cad, c.fee_discount_cad, c.price_confirmed]);
 
   const inspAmt = Math.max(0, Number(inspection || 0));
   const deliveryAmt = Math.max(0, Number(delivery || 0));
@@ -78,10 +83,10 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
   const onSave = async () => {
     setBusy(true);
     try {
-      await saveInspection({ data: { batchId, customerCode, amountCad: inspAmt } });
-      await saveDelivery({ data: { batchId, customerCode, amountCad: deliveryAmt } });
-      await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
-      alert("已保存派送费 / 检查费");
+      await saveDraft({ data: { batchId, customerCode, deliveryCad: deliveryAmt, inspectionCad: inspAmt, discountCad: discAmt } });
+      await qc.refetchQueries({ queryKey: ["admin-batch", batchId] });
+      await qc.invalidateQueries({ queryKey: ["admin-batches"] });
+      alert("费用已保存并重新计算；价格确认状态未改变");
     } catch (e: any) {
       alert(e.message);
     } finally {
@@ -93,11 +98,11 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
     if (next && warnings.length > 0 && !window.confirm("存在超长/超重/偏远预警，确认价格已核对无误？")) return;
     setBusy(true);
     try {
-      await saveInspection({ data: { batchId, customerCode, amountCad: inspAmt } });
-      await saveDelivery({ data: { batchId, customerCode, amountCad: deliveryAmt } });
+      await saveDraft({ data: { batchId, customerCode, deliveryCad: deliveryAmt, inspectionCad: inspAmt, discountCad: discAmt } });
       await setConfirmedFn({ data: { batchId, customerCode, confirmed: next } });
       setConfirmed(next);
       await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
+      await qc.invalidateQueries({ queryKey: ["admin-batches"] });
     } catch (e: any) {
       alert(e.message);
     } finally {
@@ -127,8 +132,7 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
     setBusy(true);
     try {
       // Save inspection/delivery first so they're reflected in the batch bill
-      if (inspAmt >= 0) await saveInspection({ data: { batchId, customerCode, amountCad: inspAmt } });
-      if (deliveryAmt >= 0) await saveDelivery({ data: { batchId, customerCode, amountCad: deliveryAmt } });
+      await saveDraft({ data: { batchId, customerCode, deliveryCad: deliveryAmt, inspectionCad: inspAmt, discountCad: discAmt } });
       if (method === "wallet") {
         const r: any = await deduct({
           data: {
@@ -160,6 +164,7 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
         }
       }
       await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
+      await qc.invalidateQueries({ queryKey: ["admin-batches"] });
       onClose();
     } catch (e: any) {
       alert(e.message);
