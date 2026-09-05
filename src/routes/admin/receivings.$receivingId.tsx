@@ -172,20 +172,23 @@ function ReceivingDetail() {
         </div>
         <div className="flex gap-2">
           {!isFinal && (
-            <>
-              <button onClick={() => { setPickBatchId(r.batch_id ?? ""); setShowMatch(true); }}
-                className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/10">
-                {r.batch_id ? "更换批次" : "匹配批次"}
-              </button>
-              <button onClick={onPrepare} disabled={busy || !r.batch_id}
-                className="inline-flex items-center gap-1 rounded-md border border-brand/40 bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand hover:bg-brand/20 disabled:opacity-50">
-                <Truck className="h-3.5 w-3.5" />准备派送
-              </button>
-              <button onClick={onConfirm} disabled={busy || !r.batch_id}
-                className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
-                <PackageCheck className="h-3.5 w-3.5" />确认到件
-              </button>
-            </>
+            <button onClick={() => { setPickBatchId(r.batch_id ?? ""); setShowMatch(true); }}
+              className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/10">
+              {r.batch_id ? "更换批次" : "匹配批次"}
+            </button>
+          )}
+          {/* 准备派送不改收货单/批次状态，只是把批次内容同步进待派送列表，且有去重——
+              到件确认后仍然可能需要补跑（比如确认前忘了点，或确认后批次内容有变动），
+              所以不跟 isFinal 挂钩，一直可用。 */}
+          <button onClick={onPrepare} disabled={busy || !r.batch_id}
+            className="inline-flex items-center gap-1 rounded-md border border-brand/40 bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand hover:bg-brand/20 disabled:opacity-50">
+            <Truck className="h-3.5 w-3.5" />准备派送
+          </button>
+          {!isFinal && (
+            <button onClick={onConfirm} disabled={busy || !r.batch_id}
+              className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+              <PackageCheck className="h-3.5 w-3.5" />确认到件
+            </button>
           )}
         </div>
       </div>

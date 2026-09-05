@@ -358,17 +358,17 @@ export const confirmReceiving = createServerFn({ method: "POST" })
       .from("waybills")
       .select("id, waybill_no, status")
       .eq("assigned_batch_id", recv.batch_id);
-    if (wbs?.length) {
-      const updIds = wbs
-        .filter((w) => !["delivered", "cancelled", "in_transit", "ready_pickup"].includes(w.status))
-        .map((w) => w.id);
-      if (updIds.length) {
-        await supabaseAdmin.from("waybills").update({ status: "arrived" }).in("id", updIds);
-      }
-      // 3. Add tracking event to each waybill
+    // 跳过已是终态/下游状态的运单，既不改它们的 status，也不给它们补一条"已到达目的地
+    // 仓库"的轨迹——否则一个已经 delivered/in_transit 的运单会在轨迹时间线上凭空多出一条
+    // 排在后面的"到达"记录，跟它实际的状态倒挂。
+    const updWbs = (wbs ?? []).filter((w) => !["delivered", "cancelled", "in_transit", "ready_pickup"].includes(w.status));
+    if (updWbs.length) {
+      const updIds = updWbs.map((w) => w.id);
+      await supabaseAdmin.from("waybills").update({ status: "arrived" }).in("id", updIds);
+      // 3. Add tracking event to each updated waybill
       const loc = data.location_zh || recv.warehouse_code || "目的地仓库";
       const now = new Date().toISOString();
-      for (const w of wbs) {
+      for (const w of updWbs) {
         let { data: ship } = await supabaseAdmin
           .from("shipments")
           .select("id")
@@ -408,11 +408,11 @@ export const confirmReceiving = createServerFn({ method: "POST" })
       entity_type: "receiving",
       entity_id: data.receivingId,
       action: "confirm",
-      after: { batch_id: recv.batch_id, waybills_updated: wbs?.length ?? 0 },
+      after: { batch_id: recv.batch_id, waybills_updated: updWbs.length },
       operator_id: context.userId,
     });
 
-    return { ok: true, waybills_updated: wbs?.length ?? 0 };
+    return { ok: true, waybills_updated: updWbs.length };
   });
 
 // ===== Update notes / warehouse / close =====
