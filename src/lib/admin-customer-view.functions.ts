@@ -542,10 +542,25 @@ export const createCustomerForwarding = createServerFn({ method: "POST" })
         return { ...it, quantity: qty, extras: ex };
       });
     }
-    const { data: result, error } = await context.supabase.rpc("place_forwarding", {
+    let { data: result, error } = await context.supabase.rpc("place_forwarding", {
       _payload: payload,
       _target_user_id: data.userId,
     });
+    // statement_timeout (57014) aborts and rolls back the whole RPC, so nothing
+    // was committed — one bounded retry is safe. Mirrors the customer-facing
+    // form's retry (forwarding.index.tsx); this admin path lacked it entirely,
+    // and it's the one staff use for large multi-item/multi-box commercial and
+    // storage-route entries most likely to be slow.
+    const isStatementTimeout = error?.code === "57014" || /statement timeout/i.test(error?.message ?? "");
+    if (isStatementTimeout) {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      const retry = await context.supabase.rpc("place_forwarding", {
+        _payload: payload,
+        _target_user_id: data.userId,
+      });
+      result = retry.data;
+      error = retry.error;
+    }
     if (error) throw new Error(error.message);
     const r = result as any;
     if (!r?.ok) throw new Error(r?.reason ?? "发起集运失败");

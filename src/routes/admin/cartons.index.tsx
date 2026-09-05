@@ -77,7 +77,10 @@ function CartonsPage() {
               const childChg = Number(c.child_chargeable_kg ?? 0);
               return (
               <tr key={c.id} className="hover:bg-white/[0.03]">
-                <td className="px-4 py-2.5 font-mono text-base text-brand">{c.carton_no}</td>
+                <td className="px-4 py-2.5">
+                  {c.display_name && <div className="text-sm font-semibold text-slate-100">{c.display_name}</div>}
+                  <div className="font-mono text-base text-brand">{c.carton_no}</div>
+                </td>
                 <td className="text-sm text-slate-400">{c.route_code ?? "—"}</td>
                 <td className="text-sm font-mono">{c.customer_code ?? "—"}</td>
                 <td className="text-sm text-slate-400">{c.destination_code ?? "—"}</td>

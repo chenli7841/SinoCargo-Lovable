@@ -45,6 +45,7 @@ import { Route as AdminOversizeRulesRouteImport } from './routes/admin/oversize-
 import { Route as AdminRoutesRouteImport } from './routes/admin/routes'
 import { Route as AdminSystemRouteImport } from './routes/admin/system'
 import { Route as AdminTrackingPresetsRouteImport } from './routes/admin/tracking-presets'
+import { Route as AdminWalletLedgerRouteImport } from './routes/admin/wallet-ledger'
 import { Route as AdminWarehousesRouteImport } from './routes/admin/warehouses'
 import { Route as AdminWechatAiRecordsRouteImport } from './routes/admin/wechat-ai-records'
 import { Route as CgiBinSplatRouteImport } from './routes/cgi-bin/$'
@@ -282,6 +283,11 @@ const AdminSystemRoute = AdminSystemRouteImport.update({
 const AdminTrackingPresetsRoute = AdminTrackingPresetsRouteImport.update({
   id: '/tracking-presets',
   path: '/tracking-presets',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminWalletLedgerRoute = AdminWalletLedgerRouteImport.update({
+  id: '/wallet-ledger',
+  path: '/wallet-ledger',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminWarehousesRoute = AdminWarehousesRouteImport.update({
@@ -622,6 +628,7 @@ export interface FileRoutesByFullPath {
   '/admin/routes': typeof AdminRoutesRoute
   '/admin/system': typeof AdminSystemRoute
   '/admin/tracking-presets': typeof AdminTrackingPresetsRoute
+  '/admin/wallet-ledger': typeof AdminWalletLedgerRoute
   '/admin/warehouses': typeof AdminWarehousesRoute
   '/admin/wechat-ai-records': typeof AdminWechatAiRecordsRoute
   '/cgi-bin/$': typeof CgiBinSplatRoute
@@ -714,6 +721,7 @@ export interface FileRoutesByTo {
   '/admin/routes': typeof AdminRoutesRoute
   '/admin/system': typeof AdminSystemRoute
   '/admin/tracking-presets': typeof AdminTrackingPresetsRoute
+  '/admin/wallet-ledger': typeof AdminWalletLedgerRoute
   '/admin/warehouses': typeof AdminWarehousesRoute
   '/admin/wechat-ai-records': typeof AdminWechatAiRecordsRoute
   '/cgi-bin/$': typeof CgiBinSplatRoute
@@ -810,6 +818,7 @@ export interface FileRoutesById {
   '/admin/routes': typeof AdminRoutesRoute
   '/admin/system': typeof AdminSystemRoute
   '/admin/tracking-presets': typeof AdminTrackingPresetsRoute
+  '/admin/wallet-ledger': typeof AdminWalletLedgerRoute
   '/admin/warehouses': typeof AdminWarehousesRoute
   '/admin/wechat-ai-records': typeof AdminWechatAiRecordsRoute
   '/cgi-bin/$': typeof CgiBinSplatRoute
@@ -906,6 +915,7 @@ export interface FileRouteTypes {
     | '/admin/routes'
     | '/admin/system'
     | '/admin/tracking-presets'
+    | '/admin/wallet-ledger'
     | '/admin/warehouses'
     | '/admin/wechat-ai-records'
     | '/cgi-bin/$'
@@ -998,6 +1008,7 @@ export interface FileRouteTypes {
     | '/admin/routes'
     | '/admin/system'
     | '/admin/tracking-presets'
+    | '/admin/wallet-ledger'
     | '/admin/warehouses'
     | '/admin/wechat-ai-records'
     | '/cgi-bin/$'
@@ -1093,6 +1104,7 @@ export interface FileRouteTypes {
     | '/admin/routes'
     | '/admin/system'
     | '/admin/tracking-presets'
+    | '/admin/wallet-ledger'
     | '/admin/warehouses'
     | '/admin/wechat-ai-records'
     | '/cgi-bin/$'
@@ -1441,6 +1453,13 @@ declare module '@tanstack/react-router' {
       path: '/tracking-presets'
       fullPath: '/admin/tracking-presets'
       preLoaderRoute: typeof AdminTrackingPresetsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/wallet-ledger': {
+      id: '/admin/wallet-ledger'
+      path: '/wallet-ledger'
+      fullPath: '/admin/wallet-ledger'
+      preLoaderRoute: typeof AdminWalletLedgerRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/warehouses': {
@@ -1886,6 +1905,7 @@ interface AdminRouteRouteChildren {
   AdminRoutesRoute: typeof AdminRoutesRoute
   AdminSystemRoute: typeof AdminSystemRoute
   AdminTrackingPresetsRoute: typeof AdminTrackingPresetsRoute
+  AdminWalletLedgerRoute: typeof AdminWalletLedgerRoute
   AdminWarehousesRoute: typeof AdminWarehousesRoute
   AdminWechatAiRecordsRoute: typeof AdminWechatAiRecordsRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -1940,6 +1960,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminRoutesRoute: AdminRoutesRoute,
   AdminSystemRoute: AdminSystemRoute,
   AdminTrackingPresetsRoute: AdminTrackingPresetsRoute,
+  AdminWalletLedgerRoute: AdminWalletLedgerRoute,
   AdminWarehousesRoute: AdminWarehousesRoute,
   AdminWechatAiRecordsRoute: AdminWechatAiRecordsRoute,
   AdminIndexRoute: AdminIndexRoute,

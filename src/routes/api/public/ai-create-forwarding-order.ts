@@ -273,10 +273,22 @@ export const Route = createFileRoute("/api/public/ai-create-forwarding-order")({
           ],
         };
 
-        const { data: rpc, error: rpcErr } = await supabaseAdmin.rpc("place_forwarding", {
+        let { data: rpc, error: rpcErr } = await supabaseAdmin.rpc("place_forwarding", {
           _payload: payload as any,
           _target_user_id: userId,
         });
+        // statement_timeout (57014) rolls back the whole RPC — nothing committed —
+        // so one bounded retry is safe here too (mirrors the customer/admin forms).
+        const isStatementTimeout = rpcErr?.code === "57014" || /statement timeout/i.test(rpcErr?.message ?? "");
+        if (isStatementTimeout) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          const retry = await supabaseAdmin.rpc("place_forwarding", {
+            _payload: payload as any,
+            _target_user_id: userId,
+          });
+          rpc = retry.data;
+          rpcErr = retry.error;
+        }
         const r = rpc as any;
         if (rpcErr || !r?.ok) {
           return fail("creation_failed", rpcErr?.message ?? r?.reason ?? "创建失败，请联系人工客服", {

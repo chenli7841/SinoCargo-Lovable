@@ -60,7 +60,7 @@ function BatchesPage() {
   const allBatches = (q.data?.batches ?? []) as any[];
   const pageItems = allBatches.slice((page - 1) * pageSize, page * pageSize);
 
-  const [form, setForm] = useState({ planned_ship_date: "", shipping_method: "air" as BatchMethod, cargo_type: "", destination_code: "", notes: "" });
+  const [form, setForm] = useState({ display_name: "", planned_ship_date: "", shipping_method: "air" as BatchMethod, cargo_type: "", destination_code: "", notes: "" });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
 
   const onCreate = async (e: React.FormEvent) => {
@@ -68,7 +68,7 @@ function BatchesPage() {
     try {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(form.planned_ship_date)) throw new Error("请输入完整发货日期 YYYY-MM-DD");
       await create({ data: form });
-      setShowForm(false); setForm({ planned_ship_date: "", shipping_method: availableMethods[0] ?? "air", cargo_type: "", destination_code: "", notes: "" });
+      setShowForm(false); setForm({ display_name: "", planned_ship_date: "", shipping_method: availableMethods[0] ?? "air", cargo_type: "", destination_code: "", notes: "" });
       await qc.invalidateQueries({ queryKey: ["admin-batches"] });
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
   };
@@ -106,7 +106,10 @@ function BatchesPage() {
               const grand = Number(b.grand_total_cny ?? 0);
               return (
               <tr key={b.id} className="hover:bg-white/[0.03]">
-                <td className="px-4 py-2.5 font-mono text-base text-brand">{b.batch_no}</td>
+                <td className="px-4 py-2.5">
+                  {b.display_name && <div className="text-sm font-semibold text-slate-100">{b.display_name}</div>}
+                  <div className="font-mono text-base text-brand">{b.batch_no}</div>
+                </td>
                 <td className="px-4 py-2.5 text-sm">{b.planned_ship_date}</td>
                 <td className="px-4 py-2.5 text-sm">{METHOD_LABEL[b.shipping_method] ?? b.shipping_method}</td>
                 <td className="px-4 py-2.5 text-sm text-slate-400">{b.cargo_type ?? "—"} / {b.destination_code ?? "—"}</td>
@@ -153,6 +156,12 @@ function BatchesPage() {
               <button type="button" onClick={() => setShowForm(false)} className="text-slate-400 hover:text-white"><X className="h-4 w-4"/></button>
             </div>
             <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-400">批次名称（可选，可手动填写）</label>
+                <input value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })}
+                  placeholder="例如：7月多伦多海运批次"
+                  className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100"/>
+              </div>
               <div>
                 <label className="text-xs text-slate-400">计划发货日期 *（直接输入年月日，如 20260628）</label>
                 <DateInput value={form.planned_ship_date} onChange={(v) => setForm({ ...form, planned_ship_date: v })}/>

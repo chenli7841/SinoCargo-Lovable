@@ -211,7 +211,7 @@ function BatchDetail() {
   };
 
   // meta edit
-  const [meta, setMeta] = useState({ eta_date: "", vessel_no: "" });
+  const [meta, setMeta] = useState({ display_name: "", eta_date: "", vessel_no: "" });
   const [metaInit, setMetaInit] = useState(false);
 
   // bulk form
@@ -239,7 +239,7 @@ function BatchDetail() {
   if (detailQ.isError) return <div className="p-6 text-rose-400">{(detailQ.error as Error).message}</div>;
   const { batch, waybills, logs, waybill_total, independent_clearance, fee_summary } = detailQ.data!;
   if (!metaInit) {
-    setMeta({ eta_date: batch.eta_date ?? "", vessel_no: batch.vessel_no ?? "" });
+    setMeta({ display_name: batch.display_name ?? "", eta_date: batch.eta_date ?? "", vessel_no: batch.vessel_no ?? "" });
     setMetaInit(true);
   }
   const isLocked = batch.status !== "draft";
@@ -273,7 +273,7 @@ function BatchDetail() {
       return;
     }
     await updBatch({
-      data: { batchId, patch: { eta_date: meta.eta_date || null, vessel_no: meta.vessel_no || null } },
+      data: { batchId, patch: { display_name: meta.display_name.trim() || null, eta_date: meta.eta_date || null, vessel_no: meta.vessel_no || null } },
     });
     await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
   };
@@ -392,6 +392,7 @@ function BatchDetail() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card title="批次信息">
           <div className="space-y-1 text-xs text-slate-300">
+            <div>名称：{batch.display_name ?? "—"}</div>
             <div>运输方式：{batch.shipping_method}</div>
             <div>货物类型：{batch.cargo_type ?? "—"}</div>
             <div>目的地：{batch.destination_code ?? "—"}</div>
@@ -402,6 +403,16 @@ function BatchDetail() {
         </Card>
         <Card title="发运计划">
           <div className="grid grid-cols-1 gap-2 text-xs">
+            <label className="text-slate-400">
+              批次名称（可选）
+              <input
+                disabled={!canEdit}
+                value={meta.display_name}
+                onChange={(e) => setMeta({ ...meta, display_name: e.target.value })}
+                placeholder="可手动填写"
+                className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100"
+              />
+            </label>
             <label className="text-slate-400">
               预计到货日期（直接输入年月日）
               <DateInput

@@ -53,15 +53,22 @@ export function ScanAddDialog({
           <button onClick={onClose}><X className="h-4 w-4 text-slate-400"/></button>
         </div>
         <p className="mb-3 text-xs text-slate-400">连续扫描运单号 / 箱号 (BOX...) / 托盘号 (PAL...)，系统自动识别。回车提交。</p>
-        <form onSubmit={submit}>
+        <form onSubmit={submit} className="flex gap-2">
           <input
             ref={inputRef}
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            placeholder="扫描或输入编号后按回车"
-            className="w-full rounded-md border border-brand/40 bg-white/5 px-3 py-2.5 text-sm text-slate-100 focus:border-brand focus:outline-none"
+            placeholder="扫描或输入编号后按回车，或点击确认加入"
+            className="min-w-0 flex-1 rounded-md border border-brand/40 bg-white/5 px-3 py-2.5 text-sm text-slate-100 focus:border-brand focus:outline-none"
             autoComplete="off"
           />
+          <button
+            type="submit"
+            disabled={!code.trim() || busy}
+            className="shrink-0 rounded-md bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-40"
+          >
+            确认加入
+          </button>
         </form>
         <div className="mt-3 max-h-72 overflow-y-auto rounded-lg border border-white/5 bg-white/[0.02] p-2">
           {log.length === 0 ? <div className="py-4 text-center text-xs text-slate-500">扫描记录将在这里实时显示</div> :

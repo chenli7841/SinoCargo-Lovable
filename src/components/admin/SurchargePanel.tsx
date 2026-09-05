@@ -3,7 +3,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, fmtDate } from "@/lib/admin-shared";
 import { listSurcharges, addSurcharge, updateSurcharge, deleteSurcharge, type SurchargeScope } from "@/lib/surcharges.functions";
-import { Plus, Trash2, Loader2, Save, Pencil, X } from "lucide-react";
+import { Plus, Trash2, Loader2, Save, Pencil, X, Truck } from "lucide-react";
+import { BulkDeliveryFeeDialog } from "@/components/admin/BulkDeliveryFeeDialog";
 
 type Props = {
   scope: SurchargeScope;
@@ -40,6 +41,7 @@ export function SurchargePanel({ scope, id, canEdit = true, showCustomerField, t
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ amount_cny: "", note: "", customer_code: "" });
   const [err, setErr] = useState<string | null>(null);
+  const [showBulk, setShowBulk] = useState(false);
 
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: key });
@@ -88,10 +90,18 @@ export function SurchargePanel({ scope, id, canEdit = true, showCustomerField, t
 
   return (
     <Card title={title ?? `附加费 · ${SCOPE_LABEL[scope]}`} action={canEdit && !adding && (
-      <button onClick={() => { setAdding(true); setErr(null); }}
-        className="inline-flex items-center gap-1 rounded-md bg-brand px-2 py-1 text-xs font-semibold text-white hover:bg-brand/90">
-        <Plus className="h-3 w-3"/>添加
-      </button>
+      <div className="flex items-center gap-2">
+        {scope === "batch" && (
+          <button onClick={() => setShowBulk(true)}
+            className="inline-flex items-center gap-1 rounded-md border border-brand/40 px-2 py-1 text-xs font-semibold text-brand hover:bg-brand/10">
+            <Truck className="h-3 w-3"/>批量添加派送费
+          </button>
+        )}
+        <button onClick={() => { setAdding(true); setErr(null); }}
+          className="inline-flex items-center gap-1 rounded-md bg-brand px-2 py-1 text-xs font-semibold text-white hover:bg-brand/90">
+          <Plus className="h-3 w-3"/>添加
+        </button>
+      </div>
     )}>
       {q.isLoading && <div className="py-4"><Loader2 className="mx-auto h-4 w-4 animate-spin text-slate-500"/></div>}
       {q.isError && <div className="text-xs text-rose-400">{(q.error as Error).message}</div>}
@@ -207,6 +217,13 @@ export function SurchargePanel({ scope, id, canEdit = true, showCustomerField, t
             </table>
           )}
         </>
+      )}
+      {showBulk && (
+        <BulkDeliveryFeeDialog
+          batchId={id}
+          onClose={() => setShowBulk(false)}
+          onApplied={refresh}
+        />
       )}
     </Card>
   );

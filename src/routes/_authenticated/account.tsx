@@ -1543,6 +1543,7 @@ function BatchCard({
 }) {
   const isAir = b.shipping_method === "air";
   const [trackOpen, setTrackOpen] = useState(false);
+  const [itemsOpen, setItemsOpen] = useState(false);
   const [events, setEvents] = useState<any[] | null | "err">(null);
 
   const toggleTrack = async () => {
@@ -1614,55 +1615,67 @@ function BatchCard({
         </div>
       </header>
 
-      <ul className="divide-y divide-border">
-        {b.items.map((it) => (
-          <li key={`${it.kind}-${it.id}`} className="flex flex-wrap items-center gap-3 px-5 py-3">
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${it.kind === "order" ? "bg-brand/10 text-brand" : "bg-cta/10 text-cta"}`}
-            >
-              {it.kind === "order" ? (
-                <>
-                  <ShoppingCart className="h-3 w-3" />
-                  {tr("商城", "Shop")}
-                </>
-              ) : (
-                <>
-                  <Truck className="h-3 w-3" />
-                  {tr("集运", "Forwarding")}
-                </>
-              )}
-            </span>
-            <span className="font-mono text-xs font-semibold">{it.no}</span>
-            {it.tracking_no && (
-              <span className="text-[11px] text-ink-soft">
-                · <span className="font-mono">{it.tracking_no}</span>
+      <div className="px-5 py-3">
+        <button
+          onClick={() => setItemsOpen((v) => !v)}
+          className="inline-flex items-center gap-2 rounded-full border border-border bg-background/40 px-3 py-1.5 text-xs font-medium hover:border-brand hover:text-brand"
+        >
+          <Truck className="h-3 w-3" />
+          {tr("集运订单", "Forwarding orders")} ({b.items.length})
+          <span className="text-ink-soft">{itemsOpen ? "▲" : "▼"}</span>
+        </button>
+      </div>
+      {itemsOpen && (
+        <ul className="divide-y divide-border border-t border-border">
+          {b.items.map((it) => (
+            <li key={`${it.kind}-${it.id}`} className="flex flex-wrap items-center gap-3 px-5 py-3">
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${it.kind === "order" ? "bg-brand/10 text-brand" : "bg-cta/10 text-cta"}`}
+              >
+                {it.kind === "order" ? (
+                  <>
+                    <ShoppingCart className="h-3 w-3" />
+                    {tr("商城", "Shop")}
+                  </>
+                ) : (
+                  <>
+                    <Truck className="h-3 w-3" />
+                    {tr("集运", "Forwarding")}
+                  </>
+                )}
               </span>
-            )}
-            <span
-              className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${it.payment_status === "paid" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}
-            >
-              {it.payment_status === "paid" ? tr("已付款", "Paid") : tr("待付款", "Unpaid")}
-            </span>
-            {it.kind === "order" ? (
-              <Link
-                to="/orders/$orderId"
-                params={{ orderId: it.id }}
-                className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium hover:border-brand hover:text-brand"
+              <span className="font-mono text-xs font-semibold">{it.no}</span>
+              {it.tracking_no && (
+                <span className="text-[11px] text-ink-soft">
+                  · <span className="font-mono">{it.tracking_no}</span>
+                </span>
+              )}
+              <span
+                className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${it.payment_status === "paid" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}
               >
-                {tr("详情", "Detail")} <ArrowRight className="h-3 w-3" />
-              </Link>
-            ) : (
-              <Link
-                to="/forwarding/$forwardingId"
-                params={{ forwardingId: it.id }}
-                className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium hover:border-brand hover:text-brand"
-              >
-                {tr("详情", "Detail")} <ArrowRight className="h-3 w-3" />
-              </Link>
-            )}
-          </li>
-        ))}
-      </ul>
+                {it.payment_status === "paid" ? tr("已付款", "Paid") : tr("待付款", "Unpaid")}
+              </span>
+              {it.kind === "order" ? (
+                <Link
+                  to="/orders/$orderId"
+                  params={{ orderId: it.id }}
+                  className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium hover:border-brand hover:text-brand"
+                >
+                  {tr("详情", "Detail")} <ArrowRight className="h-3 w-3" />
+                </Link>
+              ) : (
+                <Link
+                  to="/forwarding/$forwardingId"
+                  params={{ forwardingId: it.id }}
+                  className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium hover:border-brand hover:text-brand"
+                >
+                  {tr("详情", "Detail")} <ArrowRight className="h-3 w-3" />
+                </Link>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {/* Batch tracking timeline */}
       <div className="border-t border-border bg-background/40 px-5 py-3">
@@ -2437,10 +2450,28 @@ interface MyOrderItem {
   lineItems?: MyLineItem[];
   total_weight_kg?: number;
   total_volume_m3?: number;
+  total_volumetric_weight_kg?: number;
   total_cad?: number | null;
 }
 
 const HISTORY_STATUSES = new Set(["delivered", "cancelled"]);
+
+// Sort priority for the merged order/waybill list: un-warehoused (awaiting
+// arrival) first, then the rest roughly in shipping-progress order. Within
+// each rank items are ordered by time (see `filtered` below).
+const STATUS_RANK: Record<string, number> = {
+  pending: 0, // 未入库 / 已发货等待入库
+  paid: 1,
+  procurement: 2,
+  received: 3,
+  processing: 4,
+  packed: 4,
+  shipped: 5,
+  in_transit: 6,
+  ready_pickup: 7,
+  delivered: 8,
+  cancelled: 9,
+};
 
 function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } = {}) {
   const { lang, cnyToCad } = useApp();
@@ -2468,7 +2499,7 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
         .order("created_at", { ascending: false }),
       sb
         .from("waybills")
-        .select("order_id,forwarding_id,waybill_no,status,weight_kg,length_cm,width_cm,height_cm,created_at")
+        .select("order_id,forwarding_id,waybill_no,status,weight_kg,length_cm,width_cm,height_cm,weight_snapshot,created_at")
         .order("created_at"),
       sb.from("order_items").select("order_id,name_zh,name_en,quantity").order("created_at"),
       sb.from("forwarding_items").select("forwarding_id,name,quantity").order("created_at"),
@@ -2488,8 +2519,8 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
         if (!itemsByFwd.has(r.forwarding_id)) itemsByFwd.set(r.forwarding_id, []);
         itemsByFwd.get(r.forwarding_id)!.push({ name: r.name || "—", qty: Number(r.quantity ?? 0) });
       });
-      const sumOrder = new Map<string, { w: number; v: number }>();
-      const sumFwd = new Map<string, { w: number; v: number }>();
+      const sumOrder = new Map<string, { w: number; v: number; vw: number }>();
+      const sumFwd = new Map<string, { w: number; v: number; vw: number }>();
       (w.data ?? []).forEach((wb: any) => {
         const m = wb.order_id ? byOrder : byFwd;
         const s = wb.order_id ? sumOrder : sumFwd;
@@ -2497,12 +2528,15 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
         if (!key) return;
         if (!m.has(key)) m.set(key, []);
         m.get(key)!.push({ waybill_no: wb.waybill_no, status: wb.status });
-        const cur = s.get(key) ?? { w: 0, v: 0 };
+        const cur = s.get(key) ?? { w: 0, v: 0, vw: 0 };
         cur.w += Number(wb.weight_kg ?? 0);
         const l = Number(wb.length_cm ?? 0),
           wd = Number(wb.width_cm ?? 0),
           h = Number(wb.height_cm ?? 0);
-        if (l && wd && h) cur.v += (l * wd * h) / 1_000_000;
+        if (l && wd && h) {
+          cur.v += (l * wd * h) / 1_000_000;
+          cur.vw += Number(wb.weight_snapshot?.volumetric_weight ?? 0) || (l * wd * h) / 6000;
+        }
         s.set(key, cur);
       });
       const combined: MyOrderItem[] = [
@@ -2521,6 +2555,7 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
           lineItems: itemsByOrder.get(r.id) ?? [],
           total_weight_kg: sumOrder.get(r.id)?.w ?? 0,
           total_volume_m3: sumOrder.get(r.id)?.v ?? 0,
+          total_volumetric_weight_kg: sumOrder.get(r.id)?.vw ?? 0,
         })),
         ...(f.data ?? []).map((r: any) => {
           const snap: any = r.freight_snapshot ?? null;
@@ -2544,6 +2579,7 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
             lineItems: itemsByFwd.get(r.id) ?? [],
             total_weight_kg: sumFwd.get(r.id)?.w ?? Number(r.weight_kg ?? 0),
             total_volume_m3: sumFwd.get(r.id)?.v ?? 0,
+            total_volumetric_weight_kg: sumFwd.get(r.id)?.vw ?? 0,
           };
         }),
       ];
@@ -2631,18 +2667,27 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
   });
   const byHistory = showHistory ? byFilter : byFilter.filter((it) => !HISTORY_STATUSES.has(it.status));
   const q = query.trim().toLowerCase();
-  const filtered = !q
+  const searched = !q
     ? byHistory
     : byHistory.filter((it) => {
         const dateStr = new Date(it.created_at).toLocaleString(lang === "zh" ? "zh-CN" : "en-CA").toLowerCase();
         return (
           it.no.toLowerCase().includes(q) ||
           (it.tracking_no ?? "").toLowerCase().includes(q) ||
+          (it.domestic_tracking_no ?? "").toLowerCase().includes(q) ||
           statusLabel(it).toLowerCase().includes(q) ||
           it.status.toLowerCase().includes(q) ||
           dateStr.includes(q)
         );
       });
+
+  // 先按状态排列（未入库优先），同状态内再按时间新旧排列
+  const filtered = [...searched].sort((a, b) => {
+    const rankA = STATUS_RANK[a.status] ?? 99;
+    const rankB = STATUS_RANK[b.status] ?? 99;
+    if (rankA !== rankB) return rankA - rankB;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
 
   const counts = {
     all: items.length,
@@ -2710,7 +2755,7 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={tr("搜索单号 / 日期 / 包裹状态", "Search no. / date / status")}
+          placeholder={tr("搜索单号 / 国内单号 / 日期 / 包裹状态", "Search no. / domestic no. / date / status")}
           className={inputCls + " sm:max-w-md"}
         />
         <label className="inline-flex shrink-0 items-center gap-2 px-1 text-xs text-ink-soft">
@@ -2774,7 +2819,11 @@ function MyOrdersTab({ initialFilter = "all" }: { initialFilter?: OrderFilter } 
                     <div className="text-[11px] text-ink-soft">
                       {(o.total_weight_kg ?? 0) > 0 && <span>{(o.total_weight_kg ?? 0).toFixed(2)} kg</span>}
                       {(o.total_weight_kg ?? 0) > 0 && (o.total_volume_m3 ?? 0) > 0 && <span> · </span>}
-                      {(o.total_volume_m3 ?? 0) > 0 && <span>{(o.total_volume_m3 ?? 0).toFixed(3)} m³</span>}
+                      {(o.total_volume_m3 ?? 0) > 0 && (
+                        <span>
+                          {(o.total_volume_m3 ?? 0).toFixed(3)} m³ / {(o.total_volumetric_weight_kg ?? 0).toFixed(2)} kg {tr("体积重", "vol. wt.")}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ) : null;

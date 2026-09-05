@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { getDashboard } from "@/lib/dashboard.functions";
 import {
-  Boxes, Truck, Package, AlertTriangle, FileText, DollarSign, Users, Loader2, ScanLine, ArrowRight,
+  Boxes, Truck, Package, AlertTriangle, FileText, DollarSign, Users, Loader2, ScanLine, ArrowRight, Wallet,
 } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -77,6 +77,33 @@ function AdminIndex() {
         </div>
       </div>
 
+      {/* Wallet ledger summary (owner/manager only) */}
+      {d.walletLedger && (
+        <div className="mt-6 rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="inline-flex items-center gap-1.5 text-sm font-semibold">
+              <Wallet className="h-4 w-4 text-blue-400" />
+              本月钱包流水
+            </div>
+            <Link to="/admin/wallet-ledger" className="inline-flex items-center gap-1 text-xs text-brand hover:underline">
+              查看完整流水 <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <WalletLedgerMini
+              title="充值"
+              accentClass="text-emerald-300"
+              summary={d.walletLedger.month_recharge}
+            />
+            <WalletLedgerMini
+              title="扣款"
+              accentClass="text-rose-300"
+              summary={d.walletLedger.month_spend}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Recent logs */}
       <div className="mt-6 rounded-2xl border border-white/5 bg-white/[0.02] p-4">
         <div className="mb-3 flex items-center justify-between">
@@ -108,6 +135,32 @@ function AdminIndex() {
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function WalletLedgerMini({
+  title,
+  accentClass,
+  summary,
+}: {
+  title: string;
+  accentClass: string;
+  summary: { total_count: number; total_amount_cad: number; by_channel: { key: string; label: string; count: number; amount_cad: number }[] };
+}) {
+  return (
+    <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+      <div className="flex items-baseline justify-between">
+        <span className="text-xs text-slate-400">{title}（{summary.total_count} 笔）</span>
+        <span className={`font-display text-lg font-bold ${accentClass}`}>${summary.total_amount_cad.toLocaleString()}</span>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {summary.by_channel.map((c) => (
+          <span key={c.key} className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-slate-400">
+            {c.label} {c.count} 笔 · ${c.amount_cad.toLocaleString()}
+          </span>
+        ))}
       </div>
     </div>
   );

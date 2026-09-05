@@ -15,6 +15,7 @@ export function ContainerEditPanel({
   locked?: boolean;
 }) {
   const [f, setF] = useState({
+    display_name: row.display_name ?? "",
     route_code: row.route_code ?? "",
     status: row.status ?? "",
     customer_code: row.customer_code ?? "",
@@ -23,13 +24,14 @@ export function ContainerEditPanel({
   });
   useEffect(() => {
     setF({
+      display_name: row.display_name ?? "",
       route_code: row.route_code ?? "",
       status: row.status ?? "",
       customer_code: row.customer_code ?? "",
       pickup_warehouse: row.pickup_warehouse ?? "",
       destination_code: row.destination_code ?? "",
     });
-  }, [row.id, row.route_code, row.status, row.customer_code, row.pickup_warehouse, row.destination_code]);
+  }, [row.id, row.display_name, row.route_code, row.status, row.customer_code, row.pickup_warehouse, row.destination_code]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -57,7 +59,8 @@ export function ContainerEditPanel({
         {locked ? <Lock className="h-3 w-3"/> : saving ? <Loader2 className="h-3 w-3 animate-spin"/> : <Save className="h-3 w-3"/>}保存
       </button>
     }>
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5 text-xs">
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6 text-xs">
+        <F label="名称" value={f.display_name} onChange={upd("display_name")} placeholder="可手动填写" disabled={locked}/>
         <F label="线路代码" value={f.route_code} onChange={upd("route_code")} placeholder="例如 CAAIR" disabled={locked}/>
         <div>
           <label className="text-slate-400">状态</label>

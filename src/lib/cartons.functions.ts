@@ -608,6 +608,7 @@ export const listCartons = createServerFn({ method: "POST" })
       const s = data.search.trim();
       const parts = [
         `carton_no.ilike.%${s}%`,
+        `display_name.ilike.%${s}%`,
         `customer_code.ilike.%${s}%`,
         `route_code.ilike.%${s}%`,
         `destination_code.ilike.%${s}%`,
@@ -746,6 +747,7 @@ export const createCarton = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
     (d: {
+      display_name?: string;
       notes?: string;
       batch_id?: string;
       pallet_id?: string;
@@ -765,6 +767,7 @@ export const createCarton = createServerFn({ method: "POST" })
     const { data: ins, error } = await supabaseAdmin
       .from("cartons")
       .insert({
+        display_name: nz(data.display_name),
         notes: nz(data.notes),
         batch_id: nz(data.batch_id),
         pallet_id: nz(data.pallet_id),
@@ -1148,6 +1151,7 @@ export const listPallets = createServerFn({ method: "POST" })
       const s = data.search.trim();
       const parts = [
         `pallet_no.ilike.%${s}%`,
+        `display_name.ilike.%${s}%`,
         `customer_code.ilike.%${s}%`,
         `route_code.ilike.%${s}%`,
         `destination_code.ilike.%${s}%`,
@@ -1282,6 +1286,7 @@ export const createPallet = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
     (d: {
+      display_name?: string;
       notes?: string;
       batch_id?: string;
       weight_kg?: number;
@@ -1300,6 +1305,7 @@ export const createPallet = createServerFn({ method: "POST" })
     const { data: ins, error } = await supabaseAdmin
       .from("pallets")
       .insert({
+        display_name: nz(data.display_name),
         notes: nz(data.notes),
         batch_id: nz(data.batch_id),
         weight_kg: nz(data.weight_kg),

@@ -35,6 +35,13 @@ export const Route = createFileRoute("/_authenticated/forwarding/$forwardingId")
 
 const sb = supabase as any;
 
+function volumetricWeightKg(w: any) {
+  const saved = Number(w?.weight_snapshot?.volumetric_weight ?? 0);
+  if (saved > 0) return saved;
+  const l = Number(w?.length_cm ?? 0), width = Number(w?.width_cm ?? 0), h = Number(w?.height_cm ?? 0);
+  return l && width && h ? (l * width * h) / 6000 : 0;
+}
+
 function ForwardingDetailPage() {
   const { forwardingId } = Route.useParams();
   const { lang, cnyToCad } = useApp();
@@ -176,6 +183,7 @@ function ForwardingDetailPage() {
       h = Number(w.height_cm ?? 0);
     return a + (l && wd && h ? (l * wd * h) / 1_000_000 : 0);
   }, 0);
+  const totalVolumetricWeight = waybills.reduce((sum, w) => sum + volumetricWeightKg(w), 0);
   // CAD is source of truth. total_cad is authoritative — it's what the admin list "费用" shows,
   // computed server-side as: freight + duty + (insured ? insurance : 0) + surcharges (CNY×fx).
   const snap: any = fo.freight_snapshot ?? null;
@@ -318,7 +326,11 @@ function ForwardingDetailPage() {
                       {tr("总体积", "Total volume")}
                     </span>
                   }
-                  value={totalVolume > 0 ? `${totalVolume.toFixed(3)} m³` : "—"}
+                  value={
+                    totalVolume > 0
+                      ? `${totalVolume.toFixed(3)} m³ / ${totalVolumetricWeight.toFixed(2)} kg ${tr("体积重", "vol. wt.")}`
+                      : "—"
+                  }
                 />
                 <Stat
                   label={
@@ -431,7 +443,7 @@ function ForwardingDetailPage() {
                         <td className="px-3 py-2">{w.weight_kg ? `${Number(w.weight_kg).toFixed(2)} kg` : "—"}</td>
                         <td className="px-3 py-2 font-mono">
                           {w.length_cm && w.width_cm && w.height_cm
-                            ? `${w.length_cm}×${w.width_cm}×${w.height_cm} cm`
+                            ? `${w.length_cm}×${w.width_cm}×${w.height_cm} cm / ${volumetricWeightKg(w).toFixed(2)} kg ${tr("体积重", "vol. wt.")}`
                             : "—"}
                         </td>
                       </tr>

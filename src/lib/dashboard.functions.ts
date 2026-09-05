@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { computeWalletLedgerSummary } from "@/lib/wallet-ledger.functions";
 
 async function assertStaff(supabase: any, userId: string) {
   const { data } = await supabase.rpc("is_staff", { _user_id: userId });
@@ -12,6 +13,14 @@ export const getDashboard = createServerFn({ method: "GET" })
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+    // 钱包流水金额较敏感，概览小卡片只对 owner / manager 显示（与 /admin/wallet-ledger
+    // 页面的权限口径一致），其它职能角色（仓库/客服/销售）看不到这部分。
+    const [{ data: isOwner }, { data: isManager }] = await Promise.all([
+      context.supabase.rpc("has_role", { _user_id: context.userId, _role: "owner" }),
+      context.supabase.rpc("has_role", { _user_id: context.userId, _role: "manager" }),
+    ]);
+    const canSeeWallet = !!isOwner || !!isManager;
+
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const todayISO = today.toISOString();
     const sevenAgo = new Date(Date.now() - 7 * 86400000).toISOString();
@@ -21,6 +30,7 @@ export const getDashboard = createServerFn({ method: "GET" })
       ordersTodayR, waybillsTodayR, inTransitR, pendingIntakeR,
       unpaidInvR, monthRevR, detainedR, usersR,
       recentLogsR, waybillsTrendR, routeDistR,
+      walletRecharge, walletSpend,
     ] = await Promise.all([
       supabaseAdmin.from("orders").select("id", { count: "exact", head: true }).gte("created_at", todayISO),
       supabaseAdmin.from("waybills").select("id", { count: "exact", head: true }).gte("created_at", todayISO),
@@ -33,6 +43,10 @@ export const getDashboard = createServerFn({ method: "GET" })
       supabaseAdmin.from("admin_action_logs").select("*").order("created_at", { ascending: false }).limit(10),
       supabaseAdmin.from("waybills").select("created_at, status").gte("created_at", sevenAgo),
       supabaseAdmin.from("waybills").select("shipping_method").gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString()),
+      // 本月钱包流水（充值/扣款分开、按渠道分组），供概览小卡片使用 —— 与
+      // /admin/wallet-ledger 页面共用同一份聚合逻辑，口径保持一致。
+      canSeeWallet ? computeWalletLedgerSummary(supabaseAdmin, "recharge", monthStart, null) : null,
+      canSeeWallet ? computeWalletLedgerSummary(supabaseAdmin, "spend", monthStart, null) : null,
     ]);
 
     const unpaidTotal = (unpaidInvR.data ?? []).reduce((s: number, r: any) => s + Number(r.total_cny || 0), 0);
@@ -71,5 +85,6 @@ export const getDashboard = createServerFn({ method: "GET" })
       trend: days,
       routeDistribution: Object.entries(dist).map(([name, value]) => ({ name, value })),
       recentLogs: recentLogsR.data ?? [],
+      walletLedger: canSeeWallet ? { month_recharge: walletRecharge!, month_spend: walletSpend! } : null,
     };
   });

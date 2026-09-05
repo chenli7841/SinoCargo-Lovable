@@ -128,6 +128,7 @@ export function WaybillCompactList({
 export type CartonRow = {
   id: string;
   carton_no: string;
+  display_name?: string | null;
   status?: string | null;
   payment_status?: string | null;
   chargeable_weight_kg?: number | null;
@@ -177,9 +178,8 @@ export function CartonCompactList({
               <tr className="cursor-pointer hover:bg-white/[0.03]" onClick={() => setOpen((o) => ({ ...o, [c.id]: !o[c.id] }))}>
                 <td className="px-2">{isOpen ? <ChevronDown className="h-3 w-3 text-slate-400"/> : <ChevronRight className="h-3 w-3 text-slate-400"/>}</td>
                 <td className="py-2">
-                  <Link to="/admin/cartons/$cartonId" params={{ cartonId: c.id }} onClick={(e) => e.stopPropagation()} className="font-mono text-xs text-brand">
-                    {c.carton_no}
-                  </Link>
+                  {c.display_name && <div className="text-xs font-semibold text-slate-200">{c.display_name}</div>}
+                  <Link to="/admin/cartons/$cartonId" params={{ cartonId: c.id }} onClick={(e) => e.stopPropagation()} className="font-mono text-xs text-brand">{c.carton_no}</Link>
                 </td>
                 <td className="font-mono text-xs text-slate-300">{c.customer_code ?? "—"}</td>
                 <td className="text-xs">{c.status ?? "—"}</td>
@@ -223,6 +223,7 @@ export function CartonCompactList({
 export type PalletRow = {
   id: string;
   pallet_no: string;
+  display_name?: string | null;
   status?: string | null;
   payment_status?: string | null;
   chargeable_weight_kg?: number | null;
@@ -276,9 +277,8 @@ export function PalletCompactList({
               <tr className="cursor-pointer hover:bg-white/[0.03]" onClick={() => setOpen((o) => ({ ...o, [p.id]: !o[p.id] }))}>
                 <td className="px-2">{isOpen ? <ChevronDown className="h-3 w-3 text-slate-400"/> : <ChevronRight className="h-3 w-3 text-slate-400"/>}</td>
                 <td className="py-2">
-                  <Link to="/admin/pallets/$palletId" params={{ palletId: p.id }} onClick={(e) => e.stopPropagation()} className="font-mono text-xs text-brand">
-                    {p.pallet_no}
-                  </Link>
+                  {p.display_name && <div className="text-xs font-semibold text-slate-200">{p.display_name}</div>}
+                  <Link to="/admin/pallets/$palletId" params={{ palletId: p.id }} onClick={(e) => e.stopPropagation()} className="font-mono text-xs text-brand">{p.pallet_no}</Link>
                 </td>
                 <td className="font-mono text-xs text-slate-300">{p.customer_code ?? "—"}</td>
                 <td className="text-xs">{p.status ?? "—"}</td>

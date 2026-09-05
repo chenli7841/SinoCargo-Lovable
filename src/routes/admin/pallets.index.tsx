@@ -80,7 +80,10 @@ function PalletsPage() {
               const volW = Number(p.volumetric_weight_kg ?? 0);
               return (
               <tr key={p.id} className="hover:bg-white/[0.03]">
-                <td className="px-4 py-2.5 font-mono text-base text-brand">{p.pallet_no}</td>
+                <td className="px-4 py-2.5">
+                  {p.display_name && <div className="text-sm font-semibold text-slate-100">{p.display_name}</div>}
+                  <div className="font-mono text-base text-brand">{p.pallet_no}</div>
+                </td>
                 <td className="text-sm text-slate-400">{p.route_code ?? "—"}</td>
                 <td className="text-sm font-mono">{p.customer_code ?? "—"}</td>
                 <td className="text-sm text-slate-400">{p.destination_code ?? "—"}</td>

@@ -14,6 +14,136 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_forwarding_drafts: {
+        Row: {
+          confirmed_at: string | null
+          created_at: string
+          draft_data: Json
+          expires_at: string
+          forwarding_id: string | null
+          id: string
+          request_no: string | null
+          status: string
+          updated_at: string
+          user_id: string
+          version: number
+        }
+        Insert: {
+          confirmed_at?: string | null
+          created_at?: string
+          draft_data?: Json
+          expires_at?: string
+          forwarding_id?: string | null
+          id?: string
+          request_no?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+          version?: number
+        }
+        Update: {
+          confirmed_at?: string | null
+          created_at?: string
+          draft_data?: Json
+          expires_at?: string
+          forwarding_id?: string | null
+          id?: string
+          request_no?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_forwarding_drafts_forwarding_id_fkey"
+            columns: ["forwarding_id"]
+            isOneToOne: false
+            referencedRelation: "forwarding_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_support_messages: {
+        Row: {
+          body: string
+          created_at: string
+          customer_user_id: string
+          id: string
+          read_by_customer_at: string | null
+          read_by_staff_at: string | null
+          sender_role: string
+          sender_user_id: string | null
+          source: string
+          thread_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          customer_user_id: string
+          id?: string
+          read_by_customer_at?: string | null
+          read_by_staff_at?: string | null
+          sender_role: string
+          sender_user_id?: string | null
+          source?: string
+          thread_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          customer_user_id?: string
+          id?: string
+          read_by_customer_at?: string | null
+          read_by_staff_at?: string | null
+          sender_role?: string
+          sender_user_id?: string | null
+          source?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_support_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "ai_support_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_support_threads: {
+        Row: {
+          created_at: string
+          customer_code: string
+          customer_user_id: string
+          id: string
+          last_message_at: string
+          unread_for_customer: number
+          unread_for_staff: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_code: string
+          customer_user_id: string
+          id?: string
+          last_message_at?: string
+          unread_for_customer?: number
+          unread_for_staff?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_code?: string
+          customer_user_id?: string
+          id?: string
+          last_message_at?: string
+          unread_for_customer?: number
+          unread_for_staff?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       addresses: {
         Row: {
           city: string
@@ -249,6 +379,7 @@ export type Database = {
       batches: {
         Row: {
           batch_no: string | null
+          display_name: string | null
           cargo_type: string | null
           closed_at: string | null
           created_at: string
@@ -282,6 +413,7 @@ export type Database = {
         }
         Insert: {
           batch_no?: string | null
+          display_name?: string | null
           cargo_type?: string | null
           closed_at?: string | null
           created_at?: string
@@ -315,6 +447,7 @@ export type Database = {
         }
         Update: {
           batch_no?: string | null
+          display_name?: string | null
           cargo_type?: string | null
           closed_at?: string | null
           created_at?: string
@@ -384,6 +517,7 @@ export type Database = {
       cartons: {
         Row: {
           address_snapshot: Json | null
+          display_name: string | null
           batch_id: string | null
           carton_no: string | null
           closed_at: string | null
@@ -416,6 +550,7 @@ export type Database = {
         }
         Insert: {
           address_snapshot?: Json | null
+          display_name?: string | null
           batch_id?: string | null
           carton_no?: string | null
           closed_at?: string | null
@@ -448,6 +583,7 @@ export type Database = {
         }
         Update: {
           address_snapshot?: Json | null
+          display_name?: string | null
           batch_id?: string | null
           carton_no?: string | null
           closed_at?: string | null
@@ -2028,6 +2164,7 @@ export type Database = {
       pallets: {
         Row: {
           address_snapshot: Json | null
+          display_name: string | null
           batch_id: string | null
           closed_at: string | null
           created_at: string
@@ -2059,6 +2196,7 @@ export type Database = {
         }
         Insert: {
           address_snapshot?: Json | null
+          display_name?: string | null
           batch_id?: string | null
           closed_at?: string | null
           created_at?: string
@@ -2090,6 +2228,7 @@ export type Database = {
         }
         Update: {
           address_snapshot?: Json | null
+          display_name?: string | null
           batch_id?: string | null
           closed_at?: string | null
           created_at?: string
@@ -2738,6 +2877,7 @@ export type Database = {
       }
       shipping_routes: {
         Row: {
+          allowed_items_text: string | null
           blacklist_customer_codes: string[]
           blacklist_vip_levels: Database["public"]["Enums"]["vip_level"][]
           cargo_type: string
@@ -2759,6 +2899,7 @@ export type Database = {
           name_zh: string
           note: string | null
           origin_warehouse_id: string | null
+          prohibited_items_text: string | null
           sales_tax_enabled: boolean
           sales_tax_rate_pct: number
           shipping_method: string
@@ -2773,6 +2914,7 @@ export type Database = {
           wechat_ai_price_text: string | null
         }
         Insert: {
+          allowed_items_text?: string | null
           blacklist_customer_codes?: string[]
           blacklist_vip_levels?: Database["public"]["Enums"]["vip_level"][]
           cargo_type?: string
@@ -2794,6 +2936,7 @@ export type Database = {
           name_zh: string
           note?: string | null
           origin_warehouse_id?: string | null
+          prohibited_items_text?: string | null
           sales_tax_enabled?: boolean
           sales_tax_rate_pct?: number
           shipping_method: string
@@ -2808,6 +2951,7 @@ export type Database = {
           wechat_ai_price_text?: string | null
         }
         Update: {
+          allowed_items_text?: string | null
           blacklist_customer_codes?: string[]
           blacklist_vip_levels?: Database["public"]["Enums"]["vip_level"][]
           cargo_type?: string
@@ -2829,6 +2973,7 @@ export type Database = {
           name_zh?: string
           note?: string | null
           origin_warehouse_id?: string | null
+          prohibited_items_text?: string | null
           sales_tax_enabled?: boolean
           sales_tax_rate_pct?: number
           shipping_method?: string

@@ -3538,12 +3538,156 @@ export const confirmAllBatchPrices = createServerFn({ method: "POST" })
     return { ok: true, confirmed_count: customerCodes.length, invoices };
   });
 
+// 计费重量 = max(实重, 体积重)，体积重按 ÷6000 估算（与 ContainerChildList 客户端展示口径一致）。
+function chargeableWeightOf(c: { weight_kg?: number; volume_m3?: number }): number {
+  const wt = Number(c.weight_kg ?? 0);
+  const volKg = (Number(c.volume_m3 ?? 0) * 1_000_000) / 6000;
+  return Math.max(wt, volKg);
+}
 
+const BULK_DELIVERY_NOTE_PREFIX = "[delivery] 批量派送费";
+const BULK_DISCOUNT_NOTE_PREFIX = "[discount] 派送费冲抵";
+
+// 批量添加批次末端派送费（按客户号计费重量筛选），可选与另一批次做「合并计费重量」对比，
+// 避免同一客户的货物被拆到两个批次时漏收或重复收派送费。规则（按客户号逐一判断）：
+//   1) combinedWeight = 本批次计费重量 + 对比批次计费重量（未选对比批次或对比批次无该客户时为 0）
+//   2) combinedWeight <  触发重量                              → 本批次为该客户加入派送费
+//   3) combinedWeight >= 触发重量 且 对比批次已为该客户收取过派送费 → 本批次为该客户加入等额折扣（冲抵）
+//   4) 其余情况                                                 → 不处理
+// 幂等：每次执行先清除上一次本工具写入的记录（按固定 note 前缀区分），不影响客服在客户
+// 抽屉里手工填写的派送费 / 折扣（那些使用不同的 note 文案）。
+export const bulkApplyBatchDeliveryFee = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (d: { batchId: string; feeCad: number; triggerWeightKg: number; compareBatchId?: string | null }) => d,
+  )
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const fee = +Number(data.feeCad || 0).toFixed(2);
+    const trigger = Number(data.triggerWeightKg || 0);
+    if (!(fee > 0)) throw new Error("请填写有效的派送费金额");
+    if (!(trigger > 0)) throw new Error("请填写有效的触发重量");
+    if (data.compareBatchId && data.compareBatchId === data.batchId) throw new Error("对比批次不能与本批次相同");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const summary = await computeBatchFeeSummary(supabaseAdmin, data.batchId);
+    const perCustomer = (summary.per_customer ?? []) as any[];
+    if (!perCustomer.length) throw new Error("批次内没有可处理的客户账单");
+
+    const compareByCode = new Map<string, { weight: number; hadDelivery: boolean }>();
+    let compareBatchNo: string | null = null;
+    if (data.compareBatchId) {
+      const [{ data: cmpBatch }, cmpSummary] = await Promise.all([
+        supabaseAdmin.from("batches").select("batch_no").eq("id", data.compareBatchId).maybeSingle(),
+        computeBatchFeeSummary(supabaseAdmin, data.compareBatchId),
+      ]);
+      compareBatchNo = (cmpBatch as any)?.batch_no ?? null;
+      for (const c of (cmpSummary.per_customer ?? []) as any[]) {
+        if (!c.customer_code) continue;
+        compareByCode.set(c.customer_code, {
+          weight: chargeableWeightOf(c),
+          hadDelivery: Number(c.fee_delivery_cad ?? 0) > 0,
+        });
+      }
+    }
+
+    // 清除上一次批量执行写入的记录，避免重复执行时叠加
+    await supabaseAdmin
+      .from("surcharges")
+      .delete()
+      .eq("scope", "batch")
+      .eq("batch_id", data.batchId)
+      .like("note", `${BULK_DELIVERY_NOTE_PREFIX}%`);
+    await supabaseAdmin
+      .from("surcharges")
+      .delete()
+      .eq("scope", "batch")
+      .eq("batch_id", data.batchId)
+      .like("note", `${BULK_DISCOUNT_NOTE_PREFIX}%`);
+
+    const charged: string[] = [];
+    const discounted: string[] = [];
+    const skipped: string[] = [];
+    const rows: any[] = [];
+    for (const c of perCustomer) {
+      const code = c.customer_code as string | null;
+      if (!code) continue;
+      const curWeight = chargeableWeightOf(c);
+      const cmp = compareByCode.get(code);
+      const combined = curWeight + (cmp?.weight ?? 0);
+      if (combined < trigger) {
+        rows.push({
+          scope: "batch",
+          batch_id: data.batchId,
+          customer_code: code,
+          amount_cny: fee,
+          note: `${BULK_DELIVERY_NOTE_PREFIX} · 触发${trigger}kg${compareBatchNo ? ` · 合并对比 ${compareBatchNo}` : ""}`,
+          created_by: context.userId,
+        });
+        charged.push(code);
+      } else if (cmp?.hadDelivery) {
+        rows.push({
+          scope: "batch",
+          batch_id: data.batchId,
+          customer_code: code,
+          amount_cny: fee,
+          note: `${BULK_DISCOUNT_NOTE_PREFIX} · 已在批次 ${compareBatchNo ?? "对比批次"} 收取`,
+          created_by: context.userId,
+        });
+        discounted.push(code);
+      } else {
+        skipped.push(code);
+      }
+    }
+    if (rows.length) {
+      const { error } = await supabaseAdmin.from("surcharges").insert(rows);
+      if (error) throw new Error(error.message);
+    }
+
+    const newSummary = await computeBatchFeeSummary(supabaseAdmin, data.batchId);
+    await supabaseAdmin
+      .from("batches")
+      .update({
+        grand_total_cny: newSummary.grand_total_cny,
+        fee_breakdown: { ...newSummary, computed_at: new Date().toISOString() },
+      })
+      .eq("id", data.batchId);
+
+    // 已确认价格的客户账单需要同步重算，保持金额与刚写入的派送费/折扣一致
+    const touched = [...charged, ...discounted];
+    if (touched.length) {
+      const { data: settled } = await supabaseAdmin
+        .from("batch_settlements")
+        .select("customer_code, confirmed")
+        .eq("batch_id", data.batchId)
+        .in("customer_code", touched);
+      for (const s of (settled ?? []) as any[]) {
+        if (!s.confirmed) continue;
+        await ensureUnpaidBatchInvoice(supabaseAdmin, {
+          batchId: data.batchId,
+          customerCode: s.customer_code,
+          operatorId: context.userId,
+        }).catch(() => null);
+      }
+    }
+
+    return {
+      ok: true,
+      charged_count: charged.length,
+      discounted_count: discounted.length,
+      skipped_count: skipped.length,
+      charged,
+      discounted,
+      skipped,
+      grand_total_cny: newSummary.grand_total_cny,
+    };
+  });
 
 export const createBatch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
     (d: {
+      display_name?: string;
       planned_ship_date: string;
       shipping_method: BatchMethod;
       cargo_type?: string;
@@ -3558,6 +3702,7 @@ export const createBatch = createServerFn({ method: "POST" })
     const { data: ins, error } = await supabaseAdmin
       .from("batches")
       .insert({
+        display_name: data.display_name?.trim() || null,
         planned_ship_date: data.planned_ship_date,
         shipping_method: data.shipping_method,
         cargo_type: data.cargo_type ?? null,
@@ -3752,6 +3897,7 @@ export const updateBatch = createServerFn({ method: "POST" })
     (d: {
       batchId: string;
       patch: {
+        display_name?: string | null;
         eta_date?: string | null;
         vessel_no?: string | null;
         notes?: string | null;
