@@ -41,7 +41,7 @@ import { CustomerDrawer } from "@/components/admin/CustomerDrawer";
 import { WaybillCompactList, CartonCompactList, PalletCompactList } from "@/components/admin/ContainerChildList";
 import { renderLabel } from "@/lib/label-render";
 import { LabelSizeToggle } from "@/components/admin/LabelSizeToggle";
-import { Loader2, X, Wand2, Printer, ScanLine, ChevronRight, AlertCircle, Wallet, Upload, Download, Sparkles, FileText, CheckCheck } from "lucide-react";
+import { Loader2, X, Wand2, Printer, ScanLine, ChevronRight, ChevronDown, AlertCircle, Wallet, Upload, Download, Sparkles, FileText, CheckCheck } from "lucide-react";
 import { ScanAddDialog } from "@/components/admin/ScanAddDialog";
 import { DateInput } from "@/components/admin/DateInput";
 import { WorkflowStepper, BATCH_FLOW } from "@/components/admin/WorkflowStepper";
@@ -93,14 +93,25 @@ function BatchDetail() {
   const parseHbl = useServerFn(extractBatchHbl);
   const fetchInvoiceExport = useServerFn(getBatchInvoiceExport);
 
+  // 客户号账单 / 运单 / 箱号 / 托盘：默认收起，点击展开才渲染表格，减少长批次的初始滚动长度。
+  // 箱号/托盘各自是独立请求，收起时干脆不发请求（enabled 门控）；运单/客户账单的数据
+  // 跟批次费用汇总同一个请求（detailQ），汇总卡片本身要一直显示，没法一起门控——它的耗时
+  // 要靠上面新增的数据库索引来解决，这里只负责收起时不渲染这两块的表格。
+  const [custAcctOpen, setCustAcctOpen] = useState(false);
+  const [wbSectionOpen, setWbSectionOpen] = useState(false);
+  const [ctSectionOpen, setCtSectionOpen] = useState(false);
+  const [plSectionOpen, setPlSectionOpen] = useState(false);
+
   const detailQ = useQuery({ queryKey: ["admin-batch", batchId], queryFn: () => fetchDetail({ data: { batchId } }) });
   const cartonsQ = useQuery({
     queryKey: ["batch-cartons", batchId],
     queryFn: () => fetchCartons({ data: { batch_id: batchId, pageSize: 100 } }),
+    enabled: ctSectionOpen,
   });
   const palletsQ = useQuery({
     queryKey: ["batch-pallets", batchId],
     queryFn: () => fetchPallets({ data: { batch_id: batchId, pageSize: 100 } }),
+    enabled: plSectionOpen,
   });
   const meQ = useQuery({ queryKey: ["my-roles"], queryFn: () => fetchRoles(), staleTime: 60_000 });
   const canEdit = (meQ.data?.roles ?? []).some((r) => r === "owner" || r === "manager");
@@ -109,7 +120,11 @@ function BatchDetail() {
     queryFn: () => fetchCustomsReadiness({ data: { batchId } }),
   });
 
-  const [tab, setTab] = useState<"waybills" | "cartons" | "pallets">("waybills");
+  // 客户账单 / 运单 / 箱号 / 托盘 各自的搜索框（客户端过滤，数据已在内存里，不用再发请求）
+  const [custAcctSearch, setCustAcctSearch] = useState("");
+  const [wbSearch, setWbSearch] = useState("");
+  const [ctSearch, setCtSearch] = useState("");
+  const [plSearch, setPlSearch] = useState("");
   const [showAssign, setShowAssign] = useState(false);
   const [showAddCarton, setShowAddCarton] = useState(false);
   const [showAddPallet, setShowAddPallet] = useState(false);
@@ -632,29 +647,57 @@ function BatchDetail() {
       {/* ===== 按客户号账单 ===== */}
       {fee_summary && (
         <Card
-          title={`按客户号账单（${fee_summary.per_customer.length} 个客户）`}
+          title={
+            <button
+              type="button"
+              onClick={() => setCustAcctOpen((o) => !o)}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-200 hover:text-brand"
+            >
+              {custAcctOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              按客户号账单（{fee_summary.per_customer.length} 个客户）
+            </button>
+          }
           action={
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-500">点击客户号查看明细 · 批次附加费在此层级归集</span>
-              {canEdit && (
-                <button
-                  type="button"
-                  onClick={onConfirmAllPrices}
-                  disabled={confirmAllBusy || fee_summary.per_customer.every((c: any) => c.price_confirmed)}
-                  className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {confirmAllBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="h-3.5 w-3.5" />}
-                  {fee_summary.per_customer.every((c: any) => c.price_confirmed) ? "已全部确认" : "批量确认价格"}
-                </button>
-              )}
-            </div>
+            custAcctOpen && (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-500">点击客户号查看明细 · 批次附加费在此层级归集</span>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={onConfirmAllPrices}
+                    disabled={confirmAllBusy || fee_summary.per_customer.every((c: any) => c.price_confirmed)}
+                    className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {confirmAllBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="h-3.5 w-3.5" />}
+                    {fee_summary.per_customer.every((c: any) => c.price_confirmed) ? "已全部确认" : "批量确认价格"}
+                  </button>
+                )}
+              </div>
+            )
           }
         >
-          {fee_summary.per_customer.length === 0 && !fee_summary.unassigned ? (
+          {!custAcctOpen ? null : fee_summary.per_customer.length === 0 && !fee_summary.unassigned ? (
             <div className="py-6 text-center text-xs text-slate-500">
               暂无客户号账单。请检查批次内的运单 / 客户号箱号 / 客户号托盘是否已正确绑定客户号。
             </div>
           ) : (
+            <>
+              <input
+                value={custAcctSearch}
+                onChange={(e) => setCustAcctSearch(e.target.value)}
+                placeholder="搜索客户号 / 客户名 / 线路"
+                className="mb-2 w-full max-w-xs rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500"
+              />
+              {(() => {
+                const q = custAcctSearch.trim().toLowerCase();
+                const filteredCustomers = !q
+                  ? fee_summary.per_customer
+                  : fee_summary.per_customer.filter((c: any) =>
+                      [c.customer_code, c.customer_name, c.route_code].some((v) =>
+                        String(v ?? "").toLowerCase().includes(q),
+                      ),
+                    );
+                return (
             <table className="w-full text-sm">
               <thead className="text-left text-[10px] uppercase text-slate-500">
                 <tr>
@@ -671,7 +714,14 @@ function BatchDetail() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {fee_summary.per_customer.map((c: any) => (
+                {filteredCustomers.length === 0 && (
+                  <tr>
+                    <td colSpan={10} className="py-6 text-center text-xs text-slate-500">
+                      没有匹配的客户号
+                    </td>
+                  </tr>
+                )}
+                {filteredCustomers.map((c: any) => (
                   <tr
                     key={c.group_key ?? c.customer_code}
                     className="cursor-pointer hover:bg-white/[0.03]"
@@ -754,6 +804,9 @@ function BatchDetail() {
                 )}
               </tbody>
             </table>
+                );
+              })()}
+            </>
           )}
         </Card>
       )}
@@ -770,136 +823,205 @@ function BatchDetail() {
 
       {(() => {
         const wbTotal = waybills.reduce((s: number, w: any) => s + Number(w.total_cad ?? 0), 0);
+        const wbQ = wbSearch.trim().toLowerCase();
+        const filteredWaybills = !wbQ
+          ? waybills
+          : waybills.filter((w: any) =>
+              [w.waybill_no, w.customer_code, w.status].some((v) => String(v ?? "").toLowerCase().includes(wbQ)),
+            );
+
+        const ctLoaded = !!cartonsQ.data;
         const ctItems = cartonsQ.data?.items ?? [];
         const ctTotal = ctItems.reduce(
           (s: number, c: any) =>
             s + Number(c.customer_code ? (c.with_customer_total_cad ?? 0) : (c.without_customer_total_cad ?? 0)),
           0,
         );
+        const ctQ = ctSearch.trim().toLowerCase();
+        const filteredCartons = !ctQ
+          ? ctItems
+          : ctItems.filter((c: any) =>
+              [c.carton_no, c.display_name, c.customer_code].some((v) => String(v ?? "").toLowerCase().includes(ctQ)),
+            );
+
+        const plLoaded = !!palletsQ.data;
         const plItems = palletsQ.data?.items ?? [];
         const plTotal = plItems.reduce(
           (s: number, p: any) =>
             s + Number(p.customer_code ? (p.with_customer_total_cad ?? 0) : (p.without_customer_total_cad ?? 0)),
           0,
         );
+        const plQ = plSearch.trim().toLowerCase();
+        const filteredPallets = !plQ
+          ? plItems
+          : plItems.filter((p: any) =>
+              [p.pallet_no, p.display_name, p.customer_code].some((v) => String(v ?? "").toLowerCase().includes(plQ)),
+            );
+
+        // 运单 / 箱号 / 托盘：各自独立折叠，默认收起，不再用 tab 切换（同一时间只能看一个）
         return (
-          <div className="flex gap-2 border-b border-white/10 text-xs">
-            {(
-              [
-                ["waybills", `运单 (${waybills.length}) · CA$${wbTotal.toFixed(2)}`],
-                ["cartons", `箱号 (${ctItems.length}) · CA$${ctTotal.toFixed(2)}`],
-                ["pallets", `托盘 (${plItems.length}) · CA$${plTotal.toFixed(2)}`],
-              ] as const
-            ).map(([k, l]) => (
-              <button
-                key={k}
-                onClick={() => setTab(k as any)}
-                className={`px-3 py-2 ${tab === k ? "border-b-2 border-brand text-brand" : "text-slate-400 hover:text-slate-200"}`}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
+          <>
+            <Card
+              title={
+                <button
+                  type="button"
+                  onClick={() => setWbSectionOpen((o) => !o)}
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-200 hover:text-brand"
+                >
+                  {wbSectionOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  运单 ({waybills.length}) · CA${wbTotal.toFixed(2)}
+                </button>
+              }
+              action={
+                canEdit && (
+                  <button
+                    onClick={() => setShowScan(true)}
+                    className="inline-flex items-center gap-1 rounded-md bg-brand px-2 py-1 text-xs font-semibold text-white hover:bg-brand/90"
+                  >
+                    <ScanLine className="h-3 w-3" />
+                    扫码加入
+                  </button>
+                )
+              }
+            >
+              {wbSectionOpen && (
+                <>
+                  <input
+                    value={wbSearch}
+                    onChange={(e) => setWbSearch(e.target.value)}
+                    placeholder="搜索运单号 / 客户号 / 状态"
+                    className="mb-2 w-full max-w-xs rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500"
+                  />
+                  <WaybillCompactList
+                    waybills={filteredWaybills as any}
+                    onKick={
+                      canEdit
+                        ? async (w) => {
+                            await onRemove([w.id]);
+                          }
+                        : undefined
+                    }
+                  />
+                </>
+              )}
+            </Card>
+
+            <Card
+              title={
+                <button
+                  type="button"
+                  onClick={() => setCtSectionOpen((o) => !o)}
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-200 hover:text-brand"
+                >
+                  {ctSectionOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  箱号 ({ctLoaded ? ctItems.length : "…"}){ctLoaded && ` · CA$${ctTotal.toFixed(2)}`}
+                </button>
+              }
+              action={
+                canEdit && (
+                  <button
+                    onClick={() => setShowScan(true)}
+                    className="inline-flex items-center gap-1 rounded-md bg-brand px-2 py-1 text-xs font-semibold text-white"
+                  >
+                    <ScanLine className="h-3 w-3" />
+                    扫码加入
+                  </button>
+                )
+              }
+            >
+              {ctSectionOpen &&
+                (cartonsQ.isLoading ? (
+                  <div className="py-6 text-center">
+                    <Loader2 className="mx-auto h-4 w-4 animate-spin text-slate-500" />
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      value={ctSearch}
+                      onChange={(e) => setCtSearch(e.target.value)}
+                      placeholder="搜索箱号 / 客户号 / 备注名"
+                      className="mb-2 w-full max-w-xs rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500"
+                    />
+                    <CartonCompactList
+                      cartons={filteredCartons as any}
+                      onKick={
+                        canEdit
+                          ? async (c) => {
+                              await updCarton({ data: { id: c.id, patch: { batch_id: null } } });
+                              qc.invalidateQueries({ queryKey: ["batch-cartons", batchId] });
+                            }
+                          : undefined
+                      }
+                    />
+                  </>
+                ))}
+            </Card>
+
+            <Card
+              title={
+                <button
+                  type="button"
+                  onClick={() => setPlSectionOpen((o) => !o)}
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-200 hover:text-brand"
+                >
+                  {plSectionOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  托盘 ({plLoaded ? plItems.length : "…"}){plLoaded && ` · CA$${plTotal.toFixed(2)}`}
+                </button>
+              }
+              action={
+                canEdit && (
+                  <button
+                    onClick={() => setShowScan(true)}
+                    className="inline-flex items-center gap-1 rounded-md bg-brand px-2 py-1 text-xs font-semibold text-white"
+                  >
+                    <ScanLine className="h-3 w-3" />
+                    扫码加入
+                  </button>
+                )
+              }
+            >
+              {plSectionOpen &&
+                (palletsQ.isLoading ? (
+                  <div className="py-6 text-center">
+                    <Loader2 className="mx-auto h-4 w-4 animate-spin text-slate-500" />
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      value={plSearch}
+                      onChange={(e) => setPlSearch(e.target.value)}
+                      placeholder="搜索托盘号 / 客户号 / 备注名"
+                      className="mb-2 w-full max-w-xs rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500"
+                    />
+                    <PalletCompactList
+                      pallets={filteredPallets as any}
+                      onKick={
+                        canEdit
+                          ? async (p) => {
+                              await updPallet({ data: { id: p.id, patch: { batch_id: null } } });
+                              qc.invalidateQueries({ queryKey: ["batch-pallets", batchId] });
+                            }
+                          : undefined
+                      }
+                      onSplit={
+                        canEdit
+                          ? async (p) => {
+                              if (!confirm(`拆分托盘 ${p.pallet_no}？下属箱号/运单将回到批次层级，托盘会被删除。`)) return;
+                              const r = await doSplitPallet({ data: { id: p.id } });
+                              alert(`已拆分：释放 ${r.released_cartons} 箱 / ${r.released_waybills} 单`);
+                              qc.invalidateQueries({ queryKey: ["batch-pallets", batchId] });
+                              qc.invalidateQueries({ queryKey: ["batch-cartons", batchId] });
+                              qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
+                            }
+                          : undefined
+                      }
+                    />
+                  </>
+                ))}
+            </Card>
+          </>
         );
       })()}
-
-      {tab === "waybills" && (
-        <Card
-          title={`运单 (${waybills.length})`}
-          action={
-            canEdit && (
-              <button
-                onClick={() => setShowScan(true)}
-                className="inline-flex items-center gap-1 rounded-md bg-brand px-2 py-1 text-xs font-semibold text-white hover:bg-brand/90"
-              >
-                <ScanLine className="h-3 w-3" />
-                扫码加入
-              </button>
-            )
-          }
-        >
-          <WaybillCompactList
-            waybills={waybills as any}
-            onKick={
-              canEdit
-                ? async (w) => {
-                    await onRemove([w.id]);
-                  }
-                : undefined
-            }
-          />
-        </Card>
-      )}
-
-      {tab === "cartons" && (
-        <Card
-          title={`箱号 (${cartonsQ.data?.items.length ?? 0})`}
-          action={
-            canEdit && (
-              <button
-                onClick={() => setShowScan(true)}
-                className="inline-flex items-center gap-1 rounded-md bg-brand px-2 py-1 text-xs font-semibold text-white"
-              >
-                <ScanLine className="h-3 w-3" />
-                扫码加入
-              </button>
-            )
-          }
-        >
-          <CartonCompactList
-            cartons={(cartonsQ.data?.items ?? []) as any}
-            onKick={
-              canEdit
-                ? async (c) => {
-                    await updCarton({ data: { id: c.id, patch: { batch_id: null } } });
-                    qc.invalidateQueries({ queryKey: ["batch-cartons", batchId] });
-                  }
-                : undefined
-            }
-          />
-        </Card>
-      )}
-
-      {tab === "pallets" && (
-        <Card
-          title={`托盘 (${palletsQ.data?.items.length ?? 0})`}
-          action={
-            canEdit && (
-              <button
-                onClick={() => setShowScan(true)}
-                className="inline-flex items-center gap-1 rounded-md bg-brand px-2 py-1 text-xs font-semibold text-white"
-              >
-                <ScanLine className="h-3 w-3" />
-                扫码加入
-              </button>
-            )
-          }
-        >
-          <PalletCompactList
-            pallets={(palletsQ.data?.items ?? []) as any}
-            onKick={
-              canEdit
-                ? async (p) => {
-                    await updPallet({ data: { id: p.id, patch: { batch_id: null } } });
-                    qc.invalidateQueries({ queryKey: ["batch-pallets", batchId] });
-                  }
-                : undefined
-            }
-            onSplit={
-              canEdit
-                ? async (p) => {
-                    if (!confirm(`拆分托盘 ${p.pallet_no}？下属箱号/运单将回到批次层级，托盘会被删除。`)) return;
-                    const r = await doSplitPallet({ data: { id: p.id } });
-                    alert(`已拆分：释放 ${r.released_cartons} 箱 / ${r.released_waybills} 单`);
-                    qc.invalidateQueries({ queryKey: ["batch-pallets", batchId] });
-                    qc.invalidateQueries({ queryKey: ["batch-cartons", batchId] });
-                    qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
-                  }
-                : undefined
-            }
-          />
-        </Card>
-      )}
 
       <Card title="操作记录">
         <div className="space-y-2 max-h-72 overflow-y-auto">
