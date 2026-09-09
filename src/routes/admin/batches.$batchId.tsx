@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import {
   getBatchDetail,
+  getBatchFeeSummary,
   updateBatchStatus,
   assignWaybillsToBatch,
   listWaybills,
@@ -73,6 +74,7 @@ function BatchDetail() {
   const { batchId } = Route.useParams();
   const qc = useQueryClient();
   const fetchDetail = useServerFn(getBatchDetail);
+  const fetchFees = useServerFn(getBatchFeeSummary);
   const fetchRoles = useServerFn(getMyRoles);
   const fetchWaybills = useServerFn(listWaybills);
   const setBatchStatus = useServerFn(updateBatchStatus);
@@ -103,6 +105,12 @@ function BatchDetail() {
   const [plSectionOpen, setPlSectionOpen] = useState(false);
 
   const detailQ = useQuery({ queryKey: ["admin-batch", batchId], queryFn: () => fetchDetail({ data: { batchId } }) });
+  // 费用汇总是慢请求，单独发，用自己的 loading 状态——不阻塞页面框架。
+  // key 挂在 ["admin-batch", batchId] 之下，所有对 batch 的 invalidate 会一起刷新它。
+  const feeQ = useQuery({
+    queryKey: ["admin-batch", batchId, "fees"],
+    queryFn: () => fetchFees({ data: { batchId } }),
+  });
   const cartonsQ = useQuery({
     queryKey: ["batch-cartons", batchId],
     queryFn: () => fetchCartons({ data: { batch_id: batchId, pageSize: 100 } }),
@@ -252,7 +260,9 @@ function BatchDetail() {
       </div>
     );
   if (detailQ.isError) return <div className="p-6 text-rose-400">{(detailQ.error as Error).message}</div>;
-  const { batch, waybills, logs, waybill_total, independent_clearance, fee_summary } = detailQ.data!;
+  const { batch, waybills, logs, waybill_total } = detailQ.data!;
+  const fee_summary = feeQ.data?.fee_summary ?? null;
+  const independent_clearance = feeQ.data?.independent_clearance ?? null;
   if (!metaInit) {
     setMeta({ display_name: batch.display_name ?? "", eta_date: batch.eta_date ?? "", vessel_no: batch.vessel_no ?? "" });
     setMetaInit(true);
@@ -593,6 +603,20 @@ function BatchDetail() {
       )}
 
       {/* ===== 批次费用汇总 ===== */}
+      {!fee_summary && (
+        <Card title="批次费用汇总">
+          <div className="flex items-center gap-2 py-6 text-xs text-slate-500">
+            {feeQ.isError ? (
+              <span className="text-rose-400">费用汇总加载失败：{(feeQ.error as Error)?.message}</span>
+            ) : (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                正在计算费用汇总（大批次首次可能较慢，请稍候）…
+              </>
+            )}
+          </div>
+        </Card>
+      )}
       {fee_summary && (
         <Card
           title="批次费用汇总"

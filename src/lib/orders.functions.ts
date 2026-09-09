@@ -3134,13 +3134,15 @@ export const listBatches = createServerFn({ method: "GET" })
     return { batches };
   });
 
+// 批次详情：基本信息 + 直挂运单 + 日志。**不含费用汇总**（那是 getBatchFeeSummary）。
+// 大批次里 computeBatchFeeSummary 可能几十秒，拆出去让页面框架先出来。
 export const getBatchDetail = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { batchId: string }) => d)
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const [batchR, directWaybillsR, logsR] = await Promise.all([
+    const [batchR, directWaybillsR, logsR, allCntR] = await Promise.all([
       supabaseAdmin.from("batches").select("*").eq("id", data.batchId).maybeSingle(),
       supabaseAdmin
         .from("waybills")
@@ -3155,11 +3157,13 @@ export const getBatchDetail = createServerFn({ method: "POST" })
         .eq("entity_id", data.batchId)
         .order("created_at", { ascending: false })
         .limit(50),
+      supabaseAdmin
+        .from("waybills")
+        .select("id", { count: "exact", head: true })
+        .eq("assigned_batch_id", data.batchId),
     ]);
     if (!batchR.data) throw new Error("Batch not found");
-    const summary = await computeBatchFeeSummary(supabaseAdmin, data.batchId);
 
-    // ---- Enrich direct waybills: customer_code + chargeable_weight_kg + total_cad ----
     const wbList = (directWaybillsR.data ?? []) as any[];
     const wbOrderIds = Array.from(new Set(wbList.map((w) => w.order_id).filter(Boolean)));
     const wbFwdIds = Array.from(new Set(wbList.map((w) => w.forwarding_id).filter(Boolean)));
@@ -3195,6 +3199,50 @@ export const getBatchDetail = createServerFn({ method: "POST" })
       };
     });
 
+    return {
+      batch: batchR.data,
+      waybills,
+      logs: logsR.data ?? [],
+      waybill_total: (allCntR as any).count ?? waybills.length,
+    };
+  });
+
+// 批次费用汇总 —— 单独一个（慢）请求，前端用独立 loading 状态。
+export const getBatchFeeSummary = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { batchId: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // 冷启动自愈：批次内还没落 waybill_items 的集运运单，先补一次，之后每次打开都走快照直读
+    try {
+      const { data: fwdWbs } = await supabaseAdmin
+        .from("waybills")
+        .select("id, forwarding_id")
+        .eq("assigned_batch_id", data.batchId)
+        .not("forwarding_id", "is", null);
+      const wbIds = (fwdWbs ?? []).map((w: any) => w.id);
+      if (wbIds.length) {
+        const { data: haveItems } = await supabaseAdmin
+          .from("waybill_items")
+          .select("waybill_id")
+          .in("waybill_id", wbIds);
+        const have = new Set((haveItems ?? []).map((r: any) => r.waybill_id));
+        const missingFwd = Array.from(
+          new Set((fwdWbs ?? []).filter((w: any) => !have.has(w.id)).map((w: any) => w.forwarding_id)),
+        ) as string[];
+        if (missingFwd.length) {
+          const { persistWaybillItemsForParent } = await import("./duty.server");
+          for (const fid of missingFwd) await persistWaybillItemsForParent(supabaseAdmin, { forwarding_id: fid });
+        }
+      }
+    } catch (e) {
+      console.error("ensureBatchWaybillItems failed:", e);
+    }
+
+    const summary = await computeBatchFeeSummary(supabaseAdmin, data.batchId);
+
     // ---- Enrich per_customer with user_id, balance_cad, is_paid ----
     const customerCodes = summary.per_customer.map((c: any) => c.customer_code).filter(Boolean);
     let per_customer = summary.per_customer;
@@ -3210,16 +3258,13 @@ export const getBatchDetail = createServerFn({ method: "POST" })
         const { data: ws } = await supabaseAdmin.from("wallets").select("user_id, balance_cad").in("user_id", userIds);
         for (const w of (ws ?? []) as any[]) walletMap.set(w.user_id, Number(w.balance_cad ?? 0));
       }
-      // Payment status aggregation per customer in this batch
-      // Simple approach: check if any waybill under this customer in this batch is unpaid
       const paidByCustomer = new Map<string, boolean>();
       {
         const allBatchWbsR = await supabaseAdmin
           .from("waybills")
           .select("id, order_id, forwarding_id, payment_status")
-          .or(`assigned_batch_id.eq.${data.batchId}`);
+          .eq("assigned_batch_id", data.batchId);
         const wbs2: any[] = allBatchWbsR.data ?? [];
-        // parent customer for each
         const oIds = Array.from(new Set(wbs2.map((w) => w.order_id).filter(Boolean)));
         const fIds = Array.from(new Set(wbs2.map((w) => w.forwarding_id).filter(Boolean)));
         const [oR, fR] = await Promise.all([
@@ -3252,9 +3297,6 @@ export const getBatchDetail = createServerFn({ method: "POST" })
     }
 
     return {
-      batch: batchR.data,
-      waybills,
-      logs: logsR.data ?? [],
       waybill_total: summary.waybill_total,
       fee_summary: { ...summary, per_customer },
       independent_clearance: summary.independent_clearance,
