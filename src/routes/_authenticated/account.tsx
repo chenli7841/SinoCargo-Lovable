@@ -1385,10 +1385,11 @@ function AddressTab() {
 }
 
 // ===================== Batches (merged: orders + forwarding) =====================
-// Batch visibility + amounts are sourced from listMyBatches() (src/lib/orders.functions.ts),
-// which reuses computeBatchFeeSummary — the exact same computation staff see in
-// the admin "扣款" screens — filtered down to this customer's own bucket. A batch
-// only shows up once staff move it to shipped/arrived/closed.
+// Batch visibility + amounts come from listMyBatches() (src/lib/orders.functions.ts):
+// it reads the per-(batch × customer) snapshot in batch_settlements (written when
+// staff lock / confirm the batch) — the same figures the admin "扣款" screens show —
+// and only falls back to a full computeBatchFeeSummary when that snapshot is missing
+// or stale, re-writing it afterwards. A batch appears once it's shipped/arrived/closed.
 interface BatchItem {
   kind: "order" | "forwarding";
   id: string;
@@ -1396,6 +1397,28 @@ interface BatchItem {
   status: string;
   tracking_no: string | null;
   payment_status: string;
+}
+interface BatchFeeLines {
+  freight_cad: number;
+  insurance_cad: number;
+  customs_cad: number;
+  clearance_cad: number;
+  surcharge_cad: number;
+  delivery_cad: number;
+  inspection_cad: number;
+  discount_cad: number;
+}
+interface BatchDutyItem {
+  name: string;
+  hs_code: string | null;
+  tax_rate: number;
+  mfn_rate: number;
+  gst_rate: number;
+  anti_dumping_rate: number;
+  unit_price_cad: number;
+  quantity: number;
+  declared_value_cad: number;
+  duty_cad: number;
 }
 interface Batch {
   batch_id: string;
@@ -1405,6 +1428,9 @@ interface Batch {
   status: "shipped" | "arrived" | "closed";
   items: BatchItem[];
   subtotal_cad: number | null;
+  fee_lines?: BatchFeeLines | null;
+  duty_items?: BatchDutyItem[] | null;
+  duty_unmatched_hs?: string[] | null;
   price_confirmed?: boolean;
   is_paid: boolean;
   intl_tracking_nos: string[];
@@ -1544,6 +1570,8 @@ function BatchCard({
   const isAir = b.shipping_method === "air";
   const [trackOpen, setTrackOpen] = useState(false);
   const [itemsOpen, setItemsOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [dutyOpen, setDutyOpen] = useState(false);
   const [events, setEvents] = useState<any[] | null | "err">(null);
 
   const toggleTrack = async () => {
@@ -1610,10 +1638,107 @@ function BatchCard({
           {b.subtotal_cad === null ? (
             <div className="text-xs font-medium text-amber-600">{tr("等待客服确认费用", "Awaiting fee confirmation")}</div>
           ) : (
-            <div className="font-display text-lg font-bold text-brand-gradient">CA${b.subtotal_cad.toFixed(2)}</div>
+            <>
+              <div className="font-display text-lg font-bold text-brand-gradient">CA${b.subtotal_cad.toFixed(2)}</div>
+              {b.fee_lines && (
+                <button
+                  onClick={() => setDetailOpen((v) => !v)}
+                  className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-ink-soft hover:text-brand"
+                >
+                  {tr("费用明细", "Fee details")}
+                  <span>{detailOpen ? "▲" : "▼"}</span>
+                </button>
+              )}
+            </>
           )}
         </div>
       </header>
+
+      {detailOpen && b.fee_lines && (
+        <div className="border-b border-border bg-background/40 px-5 py-3 text-xs">
+          {(() => {
+            const fl = b.fee_lines!;
+            const rows: Array<[string, string, number]> = [
+              [tr("运费", "Freight"), "freight", fl.freight_cad],
+              [tr("保险", "Insurance"), "insurance", fl.insurance_cad],
+              [tr("关税", "Customs duty"), "customs", fl.customs_cad],
+              [tr("清关费", "Clearance"), "clearance", fl.clearance_cad],
+              [tr("附加费", "Surcharge"), "surcharge", fl.surcharge_cad],
+              [tr("末端派送费", "Last-mile delivery"), "delivery", fl.delivery_cad],
+              [tr("检查费", "Inspection"), "inspection", fl.inspection_cad],
+            ];
+            return (
+              <div className="space-y-1.5">
+                {rows.map(([label, key, val]) => (
+                  <div key={key}>
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-ink-soft">
+                        {label}
+                        {key === "customs" && (b.duty_items?.length ?? 0) > 0 && (
+                          <button
+                            onClick={() => setDutyOpen((v) => !v)}
+                            className="inline-flex items-center gap-0.5 text-[10px] text-brand hover:underline"
+                          >
+                            {tr("明细", "breakdown")} <span>{dutyOpen ? "▲" : "▼"}</span>
+                          </button>
+                        )}
+                      </span>
+                      <span className="font-mono tabular-nums">CA${val.toFixed(2)}</span>
+                    </div>
+                    {key === "customs" && dutyOpen && (
+                      <div className="mt-1.5 overflow-x-auto rounded-lg border border-border bg-surface p-2">
+                        {(b.duty_unmatched_hs?.length ?? 0) > 0 && (
+                          <div className="mb-1.5 rounded bg-warning/10 px-2 py-1 text-[10px] text-warning">
+                            ⚠{" "}
+                            {tr(
+                              `以下品名未匹配 HS 编码，关税暂按 0 计：${(b.duty_unmatched_hs ?? []).join("、")}`,
+                              `No HS code matched (duty counted as 0): ${(b.duty_unmatched_hs ?? []).join(", ")}`,
+                            )}
+                          </div>
+                        )}
+                        <table className="w-full text-[10px]">
+                          <thead className="text-left text-ink-soft">
+                            <tr>
+                              <th className="py-1 pr-2">{tr("品名", "Item")}</th>
+                              <th className="pr-2">HS</th>
+                              <th className="pr-2 text-right">{tr("税率", "Rate")}</th>
+                              <th className="pr-2 text-right">{tr("数量", "Qty")}</th>
+                              <th className="pr-2 text-right">{tr("申报价值", "Declared")}</th>
+                              <th className="text-right">{tr("关税", "Duty")}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(b.duty_items ?? []).map((d, i) => (
+                              <tr key={`${d.name}-${i}`} className="border-t border-border/60">
+                                <td className="py-1 pr-2">{d.name}</td>
+                                <td className="pr-2 font-mono">{d.hs_code ?? tr("缺", "—")}</td>
+                                <td className="pr-2 text-right">{(d.tax_rate * 100).toFixed(2)}%</td>
+                                <td className="pr-2 text-right">{d.quantity}</td>
+                                <td className="pr-2 text-right font-mono">CA${d.declared_value_cad.toFixed(2)}</td>
+                                <td className="text-right font-mono">CA${d.duty_cad.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {fl.discount_cad > 0 && (
+                  <div className="flex items-center justify-between text-success">
+                    <span>{tr("折扣", "Discount")}</span>
+                    <span className="font-mono tabular-nums">−CA${fl.discount_cad.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between border-t border-border pt-1.5 font-semibold">
+                  <span>{tr("小计", "Subtotal")}</span>
+                  <span className="font-mono tabular-nums">CA${(b.subtotal_cad ?? 0).toFixed(2)}</span>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       <div className="px-5 py-3">
         <button

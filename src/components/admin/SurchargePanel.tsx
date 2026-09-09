@@ -3,7 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, fmtDate } from "@/lib/admin-shared";
 import { listSurcharges, addSurcharge, updateSurcharge, deleteSurcharge, type SurchargeScope } from "@/lib/surcharges.functions";
-import { Plus, Trash2, Loader2, Save, Pencil, X, Truck } from "lucide-react";
+import { Plus, Trash2, Loader2, Save, Pencil, X, Truck, ChevronDown, ChevronRight } from "lucide-react";
 import { BulkDeliveryFeeDialog } from "@/components/admin/BulkDeliveryFeeDialog";
 
 type Props = {
@@ -14,6 +14,10 @@ type Props = {
   showCustomerField?: boolean;
   /** Override the card title. */
   title?: string;
+  /** Show a chevron toggle on the title that collapses the list. */
+  collapsible?: boolean;
+  /** Initial open state when collapsible (default: collapsed). */
+  defaultOpen?: boolean;
   onChanged?: () => void;
 };
 
@@ -25,7 +29,7 @@ const SCOPE_LABEL: Record<SurchargeScope, string> = {
   forwarding: "集运订单",
 };
 
-export function SurchargePanel({ scope, id, canEdit = true, showCustomerField, title, onChanged }: Props) {
+export function SurchargePanel({ scope, id, canEdit = true, showCustomerField, title, collapsible, defaultOpen, onChanged }: Props) {
   const qc = useQueryClient();
   const fetchList = useServerFn(listSurcharges);
   const addFn = useServerFn(addSurcharge);
@@ -35,6 +39,7 @@ export function SurchargePanel({ scope, id, canEdit = true, showCustomerField, t
   const key = ["surcharges", scope, id];
   const q = useQuery({ queryKey: key, queryFn: () => fetchList({ data: { scope, id } }) });
 
+  const [open, setOpen] = useState(defaultOpen ?? !collapsible);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ amount_cny: "", note: "", customer_code: "" });
   const [busy, setBusy] = useState(false);
@@ -88,8 +93,24 @@ export function SurchargePanel({ scope, id, canEdit = true, showCustomerField, t
     try { await delFn({ data: { id: rowId } }); await refresh(); } finally { setBusy(false); }
   };
 
+  const baseTitle = title ?? `附加费 · ${SCOPE_LABEL[scope]}`;
+  const count = q.data?.items.length ?? 0;
+  const cardTitle = collapsible ? (
+    <button
+      type="button"
+      onClick={() => setOpen((o) => !o)}
+      className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-200 hover:text-brand"
+    >
+      {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+      {baseTitle}（{count} 条）
+    </button>
+  ) : (
+    baseTitle
+  );
+  const showBody = !collapsible || open;
+
   return (
-    <Card title={title ?? `附加费 · ${SCOPE_LABEL[scope]}`} action={canEdit && !adding && (
+    <Card title={cardTitle} action={showBody && canEdit && !adding && (
       <div className="flex items-center gap-2">
         {scope === "batch" && (
           <button onClick={() => setShowBulk(true)}
@@ -103,6 +124,8 @@ export function SurchargePanel({ scope, id, canEdit = true, showCustomerField, t
         </button>
       </div>
     )}>
+      {!showBody ? null : (
+        <>
       {q.isLoading && <div className="py-4"><Loader2 className="mx-auto h-4 w-4 animate-spin text-slate-500"/></div>}
       {q.isError && <div className="text-xs text-rose-400">{(q.error as Error).message}</div>}
 
@@ -216,6 +239,8 @@ export function SurchargePanel({ scope, id, canEdit = true, showCustomerField, t
               </tbody>
             </table>
           )}
+        </>
+      )}
         </>
       )}
       {showBulk && (

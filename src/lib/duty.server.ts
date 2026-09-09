@@ -377,6 +377,104 @@ export async function computeOrderWaybillDutyBreakdown(admin: any, wb: any): Pro
   };
 }
 
+// ============================================================
+// Phase 1 · 把一条运单的关税明细持久化到 waybill_items
+// ============================================================
+// - 复用 computeAnyWaybillDutyBreakdown（已验证的拆分 + HS 匹配 + 关税逻辑）
+// - waybill_items 按 waybill_id delete-then-insert（幂等）
+// - 汇总 duty_cad 回写 waybills.duty_cad
+// - 匹配到的 hs_code / 税率 / hs_confirmed 回写父 forwarding_items 行
+// 在运单被创建 / 改尺寸 / 改物品 / HS 变动时调用（见 Phase 1 触发点）。
+export async function persistWaybillItems(
+  admin: any,
+  wbOrId: any,
+): Promise<{ items: number; duty_cad: number }> {
+  let row = wbOrId;
+  if (typeof wbOrId === "string" || !wbOrId?.id) {
+    const id = typeof wbOrId === "string" ? wbOrId : wbOrId?.id;
+    if (!id) return { items: 0, duty_cad: 0 };
+    const { data } = await admin
+      .from("waybills")
+      .select("id, waybill_no, forwarding_id, order_id, items_summary, weight_kg, length_cm, width_cm, height_cm")
+      .eq("id", id)
+      .maybeSingle();
+    if (!data) return { items: 0, duty_cad: 0 };
+    row = data;
+  }
+
+  const br = await computeAnyWaybillDutyBreakdown(admin, row);
+
+  const rows = br.items.map((it) => ({
+    waybill_id: row.id,
+    forwarding_item_id: it.forwarding_item_id ?? null,
+    order_item_id: null as string | null, // 电商侧 order_item 关联在 Phase 2 补
+    name: it.name ?? "",
+    hs_code: it.hs_code ?? null,
+    hs_matched: it.hs_matched ?? "none",
+    hs_confirmed: it.hs_matched === "manual",
+    quantity: it.quantity_per_waybill ?? 0,
+    unit_price_cad: it.unit_price_cad ?? null,
+    declared_value_cad: it.declared_value_cad ?? null,
+    mfn_rate: it.mfn_rate ?? null,
+    gst_rate: it.gst_rate ?? null,
+    anti_dumping_rate: it.anti_dumping_rate ?? null,
+    tax_rate: it.tax_rate ?? null,
+    duty_cad: it.duty_cad ?? null,
+    duty_applied: !!it.duty_applied,
+  }));
+
+  await admin.from("waybill_items").delete().eq("waybill_id", row.id);
+  if (rows.length) {
+    const { error } = await admin.from("waybill_items").insert(rows);
+    if (error) throw new Error(error.message);
+  }
+
+  const dutyTotal = +Number(br.duty_cad ?? 0).toFixed(2);
+  await admin.from("waybills").update({ duty_cad: dutyTotal }).eq("id", row.id);
+
+  // 回写父 forwarding_items（HS 匹配是逐品名的，与运单拆分无关）
+  for (const it of br.items) {
+    if (!it.forwarding_item_id) continue;
+    await admin
+      .from("forwarding_items")
+      .update({
+        hs_code: it.hs_code ?? null,
+        hs_matched: it.hs_matched ?? "none",
+        hs_confirmed: it.hs_matched === "manual",
+        mfn_rate: it.mfn_rate ?? null,
+        gst_rate: it.gst_rate ?? null,
+        anti_dumping_rate: it.anti_dumping_rate ?? null,
+      })
+      .eq("id", it.forwarding_item_id);
+  }
+
+  return { items: rows.length, duty_cad: dutyTotal };
+}
+
+// 批量：一个集运单 / 电商订单下的所有运单
+export async function persistWaybillItemsForParent(
+  admin: any,
+  parent: { forwarding_id?: string | null; order_id?: string | null },
+): Promise<number> {
+  let q = admin
+    .from("waybills")
+    .select("id, waybill_no, forwarding_id, order_id, items_summary, weight_kg, length_cm, width_cm, height_cm");
+  if (parent.forwarding_id) q = q.eq("forwarding_id", parent.forwarding_id);
+  else if (parent.order_id) q = q.eq("order_id", parent.order_id);
+  else return 0;
+  const { data: wbs } = await q;
+  let n = 0;
+  for (const wb of (wbs ?? []) as any[]) {
+    try {
+      await persistWaybillItems(admin, wb);
+      n++;
+    } catch (e) {
+      console.error("persistWaybillItems failed for waybill", wb.id, e);
+    }
+  }
+  return n;
+}
+
 // Dispatches to whichever of the two above applies to this waybill.
 export async function computeAnyWaybillDutyBreakdown(admin: any, wb: any): Promise<DutyBreakdown> {
   if (wb?.forwarding_id) return computeWaybillDutyBreakdown(admin, wb);

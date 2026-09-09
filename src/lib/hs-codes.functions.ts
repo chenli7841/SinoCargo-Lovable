@@ -7,6 +7,42 @@ async function assertStaff(supabase: any, userId: string) {
   if (!data) throw new Error("Forbidden");
 }
 
+// HS 库变动后，重算受影响集运单下所有运单的关税明细（waybill_items）。
+// 受影响 = forwarding_items 直接绑定了该 hs_code，或品名/别名命中该 HS 且未手工绑定。
+async function recomputeForwardingsForHs(
+  admin: any,
+  opts: { hs_code?: string | null; names?: (string | null | undefined)[] },
+) {
+  try {
+    const orFilters: string[] = [];
+    if (opts.hs_code) orFilters.push(`hs_code.eq.${opts.hs_code}`);
+    const names = Array.from(new Set((opts.names ?? []).map((n) => (n ?? "").trim()).filter(Boolean)));
+    let byName: any[] = [];
+    if (names.length) {
+      const { data } = await admin
+        .from("forwarding_items")
+        .select("forwarding_id, name, hs_code")
+        .in("name", names);
+      byName = (data ?? []).filter((r: any) => !r.hs_code); // 未手工绑定的才受名称匹配影响
+    }
+    let byCode: any[] = [];
+    if (opts.hs_code) {
+      const { data } = await admin.from("forwarding_items").select("forwarding_id").eq("hs_code", opts.hs_code);
+      byCode = data ?? [];
+    }
+    const fwdIds = Array.from(
+      new Set([...byName, ...byCode].map((r: any) => r.forwarding_id).filter(Boolean)),
+    ) as string[];
+    if (!fwdIds.length) return;
+    const { persistWaybillItemsForParent } = await import("./duty.server");
+    for (const fid of fwdIds) {
+      await persistWaybillItemsForParent(admin, { forwarding_id: fid });
+    }
+  } catch (e) {
+    console.error("recomputeForwardingsForHs failed:", e);
+  }
+}
+
 export const listHsCodes = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { search?: string; chapter?: string; active?: boolean } = {}) => d)
@@ -89,6 +125,11 @@ export const upsertHsCode = createServerFn({ method: "POST" })
       after: payload,
       operator_id: context.userId,
     });
+    // 税率/别名变动 → 重算受影响集运单的关税明细
+    await recomputeForwardingsForHs(supabaseAdmin, {
+      hs_code: code,
+      names: [payload.name_zh, payload.name_en, ...(payload.aliases ?? [])],
+    });
     return { ok: true };
   });
 
@@ -108,6 +149,12 @@ export const deleteHsCode = createServerFn({ method: "POST" })
       before,
       operator_id: context.userId,
     });
+    if (before) {
+      await recomputeForwardingsForHs(supabaseAdmin, {
+        hs_code: (before as any).hs_code,
+        names: [(before as any).name_zh, (before as any).name_en, ...((before as any).aliases ?? [])],
+      });
+    }
     return { ok: true };
   });
 
@@ -140,6 +187,8 @@ export const bindNameToHs = createServerFn({ method: "POST" })
       after: { name },
       operator_id: context.userId,
     });
+    // 新别名 → 该品名的未绑定物品现在能匹配上，重算
+    await recomputeForwardingsForHs(supabaseAdmin, { hs_code: data.hs_code, names: [name] });
     return { ok: true };
   });
 
@@ -150,9 +199,14 @@ export const setForwardingItemHs = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: before } = await supabaseAdmin
+      .from("forwarding_items")
+      .select("forwarding_id")
+      .eq("id", data.item_id)
+      .maybeSingle();
     const { error } = await supabaseAdmin
       .from("forwarding_items")
-      .update({ hs_code: data.hs_code || null })
+      .update({ hs_code: data.hs_code || null, hs_confirmed: !!data.hs_code, hs_matched: data.hs_code ? "manual" : "none" })
       .eq("id", data.item_id);
     if (error) throw new Error(error.message);
     await recordAdminLog(supabaseAdmin, {
@@ -162,5 +216,30 @@ export const setForwardingItemHs = createServerFn({ method: "POST" })
       after: { hs_code: data.hs_code },
       operator_id: context.userId,
     });
+    // 该集运单下所有运单的关税明细重算
+    if ((before as any)?.forwarding_id) {
+      try {
+        const { persistWaybillItemsForParent } = await import("./duty.server");
+        await persistWaybillItemsForParent(supabaseAdmin, { forwarding_id: (before as any).forwarding_id });
+      } catch (e) {
+        console.error("persistWaybillItemsForParent failed (setForwardingItemHs)", e);
+      }
+    }
     return { ok: true };
+  });
+
+// 手动重算一个集运单 / 电商订单下所有运单的关税明细（waybill_items）。
+// 供员工在订单详情 / 运单关税卡片主动触发。
+export const recomputeParentDuty = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { forwardingId?: string; orderId?: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { persistWaybillItemsForParent } = await import("./duty.server");
+    const n = await persistWaybillItemsForParent(supabaseAdmin, {
+      forwarding_id: data.forwardingId ?? null,
+      order_id: data.orderId ?? null,
+    });
+    return { ok: true, waybills: n };
   });

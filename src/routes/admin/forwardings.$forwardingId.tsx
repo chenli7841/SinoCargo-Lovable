@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { getForwardingDetail, intakeForwarding, addWaybillsToForwarding, getLabelData, previewForwardingFreight, setForwardingInsured, updateForwardingBasicInfo } from "@/lib/orders.functions";
+import { getForwardingDetail, intakeForwarding, addWaybillsToForwarding, getLabelData, previewForwardingFreight, setForwardingInsured, updateForwardingBasicInfo, updateForwardingItem, addForwardingItem, deleteForwardingItem } from "@/lib/orders.functions";
 import { adminChangeRoute, adminUpdateWaybillDims } from "@/lib/admin-routing.functions";
 import { listRoutes } from "@/lib/settings.functions";
 import { listDestinations } from "@/lib/presets.functions";
@@ -289,7 +289,12 @@ function FwDetail() {
         </Card>
       </div>
 
-      <ItemsCustomerCard items={items ?? []} />
+      <ItemsCustomerCard
+        forwardingId={id}
+        items={items ?? []}
+        canEdit={canIntake}
+        onChanged={() => qc.invalidateQueries({ queryKey: ["admin-fo", id] })}
+      />
 
       {canIntake && (
         <Card title="入库 / 录入尺寸与重量（按运单汇总）">
@@ -662,53 +667,198 @@ function InsuranceBlock({ insured, desc, canEdit, onSave }: { insured: boolean; 
   );
 }
 
-function ItemsCustomerCard({ items }: { items: any[] }) {
-  if (!items?.length) return null;
-  const COLS: { k: string; label: string; src: "row" | "extras" | "calc" }[] = [
-    { k: "name", label: "品名", src: "row" },
-    { k: "quantity", label: "数量(总)", src: "row" },
-    { k: "unit_price_cad", label: "单价 CAD", src: "row" },
-    { k: "subtotal_cad", label: "小计 CAD", src: "calc" },
-    { k: "unit_price_cny", label: "单价 CNY", src: "row" },
-    { k: "material", label: "材质", src: "extras" },
-    { k: "origin", label: "产地", src: "extras" },
-    { k: "brand", label: "品牌", src: "extras" },
-    { k: "hscode", label: "HSCODE", src: "extras" },
-    { k: "box_count", label: "箱数", src: "extras" },
-    { k: "inner_qty", label: "每箱数量", src: "extras" },
-  ];
-  const get = (it: any, c: typeof COLS[number]) => {
-    if (c.src === "row") return it[c.k];
-    if (c.src === "extras") return it.extras?.[c.k];
-    if (c.k === "subtotal_cad") {
-      const unit = Number(it.unit_price_cad ?? 0);
-      const qty = Number(it.quantity ?? 0);
-      return unit > 0 && qty > 0 ? (unit * qty).toFixed(2) : null;
-    }
-    return null;
+// 列定义：k=字段名, kind=显示/输入类型。material/origin/brand/box_count/inner_qty
+// 已从 extras 提升为 forwarding_items 列（读取时列优先、回退 extras）。
+const ITEM_COLS: { k: string; label: string; kind: "text" | "num" | "money" }[] = [
+  { k: "name", label: "品名", kind: "text" },
+  { k: "quantity", label: "数量(总)", kind: "num" },
+  { k: "unit_price_cad", label: "单价 CAD", kind: "money" },
+  { k: "subtotal_cad", label: "小计 CAD", kind: "money" }, // 只读，计算
+  { k: "unit_price_cny", label: "单价 CNY", kind: "money" },
+  { k: "material", label: "材质", kind: "text" },
+  { k: "origin", label: "产地", kind: "text" },
+  { k: "brand", label: "品牌", kind: "text" },
+  { k: "hs_code", label: "HSCODE", kind: "text" },
+  { k: "box_count", label: "箱数", kind: "num" },
+  { k: "inner_qty", label: "每箱数量", kind: "num" },
+];
+const itemVal = (it: any, k: string) => {
+  if (k === "hs_code") return it.hs_code ?? it.extras?.hscode ?? "";
+  if (["material", "origin", "brand", "box_count", "inner_qty"].includes(k)) return it[k] ?? it.extras?.[k] ?? "";
+  return it[k] ?? "";
+};
+const itemSubtotal = (it: any) => {
+  const unit = Number(itemVal(it, "unit_price_cad") || 0);
+  const qty = Number(itemVal(it, "quantity") || 0);
+  return unit > 0 && qty > 0 ? +(unit * qty).toFixed(2) : null;
+};
+
+function ItemsCustomerCard({
+  forwardingId,
+  items,
+  canEdit,
+  onChanged,
+}: {
+  forwardingId: string;
+  items: any[];
+  canEdit: boolean;
+  onChanged: () => void;
+}) {
+  const updFn = useServerFn(updateForwardingItem);
+  const addFn = useServerFn(addForwardingItem);
+  const delFn = useServerFn(deleteForwardingItem);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Record<string, any>>({});
+  const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const editKeys = ITEM_COLS.filter((c) => c.k !== "subtotal_cad").map((c) => c.k);
+  const startEdit = (it: any) => {
+    setAdding(false);
+    setEditId(it.id);
+    setDraft(Object.fromEntries(editKeys.map((k) => [k, itemVal(it, k)])));
   };
-  const fmtCell = (c: typeof COLS[number], v: any) => {
-    if (v == null || v === "") return <span className="text-slate-600">—</span>;
-    if (c.k === "unit_price_cad" || c.k === "subtotal_cad") return <span className="text-emerald-300">C${Number(v).toFixed(2)}</span>;
-    if (c.k === "unit_price_cny") return <span className="text-slate-400">¥{Number(v).toFixed(2)}</span>;
+  const startAdd = () => {
+    setEditId(null);
+    setAdding(true);
+    setDraft(Object.fromEntries(editKeys.map((k) => [k, ""])));
+  };
+  const cancel = () => {
+    setEditId(null);
+    setAdding(false);
+    setDraft({});
+  };
+  const buildPatch = () => {
+    const p: any = {};
+    for (const k of editKeys) {
+      const raw = draft[k];
+      if (["quantity", "unit_price_cad", "unit_price_cny", "box_count", "inner_qty"].includes(k)) {
+        p[k] = raw === "" || raw == null ? (["box_count", "inner_qty"].includes(k) ? null : 0) : Number(raw);
+      } else {
+        p[k] = (raw ?? "").toString();
+      }
+    }
+    return p;
+  };
+  const save = async () => {
+    setBusy(true);
+    try {
+      if (adding) await addFn({ data: { forwardingId, patch: buildPatch() } });
+      else if (editId) await updFn({ data: { itemId: editId, patch: buildPatch() } });
+      cancel();
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (id: string) => {
+    if (!confirm("删除这条物品？关税明细与集运单总额会自动重算。")) return;
+    setBusy(true);
+    try {
+      await delFn({ data: { itemId: id } });
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const fmtCell = (k: string, it: any) => {
+    if (k === "subtotal_cad") {
+      const v = itemSubtotal(it);
+      return v == null ? <span className="text-slate-600">—</span> : <span className="text-emerald-300">C${v.toFixed(2)}</span>;
+    }
+    const v = itemVal(it, k);
+    if (v === "" || v == null) return <span className="text-slate-600">—</span>;
+    if (k === "unit_price_cad") return <span className="text-emerald-300">C${Number(v).toFixed(2)}</span>;
+    if (k === "unit_price_cny") return <span className="text-slate-400">¥{Number(v).toFixed(2)}</span>;
     return String(v);
   };
+  const editInput = (k: string) => {
+    if (k === "subtotal_cad") {
+      const unit = Number(draft.unit_price_cad || 0);
+      const qty = Number(draft.quantity || 0);
+      return <span className="text-emerald-300">{unit > 0 && qty > 0 ? `C$${(unit * qty).toFixed(2)}` : "—"}</span>;
+    }
+    const isNum = ["quantity", "unit_price_cad", "unit_price_cny", "box_count", "inner_qty"].includes(k);
+    return (
+      <input
+        value={draft[k] ?? ""}
+        onChange={(e) => setDraft((d) => ({ ...d, [k]: e.target.value }))}
+        type={isNum ? "number" : "text"}
+        step={isNum ? "any" : undefined}
+        className="w-full min-w-[64px] rounded border border-white/10 bg-white/5 px-1.5 py-1 text-xs text-slate-100 outline-none focus:border-brand"
+      />
+    );
+  };
+
+  if (!items?.length && !canEdit) return null;
+
   return (
-    <Card title={<span className="inline-flex items-center gap-1"><Package className="h-3.5 w-3.5"/>客户录入物品（明细）</span> as any}>
+    <Card
+      title={<span className="inline-flex items-center gap-1"><Package className="h-3.5 w-3.5"/>客户录入物品（明细）</span> as any}
+    >
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="text-left text-[10px] uppercase text-slate-500">
-            <tr>{COLS.map((c) => <th key={c.k} className="py-1.5 pr-3 font-medium">{c.label}</th>)}</tr>
+            <tr>
+              {ITEM_COLS.map((c) => <th key={c.k} className="py-1.5 pr-3 font-medium">{c.label}</th>)}
+              {canEdit && <th className="py-1.5 pr-2 font-medium text-right">操作</th>}
+            </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {items.map((it: any) => (
               <tr key={it.id} className="text-slate-200">
-                {COLS.map((c) => <td key={c.k} className="py-1.5 pr-3">{fmtCell(c, get(it, c))}</td>)}
+                {ITEM_COLS.map((c) => (
+                  <td key={c.k} className="py-1.5 pr-3 align-top">
+                    {editId === it.id ? editInput(c.k) : fmtCell(c.k, it)}
+                  </td>
+                ))}
+                {canEdit && (
+                  <td className="py-1.5 pr-2 text-right align-top whitespace-nowrap">
+                    {editId === it.id ? (
+                      <span className="inline-flex gap-1">
+                        <button disabled={busy} onClick={save} className="rounded bg-brand px-2 py-0.5 text-[11px] font-semibold text-white disabled:opacity-40">保存</button>
+                        <button disabled={busy} onClick={cancel} className="rounded border border-white/10 px-2 py-0.5 text-[11px] text-slate-300">取消</button>
+                      </span>
+                    ) : (
+                      <span className="inline-flex gap-1">
+                        <button onClick={() => startEdit(it)} className="rounded border border-white/10 px-2 py-0.5 text-[11px] text-slate-300 hover:text-white">编辑</button>
+                        <button onClick={() => remove(it.id)} className="rounded border border-rose-500/30 px-2 py-0.5 text-[11px] text-rose-300 hover:bg-rose-500/10">删除</button>
+                      </span>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
+            {adding && (
+              <tr className="bg-white/[0.03] text-slate-200">
+                {ITEM_COLS.map((c) => (
+                  <td key={c.k} className="py-1.5 pr-3 align-top">{editInput(c.k)}</td>
+                ))}
+                <td className="py-1.5 pr-2 text-right align-top whitespace-nowrap">
+                  <span className="inline-flex gap-1">
+                    <button disabled={busy} onClick={save} className="rounded bg-brand px-2 py-0.5 text-[11px] font-semibold text-white disabled:opacity-40">保存</button>
+                    <button disabled={busy} onClick={cancel} className="rounded border border-white/10 px-2 py-0.5 text-[11px] text-slate-300">取消</button>
+                  </span>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+      {canEdit && !adding && (
+        <button
+          onClick={startAdd}
+          className="mt-2 inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200 hover:bg-white/10"
+        >
+          <Plus className="h-3 w-3" />添加物品
+        </button>
+      )}
+      {canEdit && (
+        <p className="mt-2 text-[10px] text-slate-500">
+          保存后自动重算：关税逐品名明细（waybill_items）、集运单申报价 / 运费总额，并同步各运单拆分中的品名。
+        </p>
+      )}
     </Card>
   );
 }

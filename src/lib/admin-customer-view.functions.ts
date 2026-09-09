@@ -89,25 +89,30 @@ export const getCustomerOverview = createServerFn({ method: "POST" })
         .eq("user_id", data.userId)
         .in("status", ["unpaid", "overdue"]),
     ]);
+    // 用系统设定汇率（app_settings.fx_rate）换算，不用每张账单快照的 fx_rate
+    const fx = await getFxCadPerCny(supabaseAdmin);
     const oRows = orders ?? [];
     const fRows = fwd ?? [];
     const inTransit =
       oRows.filter((r: any) => r.status === "shipped").length +
       fRows.filter((r: any) => ["shipped", "in_transit"].includes(r.status)).length;
     const unwarehoused = fRows.filter((r: any) => r.status === "pending").length;
-    const unpaidInvoices = (unpaidInv ?? []).map((inv: any) => ({
-      invoice_no: inv.invoice_no,
-      due_cny: Math.max(0, Number(inv.total_cny ?? 0) - Number(inv.paid_cny ?? 0)),
-      status: inv.status,
-      due_date: inv.due_date,
-    }));
+    const unpaidInvoices = (unpaidInv ?? []).map((inv: any) => {
+      const dueCny = Math.max(0, Number(inv.total_cny ?? 0) - Number(inv.paid_cny ?? 0));
+      return {
+        invoice_no: inv.invoice_no,
+        due_cad: +(dueCny * fx).toFixed(2),
+        status: inv.status,
+        due_date: inv.due_date,
+      };
+    });
     return {
       wallet_balance_cad: Number((wallet as any)?.balance_cad ?? 0),
       total_orders: oRows.length + fRows.length,
       in_transit: inTransit,
       unwarehoused,
       unpaid_invoices: unpaidInvoices,
-      unpaid_total_cny: unpaidInvoices.reduce((s, i) => s + i.due_cny, 0),
+      unpaid_total_cad: +unpaidInvoices.reduce((s, i) => s + i.due_cad, 0).toFixed(2),
     };
   });
 

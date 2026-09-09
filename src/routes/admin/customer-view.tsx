@@ -286,7 +286,7 @@ function OverviewTab({ userId }: { userId: string }) {
           </h3>
           <div className="text-xs">
             <span className="text-slate-400">合计 </span>
-            <span className="font-bold text-rose-300">¥{d.unpaid_total_cny.toFixed(2)}</span>
+            <span className="font-bold text-rose-300">CA${d.unpaid_total_cad.toFixed(2)}</span>
           </div>
         </div>
         {d.unpaid_invoices.length === 0 ? (
@@ -299,7 +299,7 @@ function OverviewTab({ userId }: { userId: string }) {
               <li key={inv.invoice_no} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
                 <span className="font-mono text-slate-300">{inv.invoice_no}</span>
                 <span className="text-slate-500">{inv.status === "overdue" ? "已逾期" : "未付"}</span>
-                <span className="font-bold text-rose-300">¥{inv.due_cny.toFixed(2)}</span>
+                <span className="font-bold text-rose-300">CA${inv.due_cad.toFixed(2)}</span>
               </li>
             ))}
           </ul>

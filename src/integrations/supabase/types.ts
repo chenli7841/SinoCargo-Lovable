@@ -338,33 +338,63 @@ export type Database = {
       batch_settlements: {
         Row: {
           batch_id: string
+          calc_version: number
           confirmed: boolean
           confirmed_at: string | null
           confirmed_by: string | null
           created_at: string
           customer_code: string
+          carton_count: number | null
+          fee_breakdown: Json | null
           id: string
+          is_paid: boolean
+          paid_at: string | null
+          pallet_count: number | null
+          route_codes: string | null
+          snapshot_at: string | null
+          subtotal_cad: number | null
           updated_at: string
+          waybill_count: number | null
         }
         Insert: {
           batch_id: string
+          calc_version?: number
           confirmed?: boolean
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
           customer_code: string
+          carton_count?: number | null
+          fee_breakdown?: Json | null
           id?: string
+          is_paid?: boolean
+          paid_at?: string | null
+          pallet_count?: number | null
+          route_codes?: string | null
+          snapshot_at?: string | null
+          subtotal_cad?: number | null
           updated_at?: string
+          waybill_count?: number | null
         }
         Update: {
           batch_id?: string
+          calc_version?: number
           confirmed?: boolean
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
           customer_code?: string
+          carton_count?: number | null
+          fee_breakdown?: Json | null
           id?: string
+          is_paid?: boolean
+          paid_at?: string | null
+          pallet_count?: number | null
+          route_codes?: string | null
+          snapshot_at?: string | null
+          subtotal_cad?: number | null
           updated_at?: string
+          waybill_count?: number | null
         }
         Relationships: [
           {
@@ -387,6 +417,7 @@ export type Database = {
           destination_code: string | null
           eta_date: string | null
           fee_breakdown: Json | null
+          fees_dirty_at: string | null
           grand_total_cny: number
           hbl_extracted: Json
           hbl_file_name: string | null
@@ -421,6 +452,7 @@ export type Database = {
           destination_code?: string | null
           eta_date?: string | null
           fee_breakdown?: Json | null
+          fees_dirty_at?: string | null
           grand_total_cny?: number
           hbl_extracted?: Json
           hbl_file_name?: string | null
@@ -455,6 +487,7 @@ export type Database = {
           destination_code?: string | null
           eta_date?: string | null
           fee_breakdown?: Json | null
+          fees_dirty_at?: string | null
           grand_total_cny?: number
           hbl_extracted?: Json
           hbl_file_name?: string | null
@@ -1076,34 +1109,70 @@ export type Database = {
       }
       forwarding_items: {
         Row: {
+          anti_dumping_rate: number | null
+          box_count: number | null
+          brand: string | null
           created_at: string
+          declared_value_cad: number | null
+          duty_cad: number | null
           extras: Json
           forwarding_id: string
+          gst_rate: number | null
           hs_code: string | null
+          hs_confirmed: boolean
+          hs_matched: string | null
           id: string
+          inner_qty: number | null
+          material: string | null
+          mfn_rate: number | null
           name: string
+          origin: string | null
           quantity: number
           unit_price_cad: number
           unit_price_cny: number
         }
         Insert: {
+          anti_dumping_rate?: number | null
+          box_count?: number | null
+          brand?: string | null
           created_at?: string
+          declared_value_cad?: number | null
+          duty_cad?: number | null
           extras?: Json
           forwarding_id: string
+          gst_rate?: number | null
           hs_code?: string | null
+          hs_confirmed?: boolean
+          hs_matched?: string | null
           id?: string
+          inner_qty?: number | null
+          material?: string | null
+          mfn_rate?: number | null
           name: string
+          origin?: string | null
           quantity?: number
           unit_price_cad?: number
           unit_price_cny?: number
         }
         Update: {
+          anti_dumping_rate?: number | null
+          box_count?: number | null
+          brand?: string | null
           created_at?: string
+          declared_value_cad?: number | null
+          duty_cad?: number | null
           extras?: Json
           forwarding_id?: string
+          gst_rate?: number | null
           hs_code?: string | null
+          hs_confirmed?: boolean
+          hs_matched?: string | null
           id?: string
+          inner_qty?: number | null
+          material?: string | null
+          mfn_rate?: number | null
           name?: string
+          origin?: string | null
           quantity?: number
           unit_price_cad?: number
           unit_price_cny?: number
@@ -1839,10 +1908,17 @@ export type Database = {
       }
       order_items: {
         Row: {
+          anti_dumping_rate: number | null
           attrs_snapshot: Json | null
           created_at: string
+          declared_value_cad: number | null
+          duty_cad: number | null
+          gst_rate: number | null
+          hs_code: string | null
+          hs_confirmed: boolean
           id: string
           image_url: string | null
+          mfn_rate: number | null
           name_en: string | null
           name_zh: string
           order_id: string
@@ -1858,10 +1934,17 @@ export type Database = {
           waybill_id: string | null
         }
         Insert: {
+          anti_dumping_rate?: number | null
           attrs_snapshot?: Json | null
           created_at?: string
+          declared_value_cad?: number | null
+          duty_cad?: number | null
+          gst_rate?: number | null
+          hs_code?: string | null
+          hs_confirmed?: boolean
           id?: string
           image_url?: string | null
+          mfn_rate?: number | null
           name_en?: string | null
           name_zh: string
           order_id: string
@@ -1877,10 +1960,17 @@ export type Database = {
           waybill_id?: string | null
         }
         Update: {
+          anti_dumping_rate?: number | null
           attrs_snapshot?: Json | null
           created_at?: string
+          declared_value_cad?: number | null
+          duty_cad?: number | null
+          gst_rate?: number | null
+          hs_code?: string | null
+          hs_confirmed?: boolean
           id?: string
           image_url?: string | null
+          mfn_rate?: number | null
           name_en?: string | null
           name_zh?: string
           order_id?: string
@@ -3553,6 +3643,94 @@ export type Database = {
             columns: ["pallet_id"]
             isOneToOne: false
             referencedRelation: "pallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      waybill_items: {
+        Row: {
+          anti_dumping_rate: number | null
+          created_at: string
+          declared_value_cad: number | null
+          duty_applied: boolean
+          duty_cad: number | null
+          forwarding_item_id: string | null
+          gst_rate: number | null
+          hs_code: string | null
+          hs_confirmed: boolean
+          hs_matched: string | null
+          id: string
+          mfn_rate: number | null
+          name: string
+          order_item_id: string | null
+          quantity: number
+          tax_rate: number | null
+          unit_price_cad: number | null
+          updated_at: string
+          waybill_id: string
+        }
+        Insert: {
+          anti_dumping_rate?: number | null
+          created_at?: string
+          declared_value_cad?: number | null
+          duty_applied?: boolean
+          duty_cad?: number | null
+          forwarding_item_id?: string | null
+          gst_rate?: number | null
+          hs_code?: string | null
+          hs_confirmed?: boolean
+          hs_matched?: string | null
+          id?: string
+          mfn_rate?: number | null
+          name?: string
+          order_item_id?: string | null
+          quantity?: number
+          tax_rate?: number | null
+          unit_price_cad?: number | null
+          updated_at?: string
+          waybill_id: string
+        }
+        Update: {
+          anti_dumping_rate?: number | null
+          created_at?: string
+          declared_value_cad?: number | null
+          duty_applied?: boolean
+          duty_cad?: number | null
+          forwarding_item_id?: string | null
+          gst_rate?: number | null
+          hs_code?: string | null
+          hs_confirmed?: boolean
+          hs_matched?: string | null
+          id?: string
+          mfn_rate?: number | null
+          name?: string
+          order_item_id?: string | null
+          quantity?: number
+          tax_rate?: number | null
+          unit_price_cad?: number | null
+          updated_at?: string
+          waybill_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "waybill_items_waybill_id_fkey"
+            columns: ["waybill_id"]
+            isOneToOne: false
+            referencedRelation: "waybills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "waybill_items_forwarding_item_id_fkey"
+            columns: ["forwarding_item_id"]
+            isOneToOne: false
+            referencedRelation: "forwarding_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "waybill_items_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
             referencedColumns: ["id"]
           },
         ]

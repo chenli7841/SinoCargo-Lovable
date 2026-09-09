@@ -303,6 +303,10 @@ export const updateInvoiceStatus = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: cur } = await supabaseAdmin.from("invoices").select("status").eq("id", data.id).maybeSingle();
+    if ((cur as any)?.status === "paid") {
+      throw new Error("账单已付款，已冻结，不可更改。如需更正请另行处理退款。");
+    }
     const patch: any = { status: data.status };
     if (data.note !== undefined) patch.note = data.note;
     if (data.status === "paid") patch.paid_at = new Date().toISOString();
@@ -326,6 +330,9 @@ export const deleteInvoice = createServerFn({ method: "POST" })
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: before } = await supabaseAdmin.from("invoices").select("*").eq("id", data.id).maybeSingle();
+    if ((before as any)?.status === "paid") {
+      throw new Error("账单已付款，不可删除。");
+    }
     const { error } = await supabaseAdmin.from("invoices").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
     await recordAdminLog(supabaseAdmin, {

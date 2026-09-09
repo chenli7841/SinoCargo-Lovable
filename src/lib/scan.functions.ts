@@ -840,6 +840,12 @@ export const intakeScanCommit = createServerFn({ method: "POST" })
           .eq("domestic_tracking_no", (parent as any).domestic_tracking_no)
           .eq("status", "detained");
       }
+      try {
+        const { persistWaybillItems } = await import("./duty.server");
+        for (const w of existing as any[]) await persistWaybillItems(supabaseAdmin, w.id);
+      } catch (e) {
+        console.error("persistWaybillItems failed (intakeScanCommit reuse)", e);
+      }
       return {
         ok: true,
         waybills: existing,
@@ -992,6 +998,13 @@ export const intakeScanCommit = createServerFn({ method: "POST" })
         })
         .eq("domestic_tracking_no", parent.domestic_tracking_no)
         .eq("status", "detained");
+    }
+
+    try {
+      const { persistWaybillItems } = await import("./duty.server");
+      for (const w of (ins ?? []) as any[]) await persistWaybillItems(supabaseAdmin, w.id);
+    } catch (e) {
+      console.error("persistWaybillItems failed (intakeScanCommit generate)", e);
     }
 
     return {
@@ -1613,6 +1626,13 @@ export const measureSaveDims = createServerFn({ method: "POST" })
           note: `自动计费失败：${e?.message ?? String(e)}`,
         });
       }
+      // 关税明细落库（waybill_items + waybills.duty_cad + forwarding_items 回写）
+      try {
+        const { persistWaybillItems } = await import("./duty.server");
+        await persistWaybillItems(supabaseAdmin, it.id);
+      } catch (e) {
+        console.error("persistWaybillItems failed (measureSaveDims)", it.id, e);
+      }
       n++;
     }
 
@@ -2008,6 +2028,12 @@ export const recomputeWaybillFees = createServerFn({ method: "POST" })
           clearance_cad: fees.clearance_cad,
         })
         .eq("id", wb.id);
+      try {
+        const { persistWaybillItems } = await import("./duty.server");
+        await persistWaybillItems(supabaseAdmin, wb.id);
+      } catch (e) {
+        console.error("persistWaybillItems failed (recomputeWaybillFees)", wb.id, e);
+      }
       updated++;
     }
     await supabaseAdmin.from("admin_action_logs").insert({

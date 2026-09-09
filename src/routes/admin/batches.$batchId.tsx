@@ -817,6 +817,7 @@ function BatchDetail() {
         id={batchId}
         canEdit={canEdit}
         showCustomerField
+        collapsible
         title="批次附加费（按客户号账单层级 · 每条必须指定归属客户号）"
         onChanged={() => qc.invalidateQueries({ queryKey: ["admin-batch", batchId] })}
       />

@@ -446,6 +446,11 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
                 }
               />
 
+              {confirmed && (
+                <div className="mt-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1.5 text-[10px] text-emerald-200">
+                  价格已确认，账单已冻结。要改运费/派送费/折扣，请先在下方「取消确认」。
+                </div>
+              )}
               <div className="mt-2 border-t border-white/5 pt-2">
                 <label className="block text-[10px] uppercase tracking-wider text-slate-500">
                   末端派送费 (CAD) · 可输入
@@ -455,7 +460,7 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
                   step="0.01"
                   min="0"
                   value={delivery}
-                  disabled={!canEdit}
+                  disabled={!canEdit || confirmed}
                   onChange={(e) => setDelivery(e.target.value)}
                   className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100"
                 />
@@ -464,7 +469,7 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
                     建议 <span className="font-mono text-slate-300">{cad(deliverySuggested)}</span>
                     {c.delivery_note ? ` · ${c.delivery_note}` : " · 未匹配派送费规则（可在线路设置中配置）"}
                   </span>
-                  {canEdit && deliverySuggested > 0 && (
+                  {canEdit && !confirmed && deliverySuggested > 0 && (
                     <button
                       type="button"
                       onClick={() => setDelivery(String(deliverySuggested))}
@@ -484,7 +489,7 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
                   step="0.01"
                   min="0"
                   value={inspection}
-                  disabled={!canEdit}
+                  disabled={!canEdit || confirmed}
                   onChange={(e) => setInspection(e.target.value)}
                   className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100"
                 />
@@ -501,7 +506,7 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
                   min="0"
                   max={subtotal}
                   value={discount}
-                  disabled={!canEdit}
+                  disabled={!canEdit || confirmed}
                   onChange={(e) => setDiscount(e.target.value)}
                   className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-slate-100"
                 />
@@ -561,7 +566,8 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={onSave}
-                  disabled={busy}
+                  disabled={busy || confirmed}
+                  title={confirmed ? "价格已确认，账单冻结；请先取消确认" : undefined}
                   className="inline-flex items-center justify-center gap-1 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-white/10 disabled:opacity-50"
                 >
                   <Save className="h-3.5 w-3.5" />
