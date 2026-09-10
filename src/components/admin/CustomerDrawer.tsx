@@ -99,10 +99,15 @@ export function CustomerDrawer({ batchId, customerCode, customerData, canEdit, o
     setBusy(true);
     try {
       await saveDraft({ data: { batchId, customerCode, deliveryCad: deliveryAmt, inspectionCad: inspAmt, discountCad: discAmt } });
-      await setConfirmedFn({ data: { batchId, customerCode, confirmed: next } });
+      const r: any = await setConfirmedFn({ data: { batchId, customerCode, confirmed: next } });
       setConfirmed(next);
       await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
       await qc.invalidateQueries({ queryKey: ["admin-batches"] });
+      if (next && r?.invoice_ok === false) {
+        alert(
+          `价格已确认，但账单生成失败：${r.invoice_error ?? "未知错误"}。\n请检查该客户的运单 / 客户号绑定后，取消确认再重新确认。`,
+        );
+      }
     } catch (e: any) {
       alert(e.message);
     } finally {

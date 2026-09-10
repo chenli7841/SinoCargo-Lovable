@@ -91,6 +91,8 @@ import { Route as ApiPublicAiOrderBillingRouteImport } from './routes/api/public
 import { Route as ApiPublicAiResolveWechatCustomerRouteImport } from './routes/api/public/ai-resolve-wechat-customer'
 import { Route as ApiPublicAiTrackRouteImport } from './routes/api/public/ai-track'
 import { Route as ApiPublicAiWarehouseScanRouteImport } from './routes/api/public/ai-warehouse-scan'
+import { Route as AdminShopCartsIndexRouteImport } from './routes/admin/shop.carts.index'
+import { Route as AdminShopCartsCartIdRouteImport } from './routes/admin/shop.carts.$cartId'
 import { Route as AdminShopOrdersIndexRouteImport } from './routes/admin/shop.orders.index'
 import { Route as AdminShopOrdersOrderIdRouteImport } from './routes/admin/shop.orders.$orderId'
 import { Route as AdminShopOrdersProcurementRouteImport } from './routes/admin/shop.orders.procurement'
@@ -99,6 +101,7 @@ import { Route as AdminShopProductsProductIdRouteImport } from './routes/admin/s
 import { Route as ApiPublicHooksMarkOverdueRouteImport } from './routes/api/public/hooks/mark-overdue'
 import { Route as ApiPublicHooksOttpayRouteImport } from './routes/api/public/hooks/ottpay'
 import { Route as ApiPublicHooksOttpayCardRouteImport } from './routes/api/public/hooks/ottpay-card'
+import { Route as ApiPublicHooksReconcileOttRouteImport } from './routes/api/public/hooks/reconcile-ott'
 import { Route as ApiPublicWechatCallbackRouteImport } from './routes/api/public/wechat.callback'
 import { Route as ApiPublicWechatLoginRouteImport } from './routes/api/public/wechat.login'
 import { Route as IntlChannelCallbackSplatRouteImport } from './routes/intl/channel/callback/$'
@@ -526,6 +529,16 @@ const ApiPublicAiWarehouseScanRoute =
     path: '/api/public/ai-warehouse-scan',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AdminShopCartsIndexRoute = AdminShopCartsIndexRouteImport.update({
+  id: '/shop/carts/',
+  path: '/shop/carts/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminShopCartsCartIdRoute = AdminShopCartsCartIdRouteImport.update({
+  id: '/shop/carts/$cartId',
+  path: '/shop/carts/$cartId',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminShopOrdersIndexRoute = AdminShopOrdersIndexRouteImport.update({
   id: '/shop/orders/',
   path: '/shop/orders/',
@@ -568,6 +581,12 @@ const ApiPublicHooksOttpayCardRoute =
   ApiPublicHooksOttpayCardRouteImport.update({
     id: '/api/public/hooks/ottpay-card',
     path: '/api/public/hooks/ottpay-card',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicHooksReconcileOttRoute =
+  ApiPublicHooksReconcileOttRouteImport.update({
+    id: '/api/public/hooks/reconcile-ott',
+    path: '/api/public/hooks/reconcile-ott',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiPublicWechatCallbackRoute = ApiPublicWechatCallbackRouteImport.update({
@@ -675,16 +694,19 @@ export interface FileRoutesByFullPath {
   '/admin/shop/': typeof AdminShopIndexRoute
   '/admin/users/': typeof AdminUsersIndexRoute
   '/admin/waybills/': typeof AdminWaybillsIndexRoute
+  '/admin/shop/carts/$cartId': typeof AdminShopCartsCartIdRoute
   '/admin/shop/orders/$orderId': typeof AdminShopOrdersOrderIdRoute
   '/admin/shop/orders/procurement': typeof AdminShopOrdersProcurementRoute
   '/admin/shop/products/$productId': typeof AdminShopProductsProductIdRoute
   '/api/public/hooks/mark-overdue': typeof ApiPublicHooksMarkOverdueRoute
   '/api/public/hooks/ottpay': typeof ApiPublicHooksOttpayRoute
   '/api/public/hooks/ottpay-card': typeof ApiPublicHooksOttpayCardRoute
+  '/api/public/hooks/reconcile-ott': typeof ApiPublicHooksReconcileOttRoute
   '/api/public/wechat/callback': typeof ApiPublicWechatCallbackRoute
   '/api/public/wechat/login': typeof ApiPublicWechatLoginRoute
   '/intl/channel/callback/$': typeof IntlChannelCallbackSplatRoute
   '/intl/channel/callback/wxkf-gpt': typeof IntlChannelCallbackWxkfGptRoute
+  '/admin/shop/carts/': typeof AdminShopCartsIndexRoute
   '/admin/shop/orders/': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products/': typeof AdminShopProductsIndexRoute
 }
@@ -768,16 +790,19 @@ export interface FileRoutesByTo {
   '/admin/shop': typeof AdminShopIndexRoute
   '/admin/users': typeof AdminUsersIndexRoute
   '/admin/waybills': typeof AdminWaybillsIndexRoute
+  '/admin/shop/carts/$cartId': typeof AdminShopCartsCartIdRoute
   '/admin/shop/orders/$orderId': typeof AdminShopOrdersOrderIdRoute
   '/admin/shop/orders/procurement': typeof AdminShopOrdersProcurementRoute
   '/admin/shop/products/$productId': typeof AdminShopProductsProductIdRoute
   '/api/public/hooks/mark-overdue': typeof ApiPublicHooksMarkOverdueRoute
   '/api/public/hooks/ottpay': typeof ApiPublicHooksOttpayRoute
   '/api/public/hooks/ottpay-card': typeof ApiPublicHooksOttpayCardRoute
+  '/api/public/hooks/reconcile-ott': typeof ApiPublicHooksReconcileOttRoute
   '/api/public/wechat/callback': typeof ApiPublicWechatCallbackRoute
   '/api/public/wechat/login': typeof ApiPublicWechatLoginRoute
   '/intl/channel/callback/$': typeof IntlChannelCallbackSplatRoute
   '/intl/channel/callback/wxkf-gpt': typeof IntlChannelCallbackWxkfGptRoute
+  '/admin/shop/carts': typeof AdminShopCartsIndexRoute
   '/admin/shop/orders': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products': typeof AdminShopProductsIndexRoute
 }
@@ -865,16 +890,19 @@ export interface FileRoutesById {
   '/admin/shop/': typeof AdminShopIndexRoute
   '/admin/users/': typeof AdminUsersIndexRoute
   '/admin/waybills/': typeof AdminWaybillsIndexRoute
+  '/admin/shop/carts/$cartId': typeof AdminShopCartsCartIdRoute
   '/admin/shop/orders/$orderId': typeof AdminShopOrdersOrderIdRoute
   '/admin/shop/orders/procurement': typeof AdminShopOrdersProcurementRoute
   '/admin/shop/products/$productId': typeof AdminShopProductsProductIdRoute
   '/api/public/hooks/mark-overdue': typeof ApiPublicHooksMarkOverdueRoute
   '/api/public/hooks/ottpay': typeof ApiPublicHooksOttpayRoute
   '/api/public/hooks/ottpay-card': typeof ApiPublicHooksOttpayCardRoute
+  '/api/public/hooks/reconcile-ott': typeof ApiPublicHooksReconcileOttRoute
   '/api/public/wechat/callback': typeof ApiPublicWechatCallbackRoute
   '/api/public/wechat/login': typeof ApiPublicWechatLoginRoute
   '/intl/channel/callback/$': typeof IntlChannelCallbackSplatRoute
   '/intl/channel/callback/wxkf-gpt': typeof IntlChannelCallbackWxkfGptRoute
+  '/admin/shop/carts/': typeof AdminShopCartsIndexRoute
   '/admin/shop/orders/': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products/': typeof AdminShopProductsIndexRoute
 }
@@ -962,16 +990,19 @@ export interface FileRouteTypes {
     | '/admin/shop/'
     | '/admin/users/'
     | '/admin/waybills/'
+    | '/admin/shop/carts/$cartId'
     | '/admin/shop/orders/$orderId'
     | '/admin/shop/orders/procurement'
     | '/admin/shop/products/$productId'
     | '/api/public/hooks/mark-overdue'
     | '/api/public/hooks/ottpay'
     | '/api/public/hooks/ottpay-card'
+    | '/api/public/hooks/reconcile-ott'
     | '/api/public/wechat/callback'
     | '/api/public/wechat/login'
     | '/intl/channel/callback/$'
     | '/intl/channel/callback/wxkf-gpt'
+    | '/admin/shop/carts/'
     | '/admin/shop/orders/'
     | '/admin/shop/products/'
   fileRoutesByTo: FileRoutesByTo
@@ -1055,16 +1086,19 @@ export interface FileRouteTypes {
     | '/admin/shop'
     | '/admin/users'
     | '/admin/waybills'
+    | '/admin/shop/carts/$cartId'
     | '/admin/shop/orders/$orderId'
     | '/admin/shop/orders/procurement'
     | '/admin/shop/products/$productId'
     | '/api/public/hooks/mark-overdue'
     | '/api/public/hooks/ottpay'
     | '/api/public/hooks/ottpay-card'
+    | '/api/public/hooks/reconcile-ott'
     | '/api/public/wechat/callback'
     | '/api/public/wechat/login'
     | '/intl/channel/callback/$'
     | '/intl/channel/callback/wxkf-gpt'
+    | '/admin/shop/carts'
     | '/admin/shop/orders'
     | '/admin/shop/products'
   id:
@@ -1151,16 +1185,19 @@ export interface FileRouteTypes {
     | '/admin/shop/'
     | '/admin/users/'
     | '/admin/waybills/'
+    | '/admin/shop/carts/$cartId'
     | '/admin/shop/orders/$orderId'
     | '/admin/shop/orders/procurement'
     | '/admin/shop/products/$productId'
     | '/api/public/hooks/mark-overdue'
     | '/api/public/hooks/ottpay'
     | '/api/public/hooks/ottpay-card'
+    | '/api/public/hooks/reconcile-ott'
     | '/api/public/wechat/callback'
     | '/api/public/wechat/login'
     | '/intl/channel/callback/$'
     | '/intl/channel/callback/wxkf-gpt'
+    | '/admin/shop/carts/'
     | '/admin/shop/orders/'
     | '/admin/shop/products/'
   fileRoutesById: FileRoutesById
@@ -1195,6 +1232,7 @@ export interface RootRouteChildren {
   ApiPublicHooksMarkOverdueRoute: typeof ApiPublicHooksMarkOverdueRoute
   ApiPublicHooksOttpayRoute: typeof ApiPublicHooksOttpayRoute
   ApiPublicHooksOttpayCardRoute: typeof ApiPublicHooksOttpayCardRoute
+  ApiPublicHooksReconcileOttRoute: typeof ApiPublicHooksReconcileOttRoute
   ApiPublicWechatCallbackRoute: typeof ApiPublicWechatCallbackRoute
   ApiPublicWechatLoginRoute: typeof ApiPublicWechatLoginRoute
   IntlChannelCallbackSplatRoute: typeof IntlChannelCallbackSplatRoute
@@ -1777,6 +1815,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicAiWarehouseScanRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/shop/carts/': {
+      id: '/admin/shop/carts/'
+      path: '/shop/carts'
+      fullPath: '/admin/shop/carts/'
+      preLoaderRoute: typeof AdminShopCartsIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/shop/carts/$cartId': {
+      id: '/admin/shop/carts/$cartId'
+      path: '/shop/carts/$cartId'
+      fullPath: '/admin/shop/carts/$cartId'
+      preLoaderRoute: typeof AdminShopCartsCartIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/shop/orders/': {
       id: '/admin/shop/orders/'
       path: '/shop/orders'
@@ -1831,6 +1883,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/hooks/ottpay-card'
       fullPath: '/api/public/hooks/ottpay-card'
       preLoaderRoute: typeof ApiPublicHooksOttpayCardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/hooks/reconcile-ott': {
+      id: '/api/public/hooks/reconcile-ott'
+      path: '/api/public/hooks/reconcile-ott'
+      fullPath: '/api/public/hooks/reconcile-ott'
+      preLoaderRoute: typeof ApiPublicHooksReconcileOttRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/wechat/callback': {
@@ -1936,9 +1995,11 @@ interface AdminRouteRouteChildren {
   AdminShopIndexRoute: typeof AdminShopIndexRoute
   AdminUsersIndexRoute: typeof AdminUsersIndexRoute
   AdminWaybillsIndexRoute: typeof AdminWaybillsIndexRoute
+  AdminShopCartsCartIdRoute: typeof AdminShopCartsCartIdRoute
   AdminShopOrdersOrderIdRoute: typeof AdminShopOrdersOrderIdRoute
   AdminShopOrdersProcurementRoute: typeof AdminShopOrdersProcurementRoute
   AdminShopProductsProductIdRoute: typeof AdminShopProductsProductIdRoute
+  AdminShopCartsIndexRoute: typeof AdminShopCartsIndexRoute
   AdminShopOrdersIndexRoute: typeof AdminShopOrdersIndexRoute
   AdminShopProductsIndexRoute: typeof AdminShopProductsIndexRoute
 }
@@ -1991,9 +2052,11 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminShopIndexRoute: AdminShopIndexRoute,
   AdminUsersIndexRoute: AdminUsersIndexRoute,
   AdminWaybillsIndexRoute: AdminWaybillsIndexRoute,
+  AdminShopCartsCartIdRoute: AdminShopCartsCartIdRoute,
   AdminShopOrdersOrderIdRoute: AdminShopOrdersOrderIdRoute,
   AdminShopOrdersProcurementRoute: AdminShopOrdersProcurementRoute,
   AdminShopProductsProductIdRoute: AdminShopProductsProductIdRoute,
+  AdminShopCartsIndexRoute: AdminShopCartsIndexRoute,
   AdminShopOrdersIndexRoute: AdminShopOrdersIndexRoute,
   AdminShopProductsIndexRoute: AdminShopProductsIndexRoute,
 }
@@ -2047,6 +2110,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicHooksMarkOverdueRoute: ApiPublicHooksMarkOverdueRoute,
   ApiPublicHooksOttpayRoute: ApiPublicHooksOttpayRoute,
   ApiPublicHooksOttpayCardRoute: ApiPublicHooksOttpayCardRoute,
+  ApiPublicHooksReconcileOttRoute: ApiPublicHooksReconcileOttRoute,
   ApiPublicWechatCallbackRoute: ApiPublicWechatCallbackRoute,
   ApiPublicWechatLoginRoute: ApiPublicWechatLoginRoute,
   IntlChannelCallbackSplatRoute: IntlChannelCallbackSplatRoute,

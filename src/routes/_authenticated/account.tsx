@@ -3091,6 +3091,15 @@ function WalletTab() {
   const EMT_EMAIL = "epluscanada@gmail.com";
 
   const [busy, setBusy] = useState(false);
+  const submittingRef = useRef(false); // 硬锁：覆盖 setBusy 生效前的极短窗口
+  // 同一「金额 × 渠道」的重复点击 / 重试 → 同一 idempotency_key → 服务端复用原充值单
+  const topupKey = useMemo(
+    () =>
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `k_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    [amount, channel],
+  );
   const [qr, setQr] = useState<{ src: string; reference: string; notice?: string; openUrl?: string } | null>(null);
   const QR_TTL_SEC = 20;
   const [qrLeft, setQrLeft] = useState<number>(QR_TTL_SEC);
@@ -3118,6 +3127,8 @@ function WalletTab() {
 
   const submitEmtTopupFlow = async () => {
     if (!amount || amount < 2) return toast.error(tr("最低充值 CA$2", "Min top-up CA$2"));
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setBusy(true);
     try {
       let proofPath: string | null = null;
@@ -3133,7 +3144,9 @@ function WalletTab() {
           .upload(proofPath, emtFile, { contentType: emtFile.type || undefined });
         if (up.error) throw up.error;
       }
-      const r = await submitEmt({ data: { amountCad: amount, proofPath, note: emtNote || null } });
+      const r = await submitEmt({
+        data: { amountCad: amount, proofPath, note: emtNote || null, idempotencyKey: topupKey },
+      });
       toast.success(
         tr(
           `已提交（${r.reference}），客服会在 24 小时内为您处理入账`,
@@ -3147,6 +3160,7 @@ function WalletTab() {
       toast.error(e?.message ?? tr("提交失败", "Submission failed"));
     } finally {
       setBusy(false);
+      submittingRef.current = false;
     }
   };
 
@@ -3154,10 +3168,12 @@ function WalletTab() {
     if (!amount || amount < 2) return toast.error(tr("最低充值 CA$2", "Min top-up CA$2"));
     if (channel === "card") return payByCard();
     if (channel === "emt") return submitEmtTopupFlow();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setBusy(true);
     try {
       const device = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? "mobile" : "desktop";
-      const r = await startOtt({ data: { amountCad: amount, channel, device } });
+      const r = await startOtt({ data: { amountCad: amount, channel, device, idempotencyKey: topupKey } });
 
       if (r.mode === "qr") {
         localStorage.setItem("ott_pending_ref", r.reference);
@@ -3171,6 +3187,7 @@ function WalletTab() {
       toast.error(e.message ?? tr("发起支付失败", "Failed to start payment"));
     } finally {
       setBusy(false);
+      submittingRef.current = false;
     }
   };
 
@@ -3230,15 +3247,18 @@ function WalletTab() {
 
   // Credit card: OTT Pay + Elavon Converge hosted payment page (card data never touches us)
   const payByCard = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setBusy(true);
     try {
-      const r = await startHosted({ data: { amountCad: amount } });
+      const r = await startHosted({ data: { amountCad: amount, idempotencyKey: topupKey } });
       localStorage.setItem("ott_pending_ref", r.reference);
       window.location.href = r.url;
     } catch (e: any) {
       toast.error(e.message ?? tr("支付失败", "Payment failed"));
     } finally {
       setBusy(false);
+      submittingRef.current = false;
     }
   };
 

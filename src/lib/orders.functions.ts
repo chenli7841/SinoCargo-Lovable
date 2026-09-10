@@ -2674,7 +2674,6 @@ async function batchExtraFeesCad(
 }
 
 async function settleBatchForCustomer(
-
   admin: any,
   params: {
     batchId: string;
@@ -2700,387 +2699,201 @@ async function settleBatchForCustomer(
   points_earned?: number;
 }> {
   const { batchId, customerUserId, customerCode, method } = params;
-  const discount = Math.max(0, Number(params.discountCad ?? 0));
-  const FX = await getFxCadPerCny(admin);
+  const discountCad = Math.max(0, Number(params.discountCad ?? 0));
 
   const { data: batchRow } = await admin.from("batches").select("batch_no").eq("id", batchId).maybeSingle();
   const batchNo = (batchRow as any)?.batch_no ?? batchId;
 
-  // 1) Locate this customer's UNPAID waybills in the batch (via their orders/forwarding requests —
-  // waybills has no customer_code column of its own).
-  let wbList: any[] = [];
-  if (customerCode) {
-    const [oR, fR] = await Promise.all([
-      admin.from("orders").select("id").eq("customer_code", customerCode),
-      admin.from("forwarding_orders").select("id").eq("customer_code", customerCode),
-    ]);
-    const oIds = ((oR.data ?? []) as any[]).map((o) => o.id);
-    const fIds = ((fR.data ?? []) as any[]).map((f) => f.id);
-    const filters: string[] = [];
-    if (oIds.length) filters.push(`order_id.in.(${oIds.join(",")})`);
-    if (fIds.length) filters.push(`forwarding_id.in.(${fIds.join(",")})`);
-    if (filters.length) {
-      const { data: wbs } = await admin
-        .from("waybills")
-        .select(
-          "id, waybill_no, order_id, forwarding_id, freight_cad, duty_cad, insurance_cad, clearance_cad, surcharge_cad, payment_status",
-        )
-        .eq("assigned_batch_id", batchId)
-        .or(filters.join(","));
-      wbList = ((wbs ?? []) as any[]).filter((w) => w.payment_status !== "paid");
-    }
-  }
-  if (wbList.length === 0) return { ok: false, reason: "already_paid" };
-
-  // 1.5) 冻结账单：确认价格时已生成一张未付账单。付款按【该账单的金额】扣，
-  // 不按当前运单重算——账单一经确认即定死（改运费需先取消确认）。
-  const { data: frozenRows } = await admin
-    .from("invoices")
-    .select("id, invoice_no, total_cny, fx_rate, subtotal_cny")
-    .eq("user_id", customerUserId)
-    .eq("type", "batch")
-    .eq("batch_no", batchNo)
-    .in("status", ["unpaid", "overdue"])
-    .order("created_at", { ascending: true })
-    .limit(1);
-  const frozenInvoice: any = ((frozenRows ?? []) as any[])[0] ?? null;
-
-  // 2) Authoritative totals from these waybills (server-computed — never trust a client-supplied amount)
-  const { buildInvoiceLineMeta } = await import("./duty.server");
-  // One query for every surcharge note across these waybills, so 附加费 rows
-  // can show what they're actually for instead of a bare number.
-  const { data: surchargeRows } = await admin
-    .from("surcharges")
-    .select("waybill_id, note, amount_cny")
-    .in(
-      "waybill_id",
-      wbList.map((w) => w.id),
-    );
-  const surchargeNotesByWaybill = new Map<string, string[]>();
-  for (const s of (surchargeRows ?? []) as any[]) {
-    if (!s.waybill_id) continue;
-    const arr = surchargeNotesByWaybill.get(s.waybill_id) ?? [];
-    if (s.note) arr.push(s.note);
-    surchargeNotesByWaybill.set(s.waybill_id, arr);
-  }
-
-  let f = 0,
-    cst = 0,
-    ins = 0,
-    other = 0;
-  const lineItems: any[] = [];
-  for (const w of wbList) {
-    const wf = Number(w.freight_cad ?? 0),
-      wc = Number(w.duty_cad ?? 0),
-      wi = Number(w.insurance_cad ?? 0),
-      wClearance = Number(w.clearance_cad ?? 0),
-      wSurcharge = Number(w.surcharge_cad ?? 0);
-    const fCny = +(wf / FX).toFixed(2),
-      cCny = +(wc / FX).toFixed(2),
-      iCny = +(wi / FX).toFixed(2),
-      clearanceCny = +(wClearance / FX).toFixed(2),
-      surchargeCny = +(wSurcharge / FX).toFixed(2);
-    const oCny = +(clearanceCny + surchargeCny).toFixed(2);
-    f += fCny;
-    cst += cCny;
-    ins += iCny;
-    other += oCny;
-
-    const meta = await buildInvoiceLineMeta(admin, w).catch(() => null);
-    lineItems.push({
-      waybill_id: w.id,
-      order_id: w.order_id,
-      forwarding_id: w.forwarding_id,
-      description: `运单 ${w.waybill_no}`,
-      freight_cny: fCny,
-      customs_cny: cCny,
-      insurance_cny: iCny,
-      other_cny: 0,
-      amount_cny: +(fCny + cCny + iCny).toFixed(2),
-      meta,
+  // 冻结账单：价格确认时（ensureUnpaidBatchInvoice）已生成一张未付账单。付款一律按【该账单金额】
+  // 扣，不在这里重算整批费用（大批次会超时）。若尚无冻结账单（员工未经确认直接扣款的异常路径），
+  // 先按运单口径冻结一张——这一步慢，但只发生一次，之后所有付款都走快照直读。
+  const hasFrozen = async () => {
+    const { data } = await admin
+      .from("invoices")
+      .select("id")
+      .eq("user_id", customerUserId)
+      .eq("type", "batch")
+      .eq("batch_no", batchNo)
+      .in("status", ["unpaid", "overdue"])
+      .limit(1);
+    return ((data ?? []) as any[]).length > 0;
+  };
+  if (customerCode && !(await hasFrozen())) {
+    const ens = await ensureUnpaidBatchInvoice(admin, {
+      batchId,
+      customerCode,
+      operatorId: params.operatorId,
     });
-    // 清关费/附加费 broken into their own rows (费用类型起行) instead of a
-    // combined "other" figure — same waybill reference, own subtotal.
-    if (clearanceCny > 0) {
-      lineItems.push({
-        waybill_id: w.id,
-        order_id: w.order_id,
-        forwarding_id: w.forwarding_id,
-        description: `清关费 · 批次 ${batchNo}`,
-        freight_cny: 0,
-        customs_cny: 0,
-        insurance_cny: 0,
-        other_cny: clearanceCny,
-        amount_cny: clearanceCny,
-        meta: {
-          fee_type: "清关费",
-          batch_no: batchNo,
-          waybill_no: w.waybill_no,
-          amount_cad: +wClearance.toFixed(2),
-        },
-      });
-    }
-    if (surchargeCny > 0) {
-      const notes = surchargeNotesByWaybill.get(w.id) ?? [];
-      lineItems.push({
-        waybill_id: w.id,
-        order_id: w.order_id,
-        forwarding_id: w.forwarding_id,
-        description: `附加费${notes.length ? ` · ${notes.join("、")}` : ""} · 运单 ${w.waybill_no}`,
-        freight_cny: 0,
-        customs_cny: 0,
-        insurance_cny: 0,
-        other_cny: surchargeCny,
-        amount_cny: surchargeCny,
-        meta: {
-          fee_type: "附加费",
-          batch_no: batchNo,
-          waybill_no: w.waybill_no,
-          note: notes.join("、") || null,
-          amount_cad: +wSurcharge.toFixed(2),
-        },
-      });
-    }
-  }
-  // 批次级派送费 / 检查费（展示端已计入总额，这里必须一并收取）
-  const extras = await batchExtraFeesCad(admin, batchId, customerCode);
-  for (const [label, cad] of [
-    ["末端派送费", extras.delivery],
-    ["检查费", extras.inspection],
-  ] as const) {
-    if (!cad) continue;
-    const cny = +(cad / FX).toFixed(2);
-    other += cny;
-    lineItems.push({
-      description: `${label} · 批次 ${batchNo}`,
-      freight_cny: 0,
-      customs_cny: 0,
-      insurance_cny: 0,
-      other_cny: cny,
-      amount_cny: cny,
-      meta: { fee_type: label, batch_no: batchNo, amount_cad: +cad.toFixed(2) },
-    });
-  }
-  const wbSubCny = +(f + cst + ins + other).toFixed(2);
-  // 有冻结账单 → 以账单金额为准（用账单自己的 fx_rate 折 CAD，与 pay_invoice 一致）；
-  // 否则按刚算的运单口径。
-  const invFx = frozenInvoice && Number(frozenInvoice.fx_rate) > 0 ? Number(frozenInvoice.fx_rate) : FX;
-  const subCny = frozenInvoice ? +Number(frozenInvoice.total_cny ?? 0).toFixed(2) : wbSubCny;
-
-  const discountCny = discount > 0 ? +(discount / invFx).toFixed(2) : 0;
-  const totalCny = +(subCny - discountCny).toFixed(2);
-  const subCad = +(subCny * invFx).toFixed(2);
-  const finalDeduct = +(subCad - discount).toFixed(2);
-  if (finalDeduct <= 0) return { ok: false, reason: "nothing_to_pay" };
-
-  if (params.enforceBalance) {
-    const { data: w } = await admin.from("wallets").select("balance_cad").eq("user_id", customerUserId).maybeSingle();
-    const bal = Number((w as any)?.balance_cad ?? 0);
-    if (bal < finalDeduct) return { ok: false, reason: "insufficient", need_cad: finalDeduct, balance_cad: bal };
-  }
-
-  const methodLabel = method === "wallet" ? "钱包扣款" : method === "emt" ? "EMT 收款" : "现金收款";
-
-  // 3) wallet_transactions — trigger applies balance change only for method='wallet'
-  const { error: txErr } = await admin.from("wallet_transactions").insert({
-    user_id: customerUserId,
-    type: "spend",
-    status: "completed",
-    amount_cad: finalDeduct,
-    amount_cny: totalCny,
-    channel: method,
-    ref_no: params.refNo ?? null,
-    note: params.note ?? `批次 ${batchNo} · ${methodLabel}${discount > 0 ? ` (含折扣 CA$${discount.toFixed(2)})` : ""}`,
-  });
-  if (txErr) throw new Error(txErr.message);
-
-  // 4) Discount is already persisted by saveBatchCustomerFeeDraft. Do not add a
-  // second negative surcharge during payment, otherwise the batch total is reduced twice.
-
-  // 5) Invoice —— 冻结模型：
-  //   有冻结的未付账单 → 只翻成已付，行项与金额一概不动（账单已定死）
-  //   没有（异常路径，如未经确认直接扣款）→ 才按运单口径新建一张已付账单
-  let inv: any = null;
-  let invErr: any = null;
-  const paidPatch = {
-    payment_method: method,
-    status: "paid",
-    paid_cny: totalCny,
-    paid_cad: finalDeduct,
-    paid_at: new Date().toISOString(),
-    note: `批次 ${batchNo} · ${methodLabel}${discount > 0 ? ` (折扣 CA$${discount.toFixed(2)})` : ""}`,
-  } as any;
-
-  if (frozenInvoice) {
-    const r = await admin.from("invoices").update(paidPatch).eq("id", frozenInvoice.id).select("*").single();
-    inv = r.data;
-    invErr = r.error;
-  } else {
-    const invoicePayload = {
-      user_id: customerUserId,
-      type: "batch",
-      payment_method: method,
-      subtotal_cny: subCny,
-      freight_cny: +f.toFixed(2),
-      customs_cny: +cst.toFixed(2),
-      insurance_cny: +ins.toFixed(2),
-      other_cny: +(other - discountCny).toFixed(2),
-      total_cny: totalCny,
-      paid_cny: totalCny,
-      paid_cad: finalDeduct,
-      status: "paid",
-      fx_rate: invFx,
-      batch_no: batchNo,
-      paid_at: new Date().toISOString(),
-      due_date: new Date().toISOString().slice(0, 10),
-      created_by: params.operatorId,
-      note: `批次 ${batchNo} · ${methodLabel}${discount > 0 ? ` (折扣 CA$${discount.toFixed(2)})` : ""}`,
-    } as any;
-    const r = await admin.from("invoices").insert(invoicePayload).select("*").single();
-    inv = r.data;
-    invErr = r.error;
-  }
-  if (invErr) throw new Error(invErr.message);
-  const invoiceId: string | null = inv?.id ?? null;
-
-  if (invoiceId && !frozenInvoice) {
-    await admin.from("invoice_items").insert(lineItems.map((li: any) => ({ ...li, invoice_id: invoiceId })));
-    if (discountCny > 0) {
-      await admin.from("invoice_items").insert({
-        invoice_id: invoiceId,
-        description: `折扣（${methodLabel}）`,
-        freight_cny: 0,
-        customs_cny: 0,
-        insurance_cny: 0,
-        other_cny: -discountCny,
-        amount_cny: -discountCny,
-        meta: {
-          fee_type: "折扣",
-          batch_no: batchNo,
-          note: methodLabel,
-          amount_cad: -+discount.toFixed(2),
-        },
-      });
+    if (!ens.ok) {
+      // no unpaid waybills / nothing to bill → same "no-op" outcome the old inline path returned
+      if (["already_paid", "no_waybills", "nothing_to_bill"].includes(ens.reason ?? "")) {
+        return { ok: false, reason: "already_paid" };
+      }
+      return { ok: false, reason: ens.reason ?? "freeze_failed" };
     }
   }
 
-  // 6) Mark waybills paid + logs + tracking events
-  const wbIds = wbList.map((w) => w.id);
-  await admin.from("waybills").update({ payment_status: "paid" }).in("id", wbIds);
-  for (const w of wbList) {
-    await recordLog(admin, {
-      entity_type: "waybill",
-      entity_id: w.id,
-      action: "wallet_deduct_paid",
-      after: { batch_no: batchNo, invoice_id: invoiceId, amount_cad: finalDeduct, method },
-      operator_id: params.operatorId,
-      operator_name: params.operatorName,
-      note: `批次结算（批次 ${batchNo} · ${methodLabel}）`,
-    });
-    let { data: ship } = await admin.from("shipments").select("id").eq("tracking_no", w.waybill_no).maybeSingle();
-    if (!ship) {
-      const { data: insShip } = await admin
-        .from("shipments")
-        .insert({ tracking_no: w.waybill_no, status: "created" })
-        .select("id")
-        .single();
-      ship = insShip;
-    }
-    if (ship) {
-      await admin.from("tracking_events").insert({
-        shipment_id: ship.id,
-        status_zh: method === "wallet" ? "费用已支付（钱包扣款）" : `费用已支付（${methodLabel}）`,
-        status_en: method === "wallet" ? "Payment settled (wallet)" : "Payment settled (offline)",
-        event_time: new Date().toISOString(),
-        source: "admin_action",
-      });
-    }
-  }
-  const orderIds = Array.from(new Set(wbList.map((w) => w.order_id).filter(Boolean)));
-  const fwdIds = Array.from(new Set(wbList.map((w) => w.forwarding_id).filter(Boolean)));
-  for (const oid of orderIds)
-    await recordLog(admin, {
-      entity_type: "order",
-      entity_id: oid,
-      action: "wallet_deduct_paid",
-      after: { batch_no: batchNo, invoice_id: invoiceId, amount_cad: finalDeduct, method },
-      operator_id: params.operatorId,
-      operator_name: params.operatorName,
-      note: `批次结算（批次 ${batchNo}）`,
-    });
-  for (const fid of fwdIds)
-    await recordLog(admin, {
-      entity_type: "forwarding",
-      entity_id: fid,
-      action: "wallet_deduct_paid",
-      after: { batch_no: batchNo, invoice_id: invoiceId, amount_cad: finalDeduct, method },
-      operator_id: params.operatorId,
-      operator_name: params.operatorName,
-      note: `批次结算（批次 ${batchNo}）`,
-    });
-  if (invoiceId)
-    await recordLog(admin, {
-      entity_type: "batch",
-      entity_id: batchId,
-      action: "invoice_create_and_pay",
-      after: {
-        invoice_id: invoiceId,
-        batch_no: batchNo,
-        amount_cad: finalDeduct,
-        discount_cad: discount,
-        method,
-      },
-      operator_id: params.operatorId,
-      operator_name: params.operatorName,
-      note: `生成账单并结清（客户 ${customerCode || customerUserId} · CA$${finalDeduct.toFixed(2)} · ${methodLabel}）`,
-    });
-
-  await admin.from("admin_action_logs").insert({
-    entity_type: "batch",
-    entity_id: batchId,
-    action: "wallet_deduct",
-    after: {
-      user_id: customerUserId,
-      customer_code: customerCode,
-      amount_cad: finalDeduct,
-      discount_cad: discount,
-      invoice_id: invoiceId,
+  // 核心：一个事务 RPC 完成「扣余额 / 结清账单 / 运单批量转已付 / 快照 / 积分」。
+  // 事务原子性 + 运单行锁 → 并发或重试都拿到 already_paid，不会出现半成功。
+  const rpc: any = await admin.rpc("settle_batch_customer_txn", {
+    _payload: {
+      batch_id: batchId,
+      customer_user_id: customerUserId,
+      customer_code: customerCode || null,
       method,
+      discount_cad: discountCad,
+      ref_no: params.refNo ?? null,
+      note: params.note ?? null,
+      operator_id: params.operatorId,
+      operator_name: params.operatorName,
+      enforce_balance: !!params.enforceBalance,
+      award_points: !!params.awardPoints,
     },
-    operator_id: params.operatorId,
-    operator_name: params.operatorName,
-    note: `客户 ${customerCode || customerUserId} 结算 CA$${finalDeduct.toFixed(2)}${discount > 0 ? `（折扣 CA$${discount.toFixed(2)}）` : ""}（批次 ${batchNo} · ${methodLabel}）`,
   });
-
-  let points_earned = 0;
-  if (params.awardPoints) {
-    const { data: pts } = await admin.rpc("award_points_for_spend", {
-      _user_id: customerUserId,
-      _amount_cad: finalDeduct,
-    });
-    points_earned = Number(pts ?? 0);
+  if (rpc.error) throw new Error(rpc.error.message);
+  const res: any = rpc.data;
+  if (!res?.ok) {
+    return {
+      ok: false,
+      reason: res?.reason ?? "settle_failed",
+      need_cad: res?.need_cad != null ? Number(res.need_cad) : undefined,
+      balance_cad: res?.balance_cad != null ? Number(res.balance_cad) : undefined,
+    };
   }
 
-  // 付款状态快照：该客户在本批的运单已全部付清（客户自助钱包付款 / 员工扣款共用此路径）。
-  // 只写快照列，不动 confirmed / subtotal。
-  if (customerCode) {
-    try {
-      await admin.from("batch_settlements").upsert(
-        { batch_id: batchId, customer_code: customerCode, is_paid: true, paid_at: new Date().toISOString() },
-        { onConflict: "batch_id,customer_code" },
-      );
-    } catch (e) {
-      console.error("batch_settlements is_paid snapshot write failed:", e);
-    }
+  // ---- 事务已提交：钱与状态已一致。以下为非关键补写，失败只记日志、不回滚、不报错。----
+  try {
+    await enrichAfterBatchSettle(admin, {
+      batchId,
+      batchNo: res.batch_no ?? batchNo,
+      method,
+      invoiceId: res.invoice_id,
+      finalCad: Number(res.paid_cad ?? 0),
+      discountCad,
+      waybillIds: (res.waybill_ids ?? []) as string[],
+      waybillNos: (res.waybill_nos ?? []) as string[],
+      orderIds: (res.order_ids ?? []) as string[],
+      forwardingIds: (res.forwarding_ids ?? []) as string[],
+      operatorId: params.operatorId,
+      operatorName: params.operatorName,
+      customerCode,
+      customerUserId,
+    });
+  } catch (e) {
+    console.error("enrichAfterBatchSettle failed (settlement is already committed):", e);
   }
 
   return {
     ok: true,
-    invoice_id: invoiceId ?? undefined,
-    invoice_no: inv?.invoice_no,
-    paid_cad: finalDeduct,
-    points_earned,
+    invoice_id: res.invoice_id ?? undefined,
+    invoice_no: res.invoice_no,
+    paid_cad: Number(res.paid_cad ?? 0),
+    points_earned: Number(res.points_earned ?? 0),
   };
+}
+
+// Post-settlement enrichment — runs AFTER the settle_batch_customer_txn transaction has
+// committed, so money/status are already correct. Everything here is best-effort and
+// batched (one insert per table instead of a per-waybill loop), so a slow or failing
+// step never blocks or reverts a settlement.
+async function enrichAfterBatchSettle(
+  admin: any,
+  p: {
+    batchId: string;
+    batchNo: string;
+    method: "wallet" | "emt" | "cash";
+    invoiceId?: string;
+    finalCad: number;
+    discountCad: number;
+    waybillIds: string[];
+    waybillNos: string[];
+    orderIds: string[];
+    forwardingIds: string[];
+    operatorId: string;
+    operatorName: string;
+    customerCode: string;
+    customerUserId: string;
+  },
+) {
+  const methodLabel = p.method === "wallet" ? "钱包扣款" : p.method === "emt" ? "EMT 收款" : "现金收款";
+  const after = { batch_no: p.batchNo, invoice_id: p.invoiceId ?? null, amount_cad: p.finalCad, method: p.method };
+
+  const logs: any[] = [];
+  for (const id of p.waybillIds)
+    logs.push({
+      entity_type: "waybill",
+      entity_id: id,
+      action: "wallet_deduct_paid",
+      after,
+      operator_id: p.operatorId,
+      operator_name: p.operatorName,
+      note: `批次结算（批次 ${p.batchNo} · ${methodLabel}）`,
+    });
+  for (const id of p.orderIds)
+    logs.push({
+      entity_type: "order",
+      entity_id: id,
+      action: "wallet_deduct_paid",
+      after,
+      operator_id: p.operatorId,
+      operator_name: p.operatorName,
+      note: `批次结算（批次 ${p.batchNo}）`,
+    });
+  for (const id of p.forwardingIds)
+    logs.push({
+      entity_type: "forwarding",
+      entity_id: id,
+      action: "wallet_deduct_paid",
+      after,
+      operator_id: p.operatorId,
+      operator_name: p.operatorName,
+      note: `批次结算（批次 ${p.batchNo}）`,
+    });
+  if (p.invoiceId)
+    logs.push({
+      entity_type: "batch",
+      entity_id: p.batchId,
+      action: "invoice_create_and_pay",
+      after: { ...after, discount_cad: p.discountCad },
+      operator_id: p.operatorId,
+      operator_name: p.operatorName,
+      note: `生成账单并结清（客户 ${p.customerCode || p.customerUserId} · CA$${p.finalCad.toFixed(2)} · ${methodLabel}）`,
+    });
+  if (logs.length) {
+    const { error } = await admin.from("admin_action_logs").insert(logs);
+    if (error) console.error("batch settle: admin_action_logs bulk insert failed:", error.message);
+  }
+
+  // shipments + 物流轨迹：批量查、批量补、批量写
+  if (p.waybillNos.length) {
+    const { data: existing } = await admin
+      .from("shipments")
+      .select("id, tracking_no")
+      .in("tracking_no", p.waybillNos);
+    const byNo = new Map<string, string>();
+    for (const s of (existing ?? []) as any[]) byNo.set(s.tracking_no, s.id);
+    const missing = p.waybillNos.filter((n) => !byNo.has(n));
+    if (missing.length) {
+      const { data: created } = await admin
+        .from("shipments")
+        .insert(missing.map((n) => ({ tracking_no: n, status: "created" })))
+        .select("id, tracking_no");
+      for (const s of (created ?? []) as any[]) byNo.set(s.tracking_no, s.id);
+    }
+    const nowIso = new Date().toISOString();
+    const shipIds = Array.from(new Set(p.waybillNos.map((n) => byNo.get(n)).filter(Boolean) as string[]));
+    const events = shipIds.map((shipId) => ({
+      shipment_id: shipId,
+      status_zh: p.method === "wallet" ? "费用已支付（钱包扣款）" : `费用已支付（${methodLabel}）`,
+      status_en: p.method === "wallet" ? "Payment settled (wallet)" : "Payment settled (offline)",
+      event_time: nowIso,
+      source: "admin_action",
+    }));
+    if (events.length) {
+      const { error } = await admin.from("tracking_events").insert(events);
+      if (error) console.error("batch settle: tracking_events bulk insert failed:", error.message);
+    }
+  }
 }
 
 export const listBatches = createServerFn({ method: "GET" })
@@ -3390,6 +3203,124 @@ export const deductBatchOffline = createServerFn({ method: "POST" })
       deducted_cad: r.paid_cad,
       discount_cad: Math.max(0, Number(data.discountCad ?? 0)),
     };
+  });
+
+// Staff-only: settle EVERY eligible customer in a batch from their wallet balance in one go.
+// "Eligible" = has an unpaid waybill in the batch AND price already confirmed. Wallet only.
+// Same rules as the single-customer deduct (per-customer isolation, frozen-invoice amount,
+// atomic settle_batch_customer_txn). A customer whose balance can't cover it is SKIPPED,
+// not failed — so the operator can top them up and re-run. Processed in small concurrent
+// chunks so a big batch doesn't run as one long serial request.
+export const deductWalletForBatchBulk = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { batchId: string; userIds?: string[] }) => d)
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const operator_name = await getOperatorName(supabaseAdmin, context.userId);
+
+    // 1) 本批全部运单 → 归到客户号（经 orders / forwarding_orders），谁还有未付运单
+    const { data: wbs } = await supabaseAdmin
+      .from("waybills")
+      .select("id, order_id, forwarding_id, payment_status")
+      .eq("assigned_batch_id", data.batchId);
+    const oIds = Array.from(new Set(((wbs ?? []) as any[]).map((w) => w.order_id).filter(Boolean)));
+    const fIds = Array.from(new Set(((wbs ?? []) as any[]).map((w) => w.forwarding_id).filter(Boolean)));
+    const [oR, fR] = await Promise.all([
+      oIds.length
+        ? supabaseAdmin.from("orders").select("id, customer_code").in("id", oIds)
+        : Promise.resolve({ data: [] as any[] }),
+      fIds.length
+        ? supabaseAdmin.from("forwarding_orders").select("id, customer_code").in("id", fIds)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const oM = new Map(((oR as any).data ?? []).map((o: any) => [o.id, o.customer_code]));
+    const fM = new Map(((fR as any).data ?? []).map((f: any) => [f.id, f.customer_code]));
+    const unpaidByCust = new Set<string>();
+    for (const w of (wbs ?? []) as any[]) {
+      const cc = (w.order_id && oM.get(w.order_id)) || (w.forwarding_id && fM.get(w.forwarding_id));
+      if (cc && w.payment_status !== "paid") unpaidByCust.add(cc as string);
+    }
+
+    // 2) 只保留「价格已确认」的客户（工作流：先批量确认价格，再批量扣款）
+    const { data: settRows } = await supabaseAdmin
+      .from("batch_settlements")
+      .select("customer_code, confirmed")
+      .eq("batch_id", data.batchId)
+      .eq("confirmed", true);
+    const confirmed = new Set(((settRows ?? []) as any[]).map((r) => r.customer_code));
+    let targetCodes = Array.from(unpaidByCust).filter((c) => confirmed.has(c));
+
+    // 3) 可选：前端只勾选了部分客户
+    if (data.userIds && data.userIds.length) {
+      const { data: sel } = await supabaseAdmin
+        .from("profiles")
+        .select("customer_code")
+        .in("id", data.userIds);
+      const allow = new Set(((sel ?? []) as any[]).map((p) => p.customer_code));
+      targetCodes = targetCodes.filter((c) => allow.has(c));
+    }
+
+    const { data: profs } = targetCodes.length
+      ? await supabaseAdmin.from("profiles").select("id, customer_code").in("customer_code", targetCodes)
+      : { data: [] as any[] };
+    const userByCode = new Map(((profs ?? []) as any[]).map((p) => [p.customer_code, p.id]));
+
+    const settled: any[] = [];
+    const skipped_insufficient: any[] = [];
+    const skipped_already_paid: any[] = [];
+    const failed: any[] = [];
+
+    const settleOne = async (code: string) => {
+      const uid = userByCode.get(code);
+      if (!uid) {
+        failed.push({ customer_code: code, reason: "no_profile" });
+        return;
+      }
+      try {
+        const r = await settleBatchForCustomer(supabaseAdmin, {
+          batchId: data.batchId,
+          customerUserId: uid,
+          customerCode: code,
+          method: "wallet",
+          operatorId: context.userId,
+          operatorName: operator_name,
+          enforceBalance: true, // 余额不够 → 返回 insufficient，跳过而非报错
+          awardPoints: false,
+        });
+        if (r.ok) settled.push({ customer_code: code, paid_cad: r.paid_cad });
+        else if (r.reason === "insufficient")
+          skipped_insufficient.push({ customer_code: code, need_cad: r.need_cad, balance_cad: r.balance_cad });
+        else if (r.reason === "already_paid") skipped_already_paid.push({ customer_code: code });
+        else failed.push({ customer_code: code, reason: r.reason });
+      } catch (e: any) {
+        failed.push({ customer_code: code, reason: e?.message ?? "error" });
+      }
+    };
+
+    // 小并发分片，避免整批串成一个超长请求
+    const CHUNK = 5;
+    for (let i = 0; i < targetCodes.length; i += CHUNK) {
+      await Promise.all(targetCodes.slice(i, i + CHUNK).map(settleOne));
+    }
+
+    await recordLog(supabaseAdmin, {
+      entity_type: "batch",
+      entity_id: data.batchId,
+      action: "wallet_deduct_bulk",
+      after: {
+        target: targetCodes.length,
+        settled: settled.length,
+        skipped_insufficient: skipped_insufficient.length,
+        skipped_already_paid: skipped_already_paid.length,
+        failed: failed.length,
+      },
+      operator_id: context.userId,
+      operator_name,
+      note: `批量钱包扣款：结清 ${settled.length} · 余额不足跳过 ${skipped_insufficient.length} · 已结清 ${skipped_already_paid.length} · 失败 ${failed.length}`,
+    });
+
+    return { ok: true, total: targetCodes.length, settled, skipped_insufficient, skipped_already_paid, failed };
   });
 
 // Customer self-service: pay off their own share of a batch from their wallet.
@@ -3948,14 +3879,30 @@ export const setBatchPriceConfirmed = createServerFn({ method: "POST" })
       }
     }
 
+    // 生成/刷新该客户的未付批次账单。以前这里用 .catch 把错误吞掉，导致「确认成功但没出账单」
+    // 无法察觉；现在把结果如实返回，UI 据此提示。软失败（该客户在本批已付清 / 无未付运单）
+    // 不算错误。
     let invoice_no: string | null = null;
+    let invoice_ok = true;
+    let invoice_error: string | null = null;
+    const softInvoiceReasons = ["already_paid", "no_waybills", "nothing_to_bill"];
     if (data.confirmed) {
-      const r = await ensureUnpaidBatchInvoice(supabaseAdmin, {
-        batchId: data.batchId,
-        customerCode: data.customerCode,
-        operatorId: context.userId,
-      }).catch(() => ({ ok: false }) as any);
-      invoice_no = r?.invoice_no ?? null;
+      try {
+        const r = await ensureUnpaidBatchInvoice(supabaseAdmin, {
+          batchId: data.batchId,
+          customerCode: data.customerCode,
+          operatorId: context.userId,
+        });
+        invoice_no = r?.invoice_no ?? null;
+        if (!r?.ok && !softInvoiceReasons.includes(r?.reason ?? "")) {
+          invoice_ok = false;
+          invoice_error = r?.reason ?? "invoice_generation_failed";
+        }
+      } catch (e: any) {
+        invoice_ok = false;
+        invoice_error = e?.message ?? "invoice_generation_failed";
+        console.error("ensureUnpaidBatchInvoice failed in setBatchPriceConfirmed:", e);
+      }
     } else {
       // 取消确认：撤回尚未支付的自动账单
       const { data: batchRow } = await supabaseAdmin
@@ -3983,7 +3930,7 @@ export const setBatchPriceConfirmed = createServerFn({ method: "POST" })
         }
       }
     }
-    return { ok: true, confirmed: data.confirmed, invoice_no };
+    return { ok: true, confirmed: data.confirmed, invoice_no, invoice_ok, invoice_error };
   });
 
 // Confirm every customer price in one batch. This does not collect payment.
@@ -4017,15 +3964,31 @@ export const confirmAllBatchPrices = createServerFn({ method: "POST" })
       console.error("refreshBatchSettlements failed on confirmAllBatchPrices:", e);
     }
     const invoices: any[] = [];
+    const invoice_failed: { customer_code: string; error: string }[] = [];
+    const softInvoiceReasons = ["already_paid", "no_waybills", "nothing_to_bill"];
     for (const customerCode of customerCodes) {
-      const result = await ensureUnpaidBatchInvoice(supabaseAdmin, {
-        batchId: data.batchId,
-        customerCode,
-        operatorId: context.userId,
-      });
-      invoices.push({ customer_code: customerCode, ...result });
+      try {
+        const result = await ensureUnpaidBatchInvoice(supabaseAdmin, {
+          batchId: data.batchId,
+          customerCode,
+          operatorId: context.userId,
+        });
+        invoices.push({ customer_code: customerCode, ...result });
+        if (!result?.ok && !softInvoiceReasons.includes(result?.reason ?? "")) {
+          invoice_failed.push({ customer_code: customerCode, error: result?.reason ?? "failed" });
+        }
+      } catch (e: any) {
+        invoice_failed.push({ customer_code: customerCode, error: e?.message ?? "error" });
+        console.error(`ensureUnpaidBatchInvoice failed for ${customerCode}:`, e);
+      }
     }
-    return { ok: true, confirmed_count: customerCodes.length, invoices };
+    return {
+      ok: true,
+      confirmed_count: customerCodes.length,
+      invoice_ok_count: customerCodes.length - invoice_failed.length,
+      invoice_failed,
+      invoices,
+    };
   });
 
 // 计费重量 = max(实重, 体积重)，体积重按 ÷6000 估算（与 ContainerChildList 客户端展示口径一致）。

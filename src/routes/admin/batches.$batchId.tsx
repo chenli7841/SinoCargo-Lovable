@@ -11,6 +11,7 @@ import {
   updateBatch,
   batchUpdateWaybillsByBatch,
   deductWalletForBatch,
+  deductWalletForBatchBulk,
   deductBatchOffline,
   confirmAllBatchPrices,
   type BatchStatus,
@@ -88,6 +89,7 @@ function BatchDetail() {
   const fetchLabel = useServerFn(getContainerLabelData);
   const deduct = useServerFn(deductWalletForBatch);
   const deductOffline = useServerFn(deductBatchOffline);
+  const bulkDeduct = useServerFn(deductWalletForBatchBulk);
   const confirmAllPrices = useServerFn(confirmAllBatchPrices);
   const doSplitPallet = useServerFn(splitPallet);
   const fetchCustomsReadiness = useServerFn(getBatchCustomsReadiness);
@@ -160,6 +162,7 @@ function BatchDetail() {
   const [hsBusy, setHsBusy] = useState(false);
   const [invoiceBusy, setInvoiceBusy] = useState(false);
   const [confirmAllBusy, setConfirmAllBusy] = useState(false);
+  const [bulkDeductBusy, setBulkDeductBusy] = useState(false);
   const hblInputRef = useRef<HTMLInputElement>(null);
   const onPrintLabel = async () => {
     const d = await fetchLabel({ data: { kind: "batch", id: batchId } });
@@ -222,14 +225,58 @@ function BatchDetail() {
     if (!window.confirm(`确认批次内 ${pendingCount} 位客户的价格？此操作只确认价格并生成未付账单，不会扣款。`)) return;
     setConfirmAllBusy(true);
     try {
-      const result = await confirmAllPrices({ data: { batchId } });
-      toast.success(`已批量确认 ${result.confirmed_count} 位客户，未执行扣款`);
+      const result: any = await confirmAllPrices({ data: { batchId } });
+      if (result.invoice_failed?.length) {
+        toast.error(
+          `已确认 ${result.confirmed_count} 位，但 ${result.invoice_failed.length} 位账单生成失败：${result.invoice_failed
+            .map((f: any) => `${f.customer_code}(${f.error})`)
+            .join("、")}`,
+          { duration: 10000 },
+        );
+      } else {
+        toast.success(`已批量确认 ${result.confirmed_count} 位客户并生成账单，未执行扣款`);
+      }
       await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
       await qc.invalidateQueries({ queryKey: ["batch-invoices", batch.batch_no ?? ""] });
     } catch (e: any) {
       toast.error(e?.message ?? "批量确认失败");
     } finally {
       setConfirmAllBusy(false);
+    }
+  };
+
+  const onBulkDeduct = async () => {
+    const customers = fee_summary?.per_customer ?? [];
+    // 价格已确认 且 未付清 且 有客户账号 —— 与服务端目标口径一致，仅用于按钮可用性与确认提示
+    const eligible = customers.filter((c: any) => c.price_confirmed && !c.is_paid && c.user_id);
+    if (!eligible.length) return toast.info("没有可批量扣款的客户（需价格已确认且未付清）");
+    if (
+      !window.confirm(
+        `从钱包余额批量扣款 ${eligible.length} 位客户？只从钱包余额扣，余额不足的客户会自动跳过、不做任何操作。`,
+      )
+    )
+      return;
+    setBulkDeductBusy(true);
+    try {
+      const r: any = await bulkDeduct({ data: { batchId } });
+      const parts = [`结清 ${r.settled.length}`];
+      if (r.skipped_insufficient.length) parts.push(`余额不足跳过 ${r.skipped_insufficient.length}`);
+      if (r.skipped_already_paid.length) parts.push(`已结清 ${r.skipped_already_paid.length}`);
+      if (r.failed.length) parts.push(`失败 ${r.failed.length}`);
+      toast.success(`批量扣款：${parts.join(" · ")}`);
+      if (r.skipped_insufficient.length) {
+        toast.info(
+          `余额不足跳过：${r.skipped_insufficient
+            .map((s: any) => `${s.customer_code}(缺 CA$${(Number(s.need_cad ?? 0) - Number(s.balance_cad ?? 0)).toFixed(2)})`)
+            .join("、")}`,
+        );
+      }
+      await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
+      await qc.invalidateQueries({ queryKey: ["batch-invoices", batch.batch_no ?? ""] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "批量扣款失败");
+    } finally {
+      setBulkDeductBusy(false);
     }
   };
 
@@ -694,6 +741,21 @@ function BatchDetail() {
                   >
                     {confirmAllBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="h-3.5 w-3.5" />}
                     {fee_summary.per_customer.every((c: any) => c.price_confirmed) ? "已全部确认" : "批量确认价格"}
+                  </button>
+                )}
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={onBulkDeduct}
+                    disabled={
+                      bulkDeductBusy ||
+                      !fee_summary.per_customer.some((c: any) => c.price_confirmed && !c.is_paid && c.user_id)
+                    }
+                    title="从各客户钱包余额批量扣款；余额不足自动跳过"
+                    className="inline-flex items-center gap-1 rounded-md bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {bulkDeductBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
+                    批量扣款（钱包）
                   </button>
                 )}
               </div>
@@ -1365,6 +1427,14 @@ function BatchDetail() {
                                 });
                           if (r?.ok === false && r.reason === "already_paid") {
                             alert("该客户在本批次已结清");
+                          } else if (r?.ok) {
+                            // 服务端按冻结账单金额扣款，可能与页面显示略有出入 —— 以实扣为准
+                            const actual = Number(r.deducted_cad ?? 0);
+                            if (actual > 0 && Math.abs(actual - (sub - disc)) > 0.01) {
+                              alert(
+                                `已按冻结账单结算 CA$${actual.toFixed(2)}（页面预估 CA$${(sub - disc).toFixed(2)}，价格可能已更新）`,
+                              );
+                            }
                           }
                           setDeductState(null);
                           setDeductDiscount("0");
