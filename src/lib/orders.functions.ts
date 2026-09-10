@@ -2982,20 +2982,56 @@ export const getBatchDetail = createServerFn({ method: "POST" })
     const wbFwdIds = Array.from(new Set(wbList.map((w) => w.forwarding_id).filter(Boolean)));
     const [wbOrdersR, wbFwdR] = await Promise.all([
       wbOrderIds.length
-        ? supabaseAdmin.from("orders").select("id, customer_code").in("id", wbOrderIds)
+        ? supabaseAdmin.from("orders").select("id, customer_code, route_id").in("id", wbOrderIds)
         : Promise.resolve({ data: [] as any[] }),
       wbFwdIds.length
-        ? supabaseAdmin.from("forwarding_orders").select("id, customer_code").in("id", wbFwdIds)
+        ? supabaseAdmin.from("forwarding_orders").select("id, customer_code, route_id").in("id", wbFwdIds)
         : Promise.resolve({ data: [] as any[] }),
     ]);
     const wbOMap = new Map(((wbOrdersR as any).data ?? []).map((o: any) => [o.id, o.customer_code]));
     const wbFMap = new Map(((wbFwdR as any).data ?? []).map((f: any) => [f.id, f.customer_code]));
-    const waybills = wbList.map((w: any) => {
+    const wbORoute = new Map(((wbOrdersR as any).data ?? []).map((o: any) => [o.id, o.route_id]));
+    const wbFRoute = new Map(((wbFwdR as any).data ?? []).map((f: any) => [f.id, f.route_id]));
+
+    // 计费重按【该运单所在线路的运费规则】的体积除数 + 计费方式算，不再写死 ÷6000。
+    const routeOf = (w: any) =>
+      (w.order_id && wbORoute.get(w.order_id)) || (w.forwarding_id && wbFRoute.get(w.forwarding_id)) || null;
+    const routeIds = Array.from(new Set(wbList.map(routeOf).filter(Boolean)));
+    const ruleByRoute = new Map<string, { divisor: number; weight_mode: string }>();
+    if (routeIds.length) {
+      const { data: rules } = await supabaseAdmin
+        .from("freight_rules")
+        .select("route_id, volumetric_divisor, weight_mode, created_at")
+        .in("route_id", routeIds)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false });
+      for (const r of (rules ?? []) as any[]) {
+        if (!ruleByRoute.has(r.route_id))
+          ruleByRoute.set(r.route_id, {
+            divisor: Number(r.volumetric_divisor) || 6000,
+            weight_mode: r.weight_mode || "max",
+          });
+      }
+    }
+    const chargeableOf = (w: any): number => {
+      const snap = Number((w.weight_snapshot as any)?.chargeable_weight ?? 0);
+      if (snap > 0) return snap; // 已冻结的计费重优先
+      const actual = Number(w.weight_kg ?? 0);
       const L = Number(w.length_cm ?? 0),
         W = Number(w.width_cm ?? 0),
         H = Number(w.height_cm ?? 0);
-      const vol = L && W && H ? (L * W * H) / 6000 : 0;
-      const chargeable = Math.max(Number(w.weight_kg ?? 0), vol);
+      const rule = ruleByRoute.get(routeOf(w) as string);
+      if (!rule) return actual; // 无运费规则 → 只按实重兜底
+      const volW = L && W && H ? (L * W * H) / rule.divisor : 0;
+      return rule.weight_mode === "actual"
+        ? actual
+        : rule.weight_mode === "volumetric"
+          ? volW
+          : Math.max(actual, volW);
+    };
+
+    const waybills = wbList.map((w: any) => {
+      const chargeable = chargeableOf(w);
       const total_cad =
         Number(w.freight_cad ?? 0) +
         Number(w.duty_cad ?? 0) +

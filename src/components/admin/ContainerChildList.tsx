@@ -24,11 +24,10 @@ type Waybill = {
 };
 
 function chargeableKg(w: Waybill) {
+  // 服务端已按线路运费规则算好计费重（体积除数 + 计费方式），直接用；
+  // 缺失时只按实重兜底，不用写死的体积除数瞎猜。
   if (w.chargeable_weight_kg != null) return Number(w.chargeable_weight_kg);
-  const wt = Number(w.weight_kg ?? 0);
-  const L = Number(w.length_cm ?? 0), W = Number(w.width_cm ?? 0), H = Number(w.height_cm ?? 0);
-  const vol = L && W && H ? (L * W * H) / 6000 : 0;
-  return Math.max(wt, vol);
+  return Number(w.weight_kg ?? 0);
 }
 function totalCad(w: Waybill) {
   if (w.total_cad != null) return Number(w.total_cad);
