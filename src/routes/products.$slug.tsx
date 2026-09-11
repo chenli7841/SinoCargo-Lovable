@@ -169,7 +169,9 @@ function ProductDetail() {
   }, [variants]);
   const [selVariantId, setSelVariantId] = useState<string | null>(defaultVariantId);
   const selVariant = variants.find((v: any) => v.id === selVariantId) ?? null;
-  const effectivePriceCNY = selVariant?.price_cny ?? product.priceCNY;
+  // Supabase 的 numeric 列过来是字符串（保精度），不显式转成 Number 的话，formatPrice 里的
+  // toLocaleString 在字符串上不会真正格式化——选规格后价格看着"没变"或小数位不对，就是这个。
+  const effectivePriceCNY = selVariant?.price_cny != null ? Number(selVariant.price_cny) : product.priceCNY;
   const effectiveStock = selVariant ? Number(selVariant.stock ?? 0) : stock;
 
   // 规格/产品重量、尺寸、包装数据的取值优先级：选中规格 > 商品默认值。
@@ -223,6 +225,10 @@ function ProductDetail() {
   const otherPrice =
     currency === "CNY" ? `≈ CA$${cnyToCad(effectivePriceCNY).toFixed(2)}` : `≈ ¥${effectivePriceCNY.toFixed(0)}`;
 
+  // Supabase numeric 列过来是字符串——原样塞进购物车会让下游的加总/运费计算变成字符串拼接
+  // 而不是数字相加。undefined 保持 undefined（字段真的没填），非空一律转成 Number。
+  const numOrUndef = (v: any): number | undefined => (v == null ? undefined : Number(v));
+
   const handleAdd = () => {
     if (qty < minQty) return;
     const cartVariant = selVariant
@@ -230,16 +236,16 @@ function ProductDetail() {
           id: selVariant.id,
           sku: selVariant.sku,
           label: [selVariant.attrs?.color, selVariant.attrs?.size].filter(Boolean).join(" / ") || selVariant.sku,
-          priceCNY: selVariant.price_cny,
-          weightKg: selVariant.weight_kg,
-          lengthCm: selVariant.length_cm,
-          widthCm: selVariant.width_cm,
-          heightCm: selVariant.height_cm,
-          packQty: selVariant.pack_qty,
-          packWeightKg: selVariant.pack_weight_kg,
-          packLengthCm: selVariant.pack_length_cm,
-          packWidthCm: selVariant.pack_width_cm,
-          packHeightCm: selVariant.pack_height_cm,
+          priceCNY: effectivePriceCNY,
+          weightKg: numOrUndef(selVariant.weight_kg),
+          lengthCm: numOrUndef(selVariant.length_cm),
+          widthCm: numOrUndef(selVariant.width_cm),
+          heightCm: numOrUndef(selVariant.height_cm),
+          packQty: numOrUndef(selVariant.pack_qty),
+          packWeightKg: numOrUndef(selVariant.pack_weight_kg),
+          packLengthCm: numOrUndef(selVariant.pack_length_cm),
+          packWidthCm: numOrUndef(selVariant.pack_width_cm),
+          packHeightCm: numOrUndef(selVariant.pack_height_cm),
         }
       : undefined;
     add(product, qty, cartVariant);
