@@ -172,17 +172,20 @@ export const getPublicProduct = createServerFn({ method: "POST" })
     // not-yet-deployed fallback as the product-level NEW_COLS above.
     const VARIANT_FREIGHT_COLS =
       "weight_kg,length_cm,width_cm,height_cm,pack_qty,pack_weight_kg,pack_length_cm,pack_width_cm,pack_height_cm,pack_volume_m3";
+    // 规格按价格从低到高排（同价按建单时间），不依赖建表/写入顺序——前端拿到后还会再稳定排一次兜底。
     const buildVariants = (cols: string) =>
       sb
         .from("product_variants")
         .select(cols)
         .eq("product_id", (product as any).id)
-        .eq("is_active", true);
+        .eq("is_active", true)
+        .order("price_cny", { ascending: true })
+        .order("created_at", { ascending: true });
     let { data: variants, error: varErr } = await buildVariants(
-      `id,sku,attrs,price_cny,stock,is_active,${VARIANT_FREIGHT_COLS}`,
+      `id,sku,attrs,price_cny,stock,is_active,created_at,${VARIANT_FREIGHT_COLS}`,
     );
     if (isMissingNewColumn(varErr))
-      ({ data: variants } = await buildVariants("id,sku,attrs,price_cny,stock,is_active"));
+      ({ data: variants } = await buildVariants("id,sku,attrs,price_cny,stock,is_active,created_at"));
     const cat = (product as any).category?.slug as string | undefined;
     let related: PublicProduct[] = [];
     if (cat) {
