@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { loadAllHsCodes } from "@/lib/duty.server";
 
 async function assertStaff(supabase: any, userId: string) {
   const { data } = await supabase.rpc("is_staff", { _user_id: userId });
@@ -50,7 +51,7 @@ async function loadCustomsItems(admin: any, batchId: string) {
   const waybills = await batchWaybills(admin, batchId);
   const forwardingIds = Array.from(new Set(waybills.map((w) => w.forwarding_id).filter(Boolean)));
   const orderIds = Array.from(new Set(waybills.map((w) => w.order_id).filter(Boolean)));
-  const [{ data: forwardingOrders }, { data: forwardingItems }, { data: orders }, { data: orderItems }, { data: hsRows }] =
+  const [{ data: forwardingOrders }, { data: forwardingItems }, { data: orders }, { data: orderItems }, hsRows] =
     await Promise.all([
       forwardingIds.length
         ? admin.from("forwarding_orders").select("id,customer_code,box_count").in("id", forwardingIds)
@@ -62,7 +63,7 @@ async function loadCustomsItems(admin: any, batchId: string) {
         ? admin.from("orders").select("id,customer_code,box_count,fx_rate").in("id", orderIds)
         : Promise.resolve({ data: [] }),
       orderIds.length ? admin.from("order_items").select("*").in("order_id", orderIds) : Promise.resolve({ data: [] }),
-      admin.from("hs_codes").select("hs_code,name_zh,name_en,aliases,material,origin,unit,is_active").eq("is_active", true),
+      loadAllHsCodes(admin, "hs_code,name_zh,name_en,aliases,material,origin,unit,is_active", { activeOnly: true }),
     ]);
   return {
     waybills,

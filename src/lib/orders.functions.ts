@@ -2145,10 +2145,8 @@ export async function computeBatchFeeSummary(admin: any, batchId: string) {
   // === 10. Customs items per (customer, route) — HS 明细统一口径 ===
   // 集运运单：computeWaybillDutyBreakdown（与 waybills.duty_cad 落库完全一致）
   // 电商订单：order_items × products.hs_code / hs_codes 名称匹配
-  const { computeWaybillDutyBreakdown, buildHsIndex, matchHsForName } = await import("./duty.server");
-  const { data: allHs } = await admin
-    .from("hs_codes")
-    .select("hs_code, name_zh, name_en, aliases, mfn_rate, gst_rate, anti_dumping_rate");
+  const { computeWaybillDutyBreakdown, buildHsIndex, matchHsForName, loadAllHsCodes } = await import("./duty.server");
+  const allHs = await loadAllHsCodes(admin, "hs_code, name_zh, name_en, aliases, mfn_rate, gst_rate, anti_dumping_rate");
   const hsIndex = buildHsIndex((allHs ?? []) as any[]);
 
   const itemsByKey = new Map<string, Map<string, any>>(); // key → "name|hs" → merged row

@@ -43,24 +43,38 @@ async function recomputeForwardingsForHs(
   }
 }
 
+// ilike 通配符 (% _) 在搜索词里本来就有特殊含义——不转义的话，品名/编码里若恰好出现
+// 这两个字符，搜索会被当成通配符而不是字面量。用 \ 转义成字面量（Postgres ILIKE 默认转义符）。
+function escapeIlike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => "\\" + c);
+}
+
 export const listHsCodes = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { search?: string; chapter?: string; active?: boolean } = {}) => d)
+  .inputValidator(
+    (d: { search?: string; chapter?: string; active?: boolean; page?: number; pageSize?: number } = {}) => d,
+  )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    let q = supabaseAdmin.from("hs_codes").select("*").order("hs_code", { ascending: true }).limit(1000);
+    // 分页：不管有没有搜索词，都走 range 分页 + 精确总数，不再对全表套一刀切的 limit(1000)
+    // ——超过 1000 条的编码库，1000 条之后的记录之前完全无法被浏览/搜索到。
+    const pageSize = Math.min(200, Math.max(1, Math.floor(data.pageSize ?? 50)));
+    const page = Math.max(1, Math.floor(data.page ?? 1));
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    let q = supabaseAdmin.from("hs_codes").select("*", { count: "exact" }).order("hs_code", { ascending: true });
     if (data.search?.trim()) {
-      const s = data.search.trim();
-      // 支持 HS 编码 / 中英文品名 / 别名（aliases 数组）模糊匹配
+      const s = escapeIlike(data.search.trim());
+      // 支持 HS 编码 / 中英文品名 / 别名（aliases 数组）模糊匹配——针对全表搜索，不受分页影响
       q = q.or(`hs_code.ilike.%${s}%,name_zh.ilike.%${s}%,name_en.ilike.%${s}%,aliases.cs.{${s}}`);
     }
     if (data.chapter) q = q.eq("chapter", data.chapter);
     if (typeof data.active === "boolean") q = q.eq("is_active", data.active);
-    const { data: rows, error } = await q;
+    const { data: rows, error, count } = await q.range(from, to);
 
     if (error) throw new Error(error.message);
-    return { items: rows ?? [] };
+    return { items: rows ?? [], total: count ?? 0, page, pageSize };
   });
 
 export const upsertHsCode = createServerFn({ method: "POST" })

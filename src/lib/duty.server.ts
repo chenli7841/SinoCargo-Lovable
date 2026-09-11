@@ -78,6 +78,28 @@ type HsRow = {
   anti_dumping_rate: number | null;
 };
 
+// PostgREST 单次请求默认最多返回 max-rows 条（这个项目上是 1000）——裸 select 不分页的话，
+// hs_codes 一旦超过这个数，后面的编码在报关自动匹配里会被静默漏掉（不报错，只是那些品名
+// 匹配不上、少算/漏算关税）。全量匹配场景一律走这个分页拉全表，而不是不限量的裸 select。
+export async function loadAllHsCodes(admin: any, cols: string, opts?: { activeOnly?: boolean }): Promise<any[]> {
+  const pageSize = 1000;
+  const out: any[] = [];
+  for (let from = 0; ; from += pageSize) {
+    let q = admin
+      .from("hs_codes")
+      .select(cols)
+      .order("hs_code", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (opts?.activeOnly) q = q.eq("is_active", true);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+  return out;
+}
+
 export function buildHsIndex(rows: HsRow[]) {
   const byCode = new Map<string, HsRow>();
   const byExact = new Map<string, HsRow>(); // name_zh / name_en / alias 精确 (lower)
@@ -138,13 +160,13 @@ export async function computeWaybillDutyBreakdown(admin: any, wb: any): Promise<
   };
   if (!wb?.forwarding_id) return empty;
 
-  const [{ data: fo }, { data: fi }, { data: hs }] = await Promise.all([
+  const [{ data: fo }, { data: fi }, hs] = await Promise.all([
     admin.from("forwarding_orders").select("id, box_count, route_id").eq("id", wb.forwarding_id).maybeSingle(),
     admin
       .from("forwarding_items")
       .select("id, name, quantity, unit_price_cad, unit_price_cny, extras, hs_code")
       .eq("forwarding_id", wb.forwarding_id),
-    admin.from("hs_codes").select("hs_code, name_zh, name_en, aliases, mfn_rate, gst_rate, anti_dumping_rate"),
+    loadAllHsCodes(admin, "hs_code, name_zh, name_en, aliases, mfn_rate, gst_rate, anti_dumping_rate"),
   ]);
   const route_id = fo?.route_id ?? null;
   const boxCount = Math.max(Number(fo?.box_count ?? 1) || 1, 1);
