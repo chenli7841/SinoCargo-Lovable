@@ -14,6 +14,7 @@ import {
   deductWalletForBatchBulk,
   deductBatchOffline,
   confirmAllBatchPrices,
+  refreshBatchAllSnapshots,
   type BatchStatus,
   type WaybillStatus,
 } from "@/lib/orders.functions";
@@ -43,7 +44,7 @@ import { CustomerDrawer } from "@/components/admin/CustomerDrawer";
 import { WaybillCompactList, CartonCompactList, PalletCompactList } from "@/components/admin/ContainerChildList";
 import { renderLabel } from "@/lib/label-render";
 import { LabelSizeToggle } from "@/components/admin/LabelSizeToggle";
-import { Loader2, X, Wand2, Printer, ScanLine, ChevronRight, ChevronDown, AlertCircle, Wallet, Upload, Download, Sparkles, FileText, CheckCheck } from "lucide-react";
+import { Loader2, X, Wand2, Printer, ScanLine, ChevronRight, ChevronDown, AlertCircle, Wallet, Upload, Download, Sparkles, FileText, CheckCheck, RefreshCw } from "lucide-react";
 import { ScanAddDialog } from "@/components/admin/ScanAddDialog";
 import { DateInput } from "@/components/admin/DateInput";
 import { WorkflowStepper, BATCH_FLOW } from "@/components/admin/WorkflowStepper";
@@ -91,6 +92,8 @@ function BatchDetail() {
   const deductOffline = useServerFn(deductBatchOffline);
   const bulkDeduct = useServerFn(deductWalletForBatchBulk);
   const confirmAllPrices = useServerFn(confirmAllBatchPrices);
+  const refreshAllSnapshots = useServerFn(refreshBatchAllSnapshots);
+  const [refreshingAllSnap, setRefreshingAllSnap] = useState(false);
   const doSplitPallet = useServerFn(splitPallet);
   const fetchCustomsReadiness = useServerFn(getBatchCustomsReadiness);
   const matchHsCodes = useServerFn(autoMatchBatchHsCodes);
@@ -236,6 +239,11 @@ function BatchDetail() {
       } else {
         toast.success(`已批量确认 ${result.confirmed_count} 位客户并生成账单，未执行扣款`);
       }
+      if (result.snapshot_ok === false) {
+        toast.error(`客户端快照刷新失败：${result.snapshot_error ?? "未知错误"}，可点「刷新全部客户快照」重试`, {
+          duration: 10000,
+        });
+      }
       await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
       await qc.invalidateQueries({ queryKey: ["batch-invoices", batch.batch_no ?? ""] });
     } catch (e: any) {
@@ -277,6 +285,22 @@ function BatchDetail() {
       toast.error(e?.message ?? "批量扣款失败");
     } finally {
       setBulkDeductBusy(false);
+    }
+  };
+
+  // 客户端「我的批次」只读快照，不再现算。量尺/箱托盘进出批次等改动目前还没有全部接入自动
+  // 刷新——这个按钮是兜底：整批重算并回写每个客户的快照行。
+  const onRefreshAllSnapshots = async () => {
+    if (!window.confirm("重新计算并刷新本批次所有客户的快照？运单较多时可能需要几秒到十几秒。")) return;
+    setRefreshingAllSnap(true);
+    try {
+      const r: any = await refreshAllSnapshots({ data: { batchId } });
+      toast.success(`已刷新 ${r.customers} 位客户的快照`);
+      await qc.invalidateQueries({ queryKey: ["admin-batch", batchId] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "刷新失败");
+    } finally {
+      setRefreshingAllSnap(false);
     }
   };
 
@@ -756,6 +780,22 @@ function BatchDetail() {
                   >
                     {bulkDeductBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
                     批量扣款（钱包）
+                  </button>
+                )}
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={onRefreshAllSnapshots}
+                    disabled={refreshingAllSnap}
+                    title="客户端「我的批次」只读快照；量尺/箱托盘改动等还没接入自动刷新时用这个兜底"
+                    className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {refreshingAllSnap ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    )}
+                    刷新全部客户快照
                   </button>
                 )}
               </div>

@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getFxCadPerCny, computeBatchFeeSummary } from "@/lib/orders.functions";
+import { getFxCadPerCny, computeMyBatchesForUser } from "@/lib/orders.functions";
 
 // Backs the admin "客户视图" page: owner/warehouse/support/sales (see
 // NAV_GROUPS in admin/route.tsx, where this link overrides its group's
@@ -575,90 +575,15 @@ export const createCustomerForwarding = createServerFn({ method: "POST" })
 // ============ Batches (read-only list) — mirrors "我的批次". The pay action
 // itself already has an admin-safe equivalent (deductWalletForBatch, used
 // elsewhere in the batch admin screens) — this list just surfaces it here too. ============
+// 与客户自己在「我的批次」看到的完全同口径（同一份 computeMyBatchesForUser：直读
+// batch_settlements 快照，不在请求里现算整批）——这本来就是"客户视图"该有的语义：
+// 后台看到的应该等于客户自己看到的，而不是另算一套、还更贵（原先这里对每个批次都现调
+// computeBatchFeeSummary，一个客户点开几个批次就是几次整批重算）。
 export const getCustomerBatches = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string }) => d)
   .handler(async ({ data, context }) => {
     await assertCustomerViewAccess(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("customer_code")
-      .eq("id", data.userId)
-      .maybeSingle();
-    const customerCode = (profile as any)?.customer_code ?? null;
-
-    const { data: myWbs } = await supabaseAdmin
-      .from("waybills")
-      .select("id, assigned_batch_id, order_id, forwarding_id, waybill_no, status, payment_status, intl_tracking_no")
-      .eq("user_id", data.userId)
-      .not("assigned_batch_id", "is", null);
-    const wbRows = (myWbs ?? []) as any[];
-    const batchIds = Array.from(new Set(wbRows.map((w) => w.assigned_batch_id).filter(Boolean)));
-    if (!batchIds.length) return { batches: [] };
-
-    const { data: batchRows } = await supabaseAdmin
-      .from("batches")
-      .select("id, batch_no, status, shipping_method, eta_date")
-      .in("id", batchIds)
-      .in("status", ["shipped", "arrived", "closed"]);
-    const visibleBatches = (batchRows ?? []) as any[];
-    if (!visibleBatches.length) return { batches: [] };
-
-    const FX = await getFxCadPerCny(supabaseAdmin);
-
-    const wbByBatch = new Map<string, any[]>();
-    for (const w of wbRows) {
-      if (!w.assigned_batch_id) continue;
-      const arr = wbByBatch.get(w.assigned_batch_id) ?? [];
-      arr.push(w);
-      wbByBatch.set(w.assigned_batch_id, arr);
-    }
-    const orderIds = Array.from(new Set(wbRows.map((w) => w.order_id).filter(Boolean)));
-    const fwdIds = Array.from(new Set(wbRows.map((w) => w.forwarding_id).filter(Boolean)));
-    const [oR, fR] = await Promise.all([
-      orderIds.length
-        ? supabaseAdmin.from("orders").select("id, order_no, status, tracking_no").in("id", orderIds)
-        : Promise.resolve({ data: [] as any[] }),
-      fwdIds.length
-        ? supabaseAdmin.from("forwarding_orders").select("id, request_no, status, tracking_no").in("id", fwdIds)
-        : Promise.resolve({ data: [] as any[] }),
-    ]);
-    const oMap = new Map<string, any>(((oR as any).data ?? []).map((o: any) => [o.id, o]));
-    const fMap = new Map<string, any>(((fR as any).data ?? []).map((f: any) => [f.id, f]));
-
-    const batches = [];
-    for (const b of visibleBatches) {
-      const summary = await computeBatchFeeSummary(supabaseAdmin, b.id);
-      const mine = customerCode ? summary.per_customer.filter((p: any) => p.customer_code === customerCode) : [];
-      const subtotalCny = +mine.reduce((s: number, p: any) => s + p.subtotal_cny, 0).toFixed(2);
-
-      const wbs = wbByBatch.get(b.id) ?? [];
-      const items = wbs.map((w: any) => {
-        const o = w.order_id ? oMap.get(w.order_id) : null;
-        const fo = w.forwarding_id ? fMap.get(w.forwarding_id) : null;
-        return {
-          kind: w.order_id ? ("order" as const) : ("forwarding" as const),
-          id: w.order_id ?? w.forwarding_id ?? w.id,
-          no: o?.order_no ?? fo?.request_no ?? w.waybill_no,
-          status: o?.status ?? fo?.status ?? w.status,
-          tracking_no: w.intl_tracking_no ?? o?.tracking_no ?? fo?.tracking_no ?? null,
-          payment_status: w.payment_status,
-        };
-      });
-      const allPaid = wbs.length > 0 && wbs.every((w: any) => w.payment_status === "paid");
-      batches.push({
-        batch_id: b.id,
-        batch_no: b.batch_no,
-        status: b.status as "shipped" | "arrived" | "closed",
-        shipping_method: b.shipping_method,
-        eta: b.eta_date,
-        // per_customer.subtotal_cny is already CAD — no FX conversion
-        subtotal_cad: subtotalCny,
-        is_paid: allPaid,
-        items,
-        intl_tracking_nos: Array.from(new Set(wbs.map((w: any) => w.intl_tracking_no).filter(Boolean))) as string[],
-      });
-    }
-    return { batches };
+    return computeMyBatchesForUser(supabaseAdmin, data.userId);
   });

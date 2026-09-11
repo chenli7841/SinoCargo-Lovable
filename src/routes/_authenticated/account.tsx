@@ -3,6 +3,7 @@ import React from "react";
 const WECHAT_BIND_ENABLED = false;
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useApp } from "@/lib/i18n";
@@ -49,6 +50,10 @@ import {
   ChevronDown,
   Copy,
 } from "lucide-react";
+
+// 总览页和"我的批次"页都要读 listMyBatches——共用同一个 query key，切 tab 不用重新拉一遍，
+// 付款成功后 invalidate 一次两边都会刷新。
+const MY_BATCHES_QK = ["my-batches"] as const;
 
 export const Route = createFileRoute("/_authenticated/account")({
   head: () => ({ meta: [{ title: "我的账户 / My Account — SinoCargo" }] }),
@@ -314,8 +319,20 @@ function OverviewTab({
   const [totalOrders, setTotalOrders] = useState<number | null>(null);
   const [inTransit, setInTransit] = useState<number>(0);
   const [unwarehoused, setUnwarehoused] = useState<number>(0);
-  const [batchCount, setBatchCount] = useState<number>(0);
-  const [unpaidBatches, setUnpaidBatches] = useState<UnpaidBatch[]>([]);
+
+  const { data: batchesData } = useQuery({
+    queryKey: MY_BATCHES_QK,
+    queryFn: () => fetchMyBatches(),
+  });
+  const allBatches = ((batchesData as any)?.batches ?? []) as any[];
+  const batchCount = allBatches.length;
+  const unpaidBatches: UnpaidBatch[] = allBatches
+    .filter((b) => !b.is_paid)
+    .map((b) => ({
+      batch_no: b.batch_no,
+      total_cad: b.subtotal_cad,
+      shipping_method: b.shipping_method,
+    }));
 
   useEffect(() => {
     sb.from("wallets")
@@ -326,19 +343,6 @@ function OverviewTab({
       .select("customer_code")
       .maybeSingle()
       .then(({ data }: any) => setCustomerCode(data?.customer_code ?? null));
-    fetchMyBatches().then((r: any) => {
-      const all = (r?.batches ?? []) as any[];
-      setBatchCount(all.length);
-      setUnpaidBatches(
-        all
-          .filter((b) => !b.is_paid)
-          .map((b) => ({
-            batch_no: b.batch_no,
-            total_cad: b.subtotal_cad,
-            shipping_method: b.shipping_method,
-          })),
-      );
-    });
     Promise.all([
       sb.from("orders").select("id,status,batch_no"),
       sb.from("forwarding_orders").select("id,status,batch_no"),
@@ -354,6 +358,7 @@ function OverviewTab({
     });
   }, []);
 
+  // total_cad 为 null 表示未确认/快照还没就绪——不计入"待付合计"，避免把 null 当 0 误导
   const unpaidTotalCad = unpaidBatches.reduce((s, b) => s + (b.total_cad ?? 0), 0);
 
   return (
@@ -1432,6 +1437,8 @@ interface Batch {
   duty_items?: BatchDutyItem[] | null;
   duty_unmatched_hs?: string[] | null;
   price_confirmed?: boolean;
+  // 已确认但快照还没就绪（异常情况，比如后台改动没来得及回写）——不是"未确认"也不是"算好了"
+  snapshot_pending?: boolean;
   is_paid: boolean;
   intl_tracking_nos: string[];
 }
@@ -1448,16 +1455,15 @@ function BatchesTab({ onJump }: { onJump: (t: Tab) => void }) {
   const navigate = useNavigate();
   const fetchMyBatches = useServerFn(listMyBatches);
   const doPay = useServerFn(payMyBatch);
-  const [batches, setBatches] = useState<Batch[] | null>(null);
+  const qc = useQueryClient();
   const [paying, setPaying] = useState<string | null>(null);
 
-  const load = async () => {
-    const r: any = await fetchMyBatches();
-    setBatches((r?.batches ?? []) as Batch[]);
-  };
-  useEffect(() => {
-    load();
-  }, []);
+  const { data: batchesData } = useQuery({
+    queryKey: MY_BATCHES_QK,
+    queryFn: () => fetchMyBatches(),
+  });
+  const batches = batchesData ? ((batchesData as any).batches as Batch[]) : null;
+  const load = () => qc.invalidateQueries({ queryKey: MY_BATCHES_QK });
 
   const pay = async (batchId: string, batchNo: string, amountCad: number) => {
     if (
@@ -1636,7 +1642,11 @@ function BatchCard({
             {b.is_paid ? tr("批次合计", "Batch total") : tr("批次待付", "Batch unpaid")}
           </div>
           {b.subtotal_cad === null ? (
-            <div className="text-xs font-medium text-amber-600">{tr("等待客服确认费用", "Awaiting fee confirmation")}</div>
+            <div className="text-xs font-medium text-amber-600">
+              {b.snapshot_pending
+                ? tr("数据准备中，请稍后刷新", "Preparing data — please refresh shortly")
+                : tr("等待客服确认费用", "Awaiting fee confirmation")}
+            </div>
           ) : (
             <>
               <div className="font-display text-lg font-bold text-brand-gradient">CA${b.subtotal_cad.toFixed(2)}</div>
@@ -1830,7 +1840,12 @@ function BatchCard({
 
       {!b.is_paid && b.subtotal_cad === null && (
         <div className="border-t border-border bg-background px-5 py-3 text-xs text-amber-600">
-          {tr("等待客服确认费用，确认后即可查看金额并付款", "Awaiting fee confirmation — amount and payment unlock once confirmed")}
+          {b.snapshot_pending
+            ? tr("数据准备中，请稍后刷新页面重试", "Preparing data — please refresh the page shortly")
+            : tr(
+                "等待客服确认费用，确认后即可查看金额并付款",
+                "Awaiting fee confirmation — amount and payment unlock once confirmed",
+              )}
         </div>
       )}
       {!b.is_paid && (b.subtotal_cad ?? 0) > 0 && (

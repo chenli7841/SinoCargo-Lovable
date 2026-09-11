@@ -855,7 +855,13 @@ function BatchesTab({ userId }: { userId: string }) {
                   <div className="text-[10px] uppercase tracking-wider text-slate-500">
                     {b.is_paid ? "批次合计" : "批次待付"}
                   </div>
-                  <div className="font-display text-lg font-bold text-brand">CA${b.subtotal_cad.toFixed(2)}</div>
+                  {b.subtotal_cad === null ? (
+                    <div className="text-xs font-medium text-amber-400">
+                      {b.snapshot_pending ? "数据准备中，请稍后刷新" : "等待客服确认费用"}
+                    </div>
+                  ) : (
+                    <div className="font-display text-lg font-bold text-brand">CA${b.subtotal_cad.toFixed(2)}</div>
+                  )}
                 </div>
               </header>
               <ul className="divide-y divide-white/5">
@@ -883,7 +889,7 @@ function BatchesTab({ userId }: { userId: string }) {
                   </li>
                 ))}
               </ul>
-              {!b.is_paid && b.subtotal_cad > 0 && (
+              {!b.is_paid && b.subtotal_cad !== null && b.subtotal_cad > 0 && (
                 <div className="flex items-center gap-3 border-t border-white/5 px-5 py-3">
                   <div className="text-xs text-slate-400">
                     待付{" "}

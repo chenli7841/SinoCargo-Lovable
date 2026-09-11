@@ -2541,13 +2541,48 @@ export async function markBatchFeesDirtyMany(admin: any, batchIds: (string | nul
   await admin.from("batches").update({ fees_dirty_at: new Date().toISOString() }).in("id", ids);
 }
 
+// 一批运单当前各自所属的批次：在箱里跟箱走，在托盘里跟托盘走，否则用运单自己的
+// assigned_batch_id —— 与 computeBatchFeeSummary 的分组口径一致（cartonsR/palletCartons/
+// directWbs 三路取批次的规则）。供 cartons.functions.ts / scan.functions.ts 里改动运单
+// 重量尺寸、或让运单进出箱/托盘的写路径调用，在改动前后把涉及的批次都标记为脏。
+export async function resolveWaybillBatchIds(admin: any, waybillIds: string[]): Promise<string[]> {
+  if (!waybillIds.length) return [];
+  const { data: wbs } = await admin
+    .from("waybills")
+    .select("id, carton_id, pallet_id, assigned_batch_id")
+    .in("id", waybillIds);
+  const rows = (wbs ?? []) as any[];
+  const cartonIds = Array.from(new Set(rows.map((w) => w.carton_id).filter(Boolean)));
+  const palletIds = Array.from(new Set(rows.map((w) => w.pallet_id).filter(Boolean)));
+  const cartonBatch = new Map<string, string | null>();
+  const palletBatch = new Map<string, string | null>();
+  if (cartonIds.length) {
+    const { data: cs } = await admin.from("cartons").select("id, batch_id").in("id", cartonIds);
+    for (const c of (cs ?? []) as any[]) cartonBatch.set(c.id, c.batch_id ?? null);
+  }
+  if (palletIds.length) {
+    const { data: ps } = await admin.from("pallets").select("id, batch_id").in("id", palletIds);
+    for (const p of (ps ?? []) as any[]) palletBatch.set(p.id, p.batch_id ?? null);
+  }
+  const out = new Set<string>();
+  for (const w of rows) {
+    const b: string | null = w.carton_id
+      ? (cartonBatch.get(w.carton_id) ?? null)
+      : w.pallet_id
+        ? (palletBatch.get(w.pallet_id) ?? null)
+        : (w.assigned_batch_id ?? null);
+    if (b) out.add(b);
+  }
+  return Array.from(out);
+}
+
 // 把一个批次每位客户的费用小计写入 batch_settlements 快照（按客户号跨线路合计，
 // 与 listMyBatches 的客户端口径一致）。只写快照相关列，不动 confirmed / confirmed_at。
 // summary 可传入已算好的结果以避免重复计算。
-export async function refreshBatchSettlements(admin: any, batchId: string, summary?: any) {
-  const s = summary ?? (await computeBatchFeeSummary(admin, batchId));
-  const perCustomer = (s?.per_customer ?? []) as any[];
-  // 同一客户可能被拆到多个 (客户号 × 线路) 桶，合并成一行
+// 把 computeBatchFeeSummary 的 per_customer（可能一个客户拆多个"客户号×线路"桶）
+// 按客户号合并成一行。供 refreshBatchSettlements（整批写全部客户）和
+// refreshBatchSettlementsForCustomer（只写一个客户）共用，避免两处口径分叉。
+function aggregateSettlementBuckets(perCustomer: any[]): Map<string, any> {
   const byCustomer = new Map<string, any>();
   for (const p of perCustomer) {
     const code: string | null = p.customer_code ?? null;
@@ -2614,20 +2649,33 @@ export async function refreshBatchSettlements(admin: any, batchId: string, summa
     });
     byCustomer.set(code, agg);
   }
-  const nowIso = new Date().toISOString();
-  const rows = [...byCustomer.entries()].map(([customer_code, agg]) => ({
+  return byCustomer;
+}
+
+function settlementRowFor(batchId: string, customerCode: string, agg: any, nowIso: string) {
+  return {
     batch_id: batchId,
-    customer_code,
+    customer_code: customerCode,
     subtotal_cad: +Number(agg.subtotal_cad).toFixed(2),
     waybill_count: agg.waybill_count,
     carton_count: agg.carton_count,
     pallet_count: agg.pallet_count,
-    route_codes: Array.from(agg.routes).sort().join(",") || null,
+    route_codes: Array.from(agg.routes as Set<string>).sort().join(",") || null,
     is_paid: agg.wb_total > 0 && agg.wb_paid === agg.wb_total,
     fee_breakdown: { per_route: agg.buckets, snapshot_at: nowIso },
     snapshot_at: nowIso,
     calc_version: 1,
-  }));
+  };
+}
+
+// 整批刷新：写批次内每一位客户的快照行，并清掉 fees_dirty_at。开销随批次运单数增长，
+// 只应由"影响全批"的动作触发（批次解锁重锁、批量确认价格）——单个客户的改动请用
+// refreshBatchSettlementsForCustomer，不要为了一个客户把所有人都重写一遍。
+export async function refreshBatchSettlements(admin: any, batchId: string, summary?: any) {
+  const s = summary ?? (await computeBatchFeeSummary(admin, batchId));
+  const byCustomer = aggregateSettlementBuckets((s?.per_customer ?? []) as any[]);
+  const nowIso = new Date().toISOString();
+  const rows = [...byCustomer.entries()].map(([customer_code, agg]) => settlementRowFor(batchId, customer_code, agg, nowIso));
   if (!rows.length) {
     // 批次内没有可归集的客户账单：清掉已过期标记即可
     await admin.from("batches").update({ fees_dirty_at: null }).eq("id", batchId);
@@ -2640,6 +2688,46 @@ export async function refreshBatchSettlements(admin: any, batchId: string, summa
   // 快照已是最新，清掉"费用已变动"标记
   await admin.from("batches").update({ fees_dirty_at: null }).eq("id", batchId);
   return { ok: true, customers: rows.length };
+}
+
+// 单客户刷新：只算/只写这一位客户的快照行，不碰批次内其他客户，也不清 fees_dirty_at
+// （其他客户可能仍是脏的）。改一个客户的费用（派送费/检查费/折扣/确认价格）时用这个，
+// 避免像整批刷新那样在 64 个客户的批次里无谓重写 63 行不相关数据。
+// 返回 {ok:false, error} 而不是抛错/吞错——调用方决定是硬失败还是仅提示。
+export async function refreshBatchSettlementsForCustomer(
+  admin: any,
+  batchId: string,
+  customerCode: string,
+  summary?: any,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!customerCode) return { ok: false, error: "missing customer_code" };
+  try {
+    const s = summary ?? (await computeBatchFeeSummary(admin, batchId));
+    const byCustomer = aggregateSettlementBuckets((s?.per_customer ?? []) as any[]);
+    const agg = byCustomer.get(customerCode);
+    const nowIso = new Date().toISOString();
+    const row = agg
+      ? settlementRowFor(batchId, customerCode, agg, nowIso)
+      : {
+          // 该客户在本批已没有费用行了（运单全部移出等）——仍要写一条，避免客户端继续看到旧金额
+          batch_id: batchId,
+          customer_code: customerCode,
+          subtotal_cad: 0,
+          waybill_count: 0,
+          carton_count: 0,
+          pallet_count: 0,
+          route_codes: null,
+          is_paid: false,
+          fee_breakdown: { per_route: [], snapshot_at: nowIso },
+          snapshot_at: nowIso,
+          calc_version: 1,
+        };
+    const { error } = await admin.from("batch_settlements").upsert([row], { onConflict: "batch_id,customer_code" });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? String(e) };
+  }
 }
 
 // ---- Shared batch settlement (wallet or offline) ----
@@ -3412,22 +3500,23 @@ export const payMyBatch = createServerFn({ method: "POST" })
 // gate used by payMyBatch. Amounts come from computeBatchFeeSummary (the same
 // function the staff "扣款" screens use), filtered down to this customer's own
 // bucket only — never exposes other customers' figures.
-export const listMyBatches = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("customer_code")
-      .eq("id", context.userId)
-      .maybeSingle();
-    const customerCode = (profile as any)?.customer_code ?? null;
+// "我的批次"的完整计算逻辑，按 userId 参数化——客户自己的 listMyBatches（用 context.userId）
+// 和后台"客户视图"的 getCustomerBatches（admin-customer-view.functions.ts，用指定 userId）共用，
+// 避免两处口径分叉（后台看到的必须和客户自己看到的一致，这本来就是"客户视图"存在的意义）。
+export async function computeMyBatchesForUser(admin: any, userId: string) {
+  const supabaseAdmin = admin;
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("customer_code")
+    .eq("id", userId)
+    .maybeSingle();
+  const customerCode = (profile as any)?.customer_code ?? null;
 
-    const { data: myWbs } = await supabaseAdmin
-      .from("waybills")
-      .select("id, assigned_batch_id, order_id, forwarding_id, waybill_no, status, payment_status, intl_tracking_no")
-      .eq("user_id", context.userId)
-      .not("assigned_batch_id", "is", null);
+  const { data: myWbs } = await supabaseAdmin
+    .from("waybills")
+    .select("id, assigned_batch_id, order_id, forwarding_id, waybill_no, status, payment_status, intl_tracking_no")
+    .eq("user_id", userId)
+    .not("assigned_batch_id", "is", null);
     const wbRows = (myWbs ?? []) as any[];
     const batchIds = Array.from(new Set(wbRows.map((w) => w.assigned_batch_id).filter(Boolean)));
     if (!batchIds.length) return { batches: [] };
@@ -3525,38 +3614,32 @@ export const listMyBatches = createServerFn({ method: "GET" })
       return { items, unmatched: [...unmatched] };
     };
 
+    // 只读快照，绝不在客户请求里现算整批（computeBatchFeeSummary 对大批次要 5-7 秒起）。
+    // 是否已确认直接读 snap.confirmed（不需要算钱才能知道）；未确认的批次本来就不对客户
+    // 显示金额，跳过全部费用计算。已确认但快照缺失/过期属于异常情况（正常情况下
+    // setBatchPriceConfirmed / confirmAllBatchPrices 确认的同时已经把这一客户的快照写好了）——
+    // 这种情况下返回 snapshot_pending，让前端提示"数据准备中"，后台可以手动刷新，
+    // 不把整批重算的成本转嫁给第一个点开页面的客户。
     const batches = [];
     for (const b of visibleBatches) {
       const snap = snapByBatch.get(b.id);
-      const dirtyAt = b.fees_dirty_at ? +new Date(b.fees_dirty_at) : 0;
-      const snapAt = snap?.snapshot_at ? +new Date(snap.snapshot_at) : 0;
-      const snapFresh = !!snap && snap.subtotal_cad != null && snapAt >= dirtyAt;
+      const priceConfirmed = !!snap?.confirmed;
 
-      let subtotalCny: number;
-      let priceConfirmed: boolean;
-      let feeLines: ReturnType<typeof sumFeeLines>;
-      let dutyDetail: ReturnType<typeof collectDuty>;
-      if (snapFresh) {
-        // 直读快照（费用明细在 fee_breakdown.per_route，确认价格/锁定时已写入）
-        subtotalCny = +Number(snap.subtotal_cad).toFixed(2);
-        priceConfirmed = !!snap.confirmed;
-        const perRoute = Array.isArray(snap.fee_breakdown?.per_route) ? snap.fee_breakdown.per_route : [];
-        feeLines = sumFeeLines(perRoute);
-        dutyDetail = collectDuty(perRoute);
-      } else {
-        // 无快照 / 已过期：现算一次并回写，后续访问即走快照
-        const summary = await computeBatchFeeSummary(supabaseAdmin, b.id);
-        const mine = customerCode
-          ? summary.per_customer.filter((p: any) => p.customer_code === customerCode)
-          : [];
-        subtotalCny = +mine.reduce((s: number, p: any) => s + p.subtotal_cny, 0).toFixed(2);
-        priceConfirmed = mine.length > 0 && mine.every((p: any) => p.price_confirmed);
-        feeLines = sumFeeLines(mine);
-        dutyDetail = collectDuty(mine);
-        try {
-          await refreshBatchSettlements(supabaseAdmin, b.id, summary);
-        } catch (e) {
-          console.error("refreshBatchSettlements (lazy from listMyBatches) failed:", e);
+      let subtotalCny: number | null = null;
+      let feeLines: ReturnType<typeof sumFeeLines> | null = null;
+      let dutyDetail: ReturnType<typeof collectDuty> = { items: [], unmatched: [] };
+      let snapshotPending = false;
+      if (priceConfirmed) {
+        const dirtyAt = b.fees_dirty_at ? +new Date(b.fees_dirty_at) : 0;
+        const snapAt = snap?.snapshot_at ? +new Date(snap.snapshot_at) : 0;
+        const snapFresh = !!snap && snap.subtotal_cad != null && snapAt >= dirtyAt;
+        if (snapFresh) {
+          subtotalCny = +Number(snap.subtotal_cad).toFixed(2);
+          const perRoute = Array.isArray(snap.fee_breakdown?.per_route) ? snap.fee_breakdown.per_route : [];
+          feeLines = sumFeeLines(perRoute);
+          dutyDetail = collectDuty(perRoute);
+        } else {
+          snapshotPending = true;
         }
       }
 
@@ -3582,20 +3665,29 @@ export const listMyBatches = createServerFn({ method: "GET" })
         status: b.status as "shipped" | "arrived" | "closed",
         shipping_method: b.shipping_method,
         eta: b.eta_date,
-        // subtotalCny 已是 CAD（fee_*_cad === fee_*_cny），不再换算；只有确认价格后才对客户显示
-        subtotal_cad: priceConfirmed ? subtotalCny : null,
-        // 费用明细（运费/保险/关税/清关/附加费/派送费/检查费/折扣）——确认价格后才给客户
-        fee_lines: priceConfirmed ? feeLines : null,
+        // subtotalCny 已是 CAD（fee_*_cad === fee_*_cny），不再换算；未确认 / 快照未就绪时为 null
+        subtotal_cad: subtotalCny,
+        // 费用明细（运费/保险/关税/清关/附加费/派送费/检查费/折扣）
+        fee_lines: feeLines,
         // 关税逐品名明细 + 未匹配 HS 品名（「关税」行下的次级展开用）
-        duty_items: priceConfirmed ? dutyDetail.items : null,
-        duty_unmatched_hs: priceConfirmed ? dutyDetail.unmatched : null,
+        duty_items: dutyDetail.items,
+        duty_unmatched_hs: dutyDetail.unmatched,
         price_confirmed: priceConfirmed,
+        // 已确认但快照还没就绪（异常情况）——前端显示"数据准备中"而不是 0 或旧值
+        snapshot_pending: snapshotPending,
         is_paid: allPaid,
         items,
         intl_tracking_nos: Array.from(new Set(wbs.map((w: any) => w.intl_tracking_no).filter(Boolean))) as string[],
       });
     }
     return { batches };
+}
+
+export const listMyBatches = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    return computeMyBatchesForUser(supabaseAdmin, context.userId);
   });
 
 // Save/replace the 检查费 line for a customer within a batch (kept as a surcharge row with a marker note).
@@ -3707,7 +3799,10 @@ export const saveBatchCustomerFeeDraft = createServerFn({ method: "POST" })
       .update({ grand_total_cny: summary.grand_total_cny, fee_breakdown: { ...summary, computed_at: new Date().toISOString() } })
       .eq("id", data.batchId);
     if (batchUpdateError) throw new Error(batchUpdateError.message);
-    // 账单只在【确认 / 批量确认】时重生成；这里已断言未确认，不动账单。
+    // 该客户此刻未确认（上面已断言），客户端本来就不读这一行快照——改派送费/检查费/折扣
+    // 走的是「先取消确认→改草稿→再确认」的流程，快照只应在【确认价格】那一刻重新生成，
+    // 这里不必也不应该动 batch_settlements，避免草稿态的中间值被误当成"已确认"金额落库。
+    // 账单同理，只在【确认 / 批量确认】时重生成；这里已断言未确认，不动账单。
     return { ok: true, customer, totals: summary.totals, grand_total_cny: summary.grand_total_cny };
   });
 
@@ -3906,12 +4001,16 @@ export const setBatchPriceConfirmed = createServerFn({ method: "POST" })
     );
     if (error) throw new Error(error.message);
 
-    // 确认价格 → 冻结/刷新客户端「我的批次」费用快照（此刻的运费即客户看到的金额）
+    // 确认价格 → 冻结/刷新客户端「我的批次」费用快照（此刻的运费即客户看到的金额）。
+    // 只写这一个客户——确认一个人不该把批次里另外 63 个客户的快照也重写一遍。
+    let snapshot_ok = true;
+    let snapshot_error: string | null = null;
     if (data.confirmed) {
-      try {
-        await refreshBatchSettlements(supabaseAdmin, data.batchId);
-      } catch (e) {
-        console.error("refreshBatchSettlements failed on setBatchPriceConfirmed:", e);
+      const r = await refreshBatchSettlementsForCustomer(supabaseAdmin, data.batchId, data.customerCode);
+      if (!r.ok) {
+        snapshot_ok = false;
+        snapshot_error = r.error ?? "snapshot_refresh_failed";
+        console.error("refreshBatchSettlementsForCustomer failed on setBatchPriceConfirmed:", r.error);
       }
     }
 
@@ -3966,7 +4065,7 @@ export const setBatchPriceConfirmed = createServerFn({ method: "POST" })
         }
       }
     }
-    return { ok: true, confirmed: data.confirmed, invoice_no, invoice_ok, invoice_error };
+    return { ok: true, confirmed: data.confirmed, invoice_no, invoice_ok, invoice_error, snapshot_ok, snapshot_error };
   });
 
 // Confirm every customer price in one batch. This does not collect payment.
@@ -3994,9 +4093,13 @@ export const confirmAllBatchPrices = createServerFn({ method: "POST" })
     );
     if (error) throw new Error(error.message);
     // 批量确认价格 → 冻结/刷新客户端「我的批次」费用快照（复用上面已算的 summary）
+    let snapshot_ok = true;
+    let snapshot_error: string | null = null;
     try {
       await refreshBatchSettlements(supabaseAdmin, data.batchId, summary);
-    } catch (e) {
+    } catch (e: any) {
+      snapshot_ok = false;
+      snapshot_error = e?.message ?? "snapshot_refresh_failed";
       console.error("refreshBatchSettlements failed on confirmAllBatchPrices:", e);
     }
     const invoices: any[] = [];
@@ -4024,7 +4127,33 @@ export const confirmAllBatchPrices = createServerFn({ method: "POST" })
       invoice_ok_count: customerCodes.length - invoice_failed.length,
       invoice_failed,
       invoices,
+      snapshot_ok,
+      snapshot_error,
     };
+  });
+
+// 后台手动刷新：客户端「我的批次」现在只读快照、不再现算，遇到写路径没覆盖到的改动
+// （量尺、箱托盘进出批次等，本轮暂未逐一接入 markBatchFeesDirty）就需要这两个按钮兜底。
+// 失败直接抛错，不吞——UI 应该原样显示报错，而不是"看起来成功了"。
+export const refreshBatchCustomerSnapshot = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { batchId: string; customerCode: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const r = await refreshBatchSettlementsForCustomer(supabaseAdmin, data.batchId, data.customerCode);
+    if (!r.ok) throw new Error(r.error ?? "刷新快照失败");
+    return { ok: true };
+  });
+
+export const refreshBatchAllSnapshots = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { batchId: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const r = await refreshBatchSettlements(supabaseAdmin, data.batchId);
+    return { ok: true, customers: r.customers };
   });
 
 // 计费重量 = max(实重, 体积重)，体积重按 ÷6000 估算（与 ContainerChildList 客户端展示口径一致）。
@@ -4221,12 +4350,15 @@ export const assignWaybillsToBatch = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertManager(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // 运单进出批次会改变各自计入哪个批次的费用汇总——先记下改动前所属批次，成功后统一打脏。
+    const oldBatchIds = await resolveWaybillBatchIds(supabaseAdmin, data.waybillIds);
     if (data.remove) {
       const { error } = await supabaseAdmin
         .from("waybills")
         .update({ assigned_batch_id: null, batch_no: null })
         .in("id", data.waybillIds);
       if (error) throw new Error(error.message);
+      await markBatchFeesDirtyMany(supabaseAdmin, oldBatchIds);
     } else {
       const { data: b } = await supabaseAdmin.from("batches").select("batch_no").eq("id", data.batchId).single();
       const { error } = await supabaseAdmin
@@ -4234,6 +4366,7 @@ export const assignWaybillsToBatch = createServerFn({ method: "POST" })
         .update({ assigned_batch_id: data.batchId, batch_no: b?.batch_no ?? null })
         .in("id", data.waybillIds);
       if (error) throw new Error(error.message);
+      await markBatchFeesDirtyMany(supabaseAdmin, [...oldBatchIds, data.batchId]);
     }
     return { ok: true };
   });
