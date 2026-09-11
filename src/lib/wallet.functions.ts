@@ -79,14 +79,18 @@ export const submitEmtTopup = createServerFn({ method: "POST" })
       note: `Email Transfer 充值 CA$${amountCad}${data.proofPath ? ` · 凭证=${data.proofPath}` : ""}${data.note ? ` · ${data.note}` : ""}`,
     } as any);
     if (error) {
-      // 幂等键并发撞车 → 取回已存在的那条
+      // 幂等键撞车：仍在 pending 就复用原单；已 completed/failed 说明这个 key 已用过一次，
+      // 让前端换 key 重新发起，而不是把旧记录当新提交。
       if (idem && String((error as any).code) === "23505") {
         const { data: won } = await supabaseAdmin
           .from("wallet_transactions")
-          .select("ref_no")
+          .select("ref_no, status")
           .eq("idempotency_key", idem)
           .maybeSingle();
-        if ((won as any)?.ref_no) return { ok: true, reference: (won as any).ref_no as string, deduped: true };
+        if ((won as any)?.status === "pending" && (won as any)?.ref_no) {
+          return { ok: true, reference: (won as any).ref_no as string, deduped: true };
+        }
+        throw new Error("该充值请求已处理，请刷新页面后重新发起");
       }
       throw new Error(error.message);
     }

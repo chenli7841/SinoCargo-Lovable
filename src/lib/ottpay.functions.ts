@@ -210,9 +210,12 @@ export const startOttTopup = createServerFn({ method: "POST" })
       if (idem && String((error as any).code) === "23505") {
         const { data: won } = await supabaseAdmin
           .from("wallet_transactions")
-          .select("ref_no, provider_payment_id, pay_session")
+          .select("ref_no, status, provider_payment_id, pay_session")
           .eq("idempotency_key", idem)
           .maybeSingle();
+        if ((won as any) && (won as any).status !== "pending") {
+          throw new Error("该充值请求已处理，请刷新页面后重新发起");
+        }
         const pr = (won as any)?.pay_session;
         if (pr?.pay_info) {
           if (pr.mode === "qr") {
@@ -316,9 +319,12 @@ export const startOttHostedCardTopup = createServerFn({ method: "POST" })
       if (idem && String((error as any).code) === "23505") {
         const { data: won } = await supabaseAdmin
           .from("wallet_transactions")
-          .select("ref_no, pay_session")
+          .select("ref_no, status, pay_session")
           .eq("idempotency_key", idem)
           .maybeSingle();
+        if ((won as any) && (won as any).status !== "pending") {
+          throw new Error("该充值请求已处理，请刷新页面后重新发起");
+        }
         const u = (won as any)?.pay_session?.pay_info;
         if (u) return { url: u, reference: (won as any).ref_no };
       }

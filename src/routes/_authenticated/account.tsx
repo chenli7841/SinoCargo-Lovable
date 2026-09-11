@@ -3092,13 +3092,15 @@ function WalletTab() {
 
   const [busy, setBusy] = useState(false);
   const submittingRef = useRef(false); // 硬锁：覆盖 setBusy 生效前的极短窗口
-  // 同一「金额 × 渠道」的重复点击 / 重试 → 同一 idempotency_key → 服务端复用原充值单
+  // 同一「金额 × 渠道」的重复点击 / 失败重试 → 同一 idempotency_key → 服务端复用原充值单。
+  // 一次充值成功发起后 topupNonce+1，让「再充一笔相同金额」拿到全新 key，不撞已用过的键。
+  const [topupNonce, setTopupNonce] = useState(0);
   const topupKey = useMemo(
     () =>
       typeof crypto !== "undefined" && "randomUUID" in crypto
         ? crypto.randomUUID()
         : `k_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-    [amount, channel],
+    [amount, channel, topupNonce],
   );
   const [qr, setQr] = useState<{ src: string; reference: string; notice?: string; openUrl?: string } | null>(null);
   const QR_TTL_SEC = 20;
@@ -3153,6 +3155,7 @@ function WalletTab() {
           `Submitted (${r.reference}). Support will credit your balance within 24 hours.`,
         ),
       );
+      setTopupNonce((n) => n + 1); // 本次已发起 → 下一笔用新 key
       setEmtFile(null);
       setEmtNote("");
       await load();
@@ -3175,10 +3178,10 @@ function WalletTab() {
       const device = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? "mobile" : "desktop";
       const r = await startOtt({ data: { amountCad: amount, channel, device, idempotencyKey: topupKey } });
 
+      setTopupNonce((n) => n + 1); // 本次已发起 → 下一笔用新 key（QR 场景尤其需要）
       if (r.mode === "qr") {
         localStorage.setItem("ott_pending_ref", r.reference);
         setQr({ src: r.qrDataUrl, reference: r.reference, notice: r.notice, openUrl: r.openUrl });
-
       } else {
         localStorage.setItem("ott_pending_ref", r.reference);
         window.location.href = r.url;
@@ -3252,6 +3255,7 @@ function WalletTab() {
     setBusy(true);
     try {
       const r = await startHosted({ data: { amountCad: amount, idempotencyKey: topupKey } });
+      setTopupNonce((n) => n + 1);
       localStorage.setItem("ott_pending_ref", r.reference);
       window.location.href = r.url;
     } catch (e: any) {
