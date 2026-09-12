@@ -108,6 +108,7 @@ import { Route as ApiPublicWechatCallbackRouteImport } from './routes/api/public
 import { Route as ApiPublicWechatLoginRouteImport } from './routes/api/public/wechat.login'
 import { Route as IntlChannelCallbackSplatRouteImport } from './routes/intl/channel/callback/$'
 import { Route as IntlChannelCallbackWxkfGptRouteImport } from './routes/intl/channel/callback/wxkf-gpt'
+import { Route as ApiPartnersV1OrdersByDomesticNumberDomesticNumberRouteImport } from './routes/api/partners/v1/orders.by-domestic-number.$domesticNumber'
 import { Route as ApiPartnersV1RoutesRouteCodeOrderSchemaRouteImport } from './routes/api/partners/v1/routes.$routeCode.order-schema'
 
 const IndexRoute = IndexRouteImport.update({
@@ -624,6 +625,12 @@ const IntlChannelCallbackWxkfGptRoute =
     path: '/intl/channel/callback/wxkf-gpt',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPartnersV1OrdersByDomesticNumberDomesticNumberRoute =
+  ApiPartnersV1OrdersByDomesticNumberDomesticNumberRouteImport.update({
+    id: '/by-domestic-number/$domesticNumber',
+    path: '/by-domestic-number/$domesticNumber',
+    getParentRoute: () => ApiPartnersV1OrdersRoute,
+  } as any)
 const ApiPartnersV1RoutesRouteCodeOrderSchemaRoute =
   ApiPartnersV1RoutesRouteCodeOrderSchemaRouteImport.update({
     id: '/$routeCode/order-schema',
@@ -717,7 +724,7 @@ export interface FileRoutesByFullPath {
   '/admin/shop/orders/$orderId': typeof AdminShopOrdersOrderIdRoute
   '/admin/shop/orders/procurement': typeof AdminShopOrdersProcurementRoute
   '/admin/shop/products/$productId': typeof AdminShopProductsProductIdRoute
-  '/api/partners/v1/orders': typeof ApiPartnersV1OrdersRoute
+  '/api/partners/v1/orders': typeof ApiPartnersV1OrdersRouteWithChildren
   '/api/partners/v1/routes': typeof ApiPartnersV1RoutesRouteWithChildren
   '/api/public/hooks/mark-overdue': typeof ApiPublicHooksMarkOverdueRoute
   '/api/public/hooks/ottpay': typeof ApiPublicHooksOttpayRoute
@@ -730,6 +737,7 @@ export interface FileRoutesByFullPath {
   '/admin/shop/carts/': typeof AdminShopCartsIndexRoute
   '/admin/shop/orders/': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products/': typeof AdminShopProductsIndexRoute
+  '/api/partners/v1/orders/by-domestic-number/$domesticNumber': typeof ApiPartnersV1OrdersByDomesticNumberDomesticNumberRoute
   '/api/partners/v1/routes/$routeCode/order-schema': typeof ApiPartnersV1RoutesRouteCodeOrderSchemaRoute
 }
 export interface FileRoutesByTo {
@@ -816,7 +824,7 @@ export interface FileRoutesByTo {
   '/admin/shop/orders/$orderId': typeof AdminShopOrdersOrderIdRoute
   '/admin/shop/orders/procurement': typeof AdminShopOrdersProcurementRoute
   '/admin/shop/products/$productId': typeof AdminShopProductsProductIdRoute
-  '/api/partners/v1/orders': typeof ApiPartnersV1OrdersRoute
+  '/api/partners/v1/orders': typeof ApiPartnersV1OrdersRouteWithChildren
   '/api/partners/v1/routes': typeof ApiPartnersV1RoutesRouteWithChildren
   '/api/public/hooks/mark-overdue': typeof ApiPublicHooksMarkOverdueRoute
   '/api/public/hooks/ottpay': typeof ApiPublicHooksOttpayRoute
@@ -829,6 +837,7 @@ export interface FileRoutesByTo {
   '/admin/shop/carts': typeof AdminShopCartsIndexRoute
   '/admin/shop/orders': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products': typeof AdminShopProductsIndexRoute
+  '/api/partners/v1/orders/by-domestic-number/$domesticNumber': typeof ApiPartnersV1OrdersByDomesticNumberDomesticNumberRoute
   '/api/partners/v1/routes/$routeCode/order-schema': typeof ApiPartnersV1RoutesRouteCodeOrderSchemaRoute
 }
 export interface FileRoutesById {
@@ -919,7 +928,7 @@ export interface FileRoutesById {
   '/admin/shop/orders/$orderId': typeof AdminShopOrdersOrderIdRoute
   '/admin/shop/orders/procurement': typeof AdminShopOrdersProcurementRoute
   '/admin/shop/products/$productId': typeof AdminShopProductsProductIdRoute
-  '/api/partners/v1/orders': typeof ApiPartnersV1OrdersRoute
+  '/api/partners/v1/orders': typeof ApiPartnersV1OrdersRouteWithChildren
   '/api/partners/v1/routes': typeof ApiPartnersV1RoutesRouteWithChildren
   '/api/public/hooks/mark-overdue': typeof ApiPublicHooksMarkOverdueRoute
   '/api/public/hooks/ottpay': typeof ApiPublicHooksOttpayRoute
@@ -932,6 +941,7 @@ export interface FileRoutesById {
   '/admin/shop/carts/': typeof AdminShopCartsIndexRoute
   '/admin/shop/orders/': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products/': typeof AdminShopProductsIndexRoute
+  '/api/partners/v1/orders/by-domestic-number/$domesticNumber': typeof ApiPartnersV1OrdersByDomesticNumberDomesticNumberRoute
   '/api/partners/v1/routes/$routeCode/order-schema': typeof ApiPartnersV1RoutesRouteCodeOrderSchemaRoute
 }
 export interface FileRouteTypes {
@@ -1035,6 +1045,7 @@ export interface FileRouteTypes {
     | '/admin/shop/carts/'
     | '/admin/shop/orders/'
     | '/admin/shop/products/'
+    | '/api/partners/v1/orders/by-domestic-number/$domesticNumber'
     | '/api/partners/v1/routes/$routeCode/order-schema'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -1134,6 +1145,7 @@ export interface FileRouteTypes {
     | '/admin/shop/carts'
     | '/admin/shop/orders'
     | '/admin/shop/products'
+    | '/api/partners/v1/orders/by-domestic-number/$domesticNumber'
     | '/api/partners/v1/routes/$routeCode/order-schema'
   id:
     | '__root__'
@@ -1236,6 +1248,7 @@ export interface FileRouteTypes {
     | '/admin/shop/carts/'
     | '/admin/shop/orders/'
     | '/admin/shop/products/'
+    | '/api/partners/v1/orders/by-domestic-number/$domesticNumber'
     | '/api/partners/v1/routes/$routeCode/order-schema'
   fileRoutesById: FileRoutesById
 }
@@ -1266,7 +1279,7 @@ export interface RootRouteChildren {
   ApiPublicAiResolveWechatCustomerRoute: typeof ApiPublicAiResolveWechatCustomerRoute
   ApiPublicAiTrackRoute: typeof ApiPublicAiTrackRoute
   ApiPublicAiWarehouseScanRoute: typeof ApiPublicAiWarehouseScanRoute
-  ApiPartnersV1OrdersRoute: typeof ApiPartnersV1OrdersRoute
+  ApiPartnersV1OrdersRoute: typeof ApiPartnersV1OrdersRouteWithChildren
   ApiPartnersV1RoutesRoute: typeof ApiPartnersV1RoutesRouteWithChildren
   ApiPublicHooksMarkOverdueRoute: typeof ApiPublicHooksMarkOverdueRoute
   ApiPublicHooksOttpayRoute: typeof ApiPublicHooksOttpayRoute
@@ -1973,6 +1986,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IntlChannelCallbackWxkfGptRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/partners/v1/orders/by-domestic-number/$domesticNumber': {
+      id: '/api/partners/v1/orders/by-domestic-number/$domesticNumber'
+      path: '/by-domestic-number/$domesticNumber'
+      fullPath: '/api/partners/v1/orders/by-domestic-number/$domesticNumber'
+      preLoaderRoute: typeof ApiPartnersV1OrdersByDomesticNumberDomesticNumberRouteImport
+      parentRoute: typeof ApiPartnersV1OrdersRoute
+    }
     '/api/partners/v1/routes/$routeCode/order-schema': {
       id: '/api/partners/v1/routes/$routeCode/order-schema'
       path: '/$routeCode/order-schema'
@@ -2139,6 +2159,18 @@ const ProductsRouteWithChildren = ProductsRoute._addFileChildren(
   ProductsRouteChildren,
 )
 
+interface ApiPartnersV1OrdersRouteChildren {
+  ApiPartnersV1OrdersByDomesticNumberDomesticNumberRoute: typeof ApiPartnersV1OrdersByDomesticNumberDomesticNumberRoute
+}
+
+const ApiPartnersV1OrdersRouteChildren: ApiPartnersV1OrdersRouteChildren = {
+  ApiPartnersV1OrdersByDomesticNumberDomesticNumberRoute:
+    ApiPartnersV1OrdersByDomesticNumberDomesticNumberRoute,
+}
+
+const ApiPartnersV1OrdersRouteWithChildren =
+  ApiPartnersV1OrdersRoute._addFileChildren(ApiPartnersV1OrdersRouteChildren)
+
 interface ApiPartnersV1RoutesRouteChildren {
   ApiPartnersV1RoutesRouteCodeOrderSchemaRoute: typeof ApiPartnersV1RoutesRouteCodeOrderSchemaRoute
 }
@@ -2179,7 +2211,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicAiResolveWechatCustomerRoute: ApiPublicAiResolveWechatCustomerRoute,
   ApiPublicAiTrackRoute: ApiPublicAiTrackRoute,
   ApiPublicAiWarehouseScanRoute: ApiPublicAiWarehouseScanRoute,
-  ApiPartnersV1OrdersRoute: ApiPartnersV1OrdersRoute,
+  ApiPartnersV1OrdersRoute: ApiPartnersV1OrdersRouteWithChildren,
   ApiPartnersV1RoutesRoute: ApiPartnersV1RoutesRouteWithChildren,
   ApiPublicHooksMarkOverdueRoute: ApiPublicHooksMarkOverdueRoute,
   ApiPublicHooksOttpayRoute: ApiPublicHooksOttpayRoute,

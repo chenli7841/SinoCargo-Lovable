@@ -275,7 +275,7 @@ export async function createShipOrder(admin: any, partnerKey: string, body: any)
 
   const { data: waybills, error: wbErr } = await admin
     .from("waybills")
-    .select("id, waybill_no, mark_no, box_no, items_summary, updated_at")
+    .select("id, waybill_no, mark_no, box_no, items_summary, client_package_id, updated_at")
     .eq("forwarding_id", forwardingId)
     .order("box_no", { ascending: true });
   if (wbErr) throw wbErr;
@@ -301,7 +301,7 @@ export async function createShipOrder(admin: any, partnerKey: string, body: any)
     // box_no 按 001/002/... 顺序生成，跟 packages[] 提交顺序一一对应（同一 SQL 循环
     // 按数组顺序建的）。
     packagesOut = wbRows.map((w, i) => ({
-      clientPackageId: normalizedPackages[i]?.clientPackageId ?? null,
+      clientPackageId: w.client_package_id ?? null,
       waybillNumber: w.waybill_no,
       sequence: i + 1,
     }));
