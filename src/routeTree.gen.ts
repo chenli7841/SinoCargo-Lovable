@@ -108,6 +108,7 @@ import { Route as ApiPublicWechatCallbackRouteImport } from './routes/api/public
 import { Route as ApiPublicWechatLoginRouteImport } from './routes/api/public/wechat.login'
 import { Route as IntlChannelCallbackSplatRouteImport } from './routes/intl/channel/callback/$'
 import { Route as IntlChannelCallbackWxkfGptRouteImport } from './routes/intl/channel/callback/wxkf-gpt'
+import { Route as ApiPartnersV1CustomersExternalCustomerIdProfileRouteImport } from './routes/api/partners/v1/customers.$externalCustomerId.profile'
 import { Route as ApiPartnersV1OrdersByDomesticNumberDomesticNumberRouteImport } from './routes/api/partners/v1/orders.by-domestic-number.$domesticNumber'
 import { Route as ApiPartnersV1RoutesRouteCodeOrderSchemaRouteImport } from './routes/api/partners/v1/routes.$routeCode.order-schema'
 
@@ -625,6 +626,12 @@ const IntlChannelCallbackWxkfGptRoute =
     path: '/intl/channel/callback/wxkf-gpt',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPartnersV1CustomersExternalCustomerIdProfileRoute =
+  ApiPartnersV1CustomersExternalCustomerIdProfileRouteImport.update({
+    id: '/api/partners/v1/customers/$externalCustomerId/profile',
+    path: '/api/partners/v1/customers/$externalCustomerId/profile',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPartnersV1OrdersByDomesticNumberDomesticNumberRoute =
   ApiPartnersV1OrdersByDomesticNumberDomesticNumberRouteImport.update({
     id: '/by-domestic-number/$domesticNumber',
@@ -737,6 +744,7 @@ export interface FileRoutesByFullPath {
   '/admin/shop/carts/': typeof AdminShopCartsIndexRoute
   '/admin/shop/orders/': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products/': typeof AdminShopProductsIndexRoute
+  '/api/partners/v1/customers/$externalCustomerId/profile': typeof ApiPartnersV1CustomersExternalCustomerIdProfileRoute
   '/api/partners/v1/orders/by-domestic-number/$domesticNumber': typeof ApiPartnersV1OrdersByDomesticNumberDomesticNumberRoute
   '/api/partners/v1/routes/$routeCode/order-schema': typeof ApiPartnersV1RoutesRouteCodeOrderSchemaRoute
 }
@@ -837,6 +845,7 @@ export interface FileRoutesByTo {
   '/admin/shop/carts': typeof AdminShopCartsIndexRoute
   '/admin/shop/orders': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products': typeof AdminShopProductsIndexRoute
+  '/api/partners/v1/customers/$externalCustomerId/profile': typeof ApiPartnersV1CustomersExternalCustomerIdProfileRoute
   '/api/partners/v1/orders/by-domestic-number/$domesticNumber': typeof ApiPartnersV1OrdersByDomesticNumberDomesticNumberRoute
   '/api/partners/v1/routes/$routeCode/order-schema': typeof ApiPartnersV1RoutesRouteCodeOrderSchemaRoute
 }
@@ -941,6 +950,7 @@ export interface FileRoutesById {
   '/admin/shop/carts/': typeof AdminShopCartsIndexRoute
   '/admin/shop/orders/': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products/': typeof AdminShopProductsIndexRoute
+  '/api/partners/v1/customers/$externalCustomerId/profile': typeof ApiPartnersV1CustomersExternalCustomerIdProfileRoute
   '/api/partners/v1/orders/by-domestic-number/$domesticNumber': typeof ApiPartnersV1OrdersByDomesticNumberDomesticNumberRoute
   '/api/partners/v1/routes/$routeCode/order-schema': typeof ApiPartnersV1RoutesRouteCodeOrderSchemaRoute
 }
@@ -1045,6 +1055,7 @@ export interface FileRouteTypes {
     | '/admin/shop/carts/'
     | '/admin/shop/orders/'
     | '/admin/shop/products/'
+    | '/api/partners/v1/customers/$externalCustomerId/profile'
     | '/api/partners/v1/orders/by-domestic-number/$domesticNumber'
     | '/api/partners/v1/routes/$routeCode/order-schema'
   fileRoutesByTo: FileRoutesByTo
@@ -1145,6 +1156,7 @@ export interface FileRouteTypes {
     | '/admin/shop/carts'
     | '/admin/shop/orders'
     | '/admin/shop/products'
+    | '/api/partners/v1/customers/$externalCustomerId/profile'
     | '/api/partners/v1/orders/by-domestic-number/$domesticNumber'
     | '/api/partners/v1/routes/$routeCode/order-schema'
   id:
@@ -1248,6 +1260,7 @@ export interface FileRouteTypes {
     | '/admin/shop/carts/'
     | '/admin/shop/orders/'
     | '/admin/shop/products/'
+    | '/api/partners/v1/customers/$externalCustomerId/profile'
     | '/api/partners/v1/orders/by-domestic-number/$domesticNumber'
     | '/api/partners/v1/routes/$routeCode/order-schema'
   fileRoutesById: FileRoutesById
@@ -1289,6 +1302,7 @@ export interface RootRouteChildren {
   ApiPublicWechatLoginRoute: typeof ApiPublicWechatLoginRoute
   IntlChannelCallbackSplatRoute: typeof IntlChannelCallbackSplatRoute
   IntlChannelCallbackWxkfGptRoute: typeof IntlChannelCallbackWxkfGptRoute
+  ApiPartnersV1CustomersExternalCustomerIdProfileRoute: typeof ApiPartnersV1CustomersExternalCustomerIdProfileRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1986,6 +2000,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IntlChannelCallbackWxkfGptRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/partners/v1/customers/$externalCustomerId/profile': {
+      id: '/api/partners/v1/customers/$externalCustomerId/profile'
+      path: '/api/partners/v1/customers/$externalCustomerId/profile'
+      fullPath: '/api/partners/v1/customers/$externalCustomerId/profile'
+      preLoaderRoute: typeof ApiPartnersV1CustomersExternalCustomerIdProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/partners/v1/orders/by-domestic-number/$domesticNumber': {
       id: '/api/partners/v1/orders/by-domestic-number/$domesticNumber'
       path: '/by-domestic-number/$domesticNumber'
@@ -2221,6 +2242,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicWechatLoginRoute: ApiPublicWechatLoginRoute,
   IntlChannelCallbackSplatRoute: IntlChannelCallbackSplatRoute,
   IntlChannelCallbackWxkfGptRoute: IntlChannelCallbackWxkfGptRoute,
+  ApiPartnersV1CustomersExternalCustomerIdProfileRoute:
+    ApiPartnersV1CustomersExternalCustomerIdProfileRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -73,11 +73,20 @@ export class ShipApiError extends Error {
   code: ShipApiErrorCode;
   fields?: { path: string; message: string }[];
   retryable: boolean;
-  constructor(code: ShipApiErrorCode, message: string, fields?: { path: string; message: string }[]) {
+  // 额外的错误上下文，合并进 error 对象——目前只用于客户资料 412 冲突时按契约要求
+  // 附带 currentEditToken，让 Shipper 能先核对最新资料再决定要不要重新提交。
+  meta?: Record<string, unknown>;
+  constructor(
+    code: ShipApiErrorCode,
+    message: string,
+    fields?: { path: string; message: string }[],
+    meta?: Record<string, unknown>,
+  ) {
     super(message);
     this.code = code;
     this.fields = fields;
     this.retryable = RETRYABLE_CODES.has(code);
+    this.meta = meta;
   }
 }
 
@@ -104,7 +113,7 @@ export function shipApiError(err: ShipApiError, requestId?: string): Response {
     JSON.stringify({
       requestId: requestId ?? newRequestId(),
       data: null,
-      error: { code: err.code, message: err.message, fields: err.fields ?? [], retryable: err.retryable },
+      error: { code: err.code, message: err.message, fields: err.fields ?? [], retryable: err.retryable, ...(err.meta ?? {}) },
     }),
     {
       status: CODE_HTTP_STATUS[err.code],
