@@ -797,7 +797,15 @@ export const intakeScanReceiveWaybill = createServerFn({ method: "POST" })
 export const intakeScanCommit = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (d: { parentKind: "order" | "forwarding"; parentId: string; boxCount: number; weightPerBox?: number }) => d,
+    (d: {
+      parentKind: "order" | "forwarding";
+      parentId: string;
+      boxCount: number;
+      weightPerBox?: number;
+      // true = 已入库过一次（运单已推进到 pending 之后的状态）的二次触碰场景：
+      // 删掉现有运单，按新填的箱数重新生成，而不是直接复用现有的。
+      overwrite?: boolean;
+    }) => d,
   )
   .handler(async ({ data, context }) => {
     await assertStaff(context.supabase, context.userId);
@@ -811,11 +819,43 @@ export const intakeScanCommit = createServerFn({ method: "POST" })
     const isStorage = parent.shipping_method === "storage";
 
     // If parent already has waybills → receive existing ones instead of creating duplicates
+    // (除非调用方明确要求 overwrite 覆盖重建)
     const { data: existing } = await supabaseAdmin
       .from("waybills")
-      .select("id, waybill_no, status, order_id, forwarding_id, shipping_method")
+      .select("id, waybill_no, status, order_id, forwarding_id, shipping_method, weight_kg, pallet_id, carton_id, assigned_batch_id")
       .eq(fk, data.parentId);
-    if (existing && existing.length > 0) {
+
+    if (data.overwrite && existing && existing.length > 0) {
+      // 覆盖重建有真实丢数据的风险：任何一张运单只要已经称重/装箱/装托/入批次，
+      // 说明它已经被后续流程实际使用过，拒绝删除，让操作员改用其它方式处理。
+      const blockers = (existing as any[]).filter(
+        (w) => w.weight_kg != null || w.pallet_id != null || w.carton_id != null || w.assigned_batch_id != null,
+      );
+      if (blockers.length) {
+        throw new Error(
+          `无法覆盖重建：运单 ${blockers.map((w) => w.waybill_no).join("、")} 已称重/装箱/装托/入批次，请改用其它方式处理`,
+        );
+      }
+      const { error: delErr } = await supabaseAdmin
+        .from("waybills")
+        .delete()
+        .in(
+          "id",
+          (existing as any[]).map((w) => w.id),
+        );
+      if (delErr) throw new Error(`覆盖重建失败: ${delErr.message}`);
+      const operatorName = await getOperatorName(supabaseAdmin, context.userId);
+      await supabaseAdmin.from("admin_action_logs").insert({
+        entity_type: data.parentKind,
+        entity_id: data.parentId,
+        action: "intake_overwrite_rebuild",
+        after: { removed_waybill_numbers: (existing as any[]).map((w) => w.waybill_no), new_box_count: n },
+        operator_id: context.userId,
+        operator_name: operatorName,
+        note: `入库扫描: 覆盖重建，删除旧运单 ${(existing as any[]).map((w) => w.waybill_no).join("、")}，按 ${n} 箱重新生成`,
+      });
+      // 落到下方"没有已有运单"的生成分支，重新按 n 箱生成。
+    } else if (existing && existing.length > 0) {
       const warehouseName: string | null = (parent as any).warehouse ?? (parent as any).pickup_warehouse ?? null;
       const operatorName = await getOperatorName(supabaseAdmin, context.userId);
       const newStatus = isStorage ? "storage" : "received";
