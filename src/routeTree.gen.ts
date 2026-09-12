@@ -98,6 +98,7 @@ import { Route as AdminShopOrdersOrderIdRouteImport } from './routes/admin/shop.
 import { Route as AdminShopOrdersProcurementRouteImport } from './routes/admin/shop.orders.procurement'
 import { Route as AdminShopProductsIndexRouteImport } from './routes/admin/shop.products.index'
 import { Route as AdminShopProductsProductIdRouteImport } from './routes/admin/shop.products.$productId'
+import { Route as ApiPartnersV1RoutesRouteImport } from './routes/api/partners/v1/routes'
 import { Route as ApiPublicHooksMarkOverdueRouteImport } from './routes/api/public/hooks/mark-overdue'
 import { Route as ApiPublicHooksOttpayRouteImport } from './routes/api/public/hooks/ottpay'
 import { Route as ApiPublicHooksOttpayCardRouteImport } from './routes/api/public/hooks/ottpay-card'
@@ -106,6 +107,7 @@ import { Route as ApiPublicWechatCallbackRouteImport } from './routes/api/public
 import { Route as ApiPublicWechatLoginRouteImport } from './routes/api/public/wechat.login'
 import { Route as IntlChannelCallbackSplatRouteImport } from './routes/intl/channel/callback/$'
 import { Route as IntlChannelCallbackWxkfGptRouteImport } from './routes/intl/channel/callback/wxkf-gpt'
+import { Route as ApiPartnersV1RoutesRouteCodeOrderSchemaRouteImport } from './routes/api/partners/v1/routes.$routeCode.order-schema'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -566,6 +568,11 @@ const AdminShopProductsProductIdRoute =
     path: '/shop/products/$productId',
     getParentRoute: () => AdminRouteRoute,
   } as any)
+const ApiPartnersV1RoutesRoute = ApiPartnersV1RoutesRouteImport.update({
+  id: '/api/partners/v1/routes',
+  path: '/api/partners/v1/routes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicHooksMarkOverdueRoute =
   ApiPublicHooksMarkOverdueRouteImport.update({
     id: '/api/public/hooks/mark-overdue',
@@ -610,6 +617,12 @@ const IntlChannelCallbackWxkfGptRoute =
     id: '/intl/channel/callback/wxkf-gpt',
     path: '/intl/channel/callback/wxkf-gpt',
     getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPartnersV1RoutesRouteCodeOrderSchemaRoute =
+  ApiPartnersV1RoutesRouteCodeOrderSchemaRouteImport.update({
+    id: '/$routeCode/order-schema',
+    path: '/$routeCode/order-schema',
+    getParentRoute: () => ApiPartnersV1RoutesRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -698,6 +711,7 @@ export interface FileRoutesByFullPath {
   '/admin/shop/orders/$orderId': typeof AdminShopOrdersOrderIdRoute
   '/admin/shop/orders/procurement': typeof AdminShopOrdersProcurementRoute
   '/admin/shop/products/$productId': typeof AdminShopProductsProductIdRoute
+  '/api/partners/v1/routes': typeof ApiPartnersV1RoutesRouteWithChildren
   '/api/public/hooks/mark-overdue': typeof ApiPublicHooksMarkOverdueRoute
   '/api/public/hooks/ottpay': typeof ApiPublicHooksOttpayRoute
   '/api/public/hooks/ottpay-card': typeof ApiPublicHooksOttpayCardRoute
@@ -709,6 +723,7 @@ export interface FileRoutesByFullPath {
   '/admin/shop/carts/': typeof AdminShopCartsIndexRoute
   '/admin/shop/orders/': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products/': typeof AdminShopProductsIndexRoute
+  '/api/partners/v1/routes/$routeCode/order-schema': typeof ApiPartnersV1RoutesRouteCodeOrderSchemaRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -794,6 +809,7 @@ export interface FileRoutesByTo {
   '/admin/shop/orders/$orderId': typeof AdminShopOrdersOrderIdRoute
   '/admin/shop/orders/procurement': typeof AdminShopOrdersProcurementRoute
   '/admin/shop/products/$productId': typeof AdminShopProductsProductIdRoute
+  '/api/partners/v1/routes': typeof ApiPartnersV1RoutesRouteWithChildren
   '/api/public/hooks/mark-overdue': typeof ApiPublicHooksMarkOverdueRoute
   '/api/public/hooks/ottpay': typeof ApiPublicHooksOttpayRoute
   '/api/public/hooks/ottpay-card': typeof ApiPublicHooksOttpayCardRoute
@@ -805,6 +821,7 @@ export interface FileRoutesByTo {
   '/admin/shop/carts': typeof AdminShopCartsIndexRoute
   '/admin/shop/orders': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products': typeof AdminShopProductsIndexRoute
+  '/api/partners/v1/routes/$routeCode/order-schema': typeof ApiPartnersV1RoutesRouteCodeOrderSchemaRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -894,6 +911,7 @@ export interface FileRoutesById {
   '/admin/shop/orders/$orderId': typeof AdminShopOrdersOrderIdRoute
   '/admin/shop/orders/procurement': typeof AdminShopOrdersProcurementRoute
   '/admin/shop/products/$productId': typeof AdminShopProductsProductIdRoute
+  '/api/partners/v1/routes': typeof ApiPartnersV1RoutesRouteWithChildren
   '/api/public/hooks/mark-overdue': typeof ApiPublicHooksMarkOverdueRoute
   '/api/public/hooks/ottpay': typeof ApiPublicHooksOttpayRoute
   '/api/public/hooks/ottpay-card': typeof ApiPublicHooksOttpayCardRoute
@@ -905,6 +923,7 @@ export interface FileRoutesById {
   '/admin/shop/carts/': typeof AdminShopCartsIndexRoute
   '/admin/shop/orders/': typeof AdminShopOrdersIndexRoute
   '/admin/shop/products/': typeof AdminShopProductsIndexRoute
+  '/api/partners/v1/routes/$routeCode/order-schema': typeof ApiPartnersV1RoutesRouteCodeOrderSchemaRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -994,6 +1013,7 @@ export interface FileRouteTypes {
     | '/admin/shop/orders/$orderId'
     | '/admin/shop/orders/procurement'
     | '/admin/shop/products/$productId'
+    | '/api/partners/v1/routes'
     | '/api/public/hooks/mark-overdue'
     | '/api/public/hooks/ottpay'
     | '/api/public/hooks/ottpay-card'
@@ -1005,6 +1025,7 @@ export interface FileRouteTypes {
     | '/admin/shop/carts/'
     | '/admin/shop/orders/'
     | '/admin/shop/products/'
+    | '/api/partners/v1/routes/$routeCode/order-schema'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -1090,6 +1111,7 @@ export interface FileRouteTypes {
     | '/admin/shop/orders/$orderId'
     | '/admin/shop/orders/procurement'
     | '/admin/shop/products/$productId'
+    | '/api/partners/v1/routes'
     | '/api/public/hooks/mark-overdue'
     | '/api/public/hooks/ottpay'
     | '/api/public/hooks/ottpay-card'
@@ -1101,6 +1123,7 @@ export interface FileRouteTypes {
     | '/admin/shop/carts'
     | '/admin/shop/orders'
     | '/admin/shop/products'
+    | '/api/partners/v1/routes/$routeCode/order-schema'
   id:
     | '__root__'
     | '/'
@@ -1189,6 +1212,7 @@ export interface FileRouteTypes {
     | '/admin/shop/orders/$orderId'
     | '/admin/shop/orders/procurement'
     | '/admin/shop/products/$productId'
+    | '/api/partners/v1/routes'
     | '/api/public/hooks/mark-overdue'
     | '/api/public/hooks/ottpay'
     | '/api/public/hooks/ottpay-card'
@@ -1200,6 +1224,7 @@ export interface FileRouteTypes {
     | '/admin/shop/carts/'
     | '/admin/shop/orders/'
     | '/admin/shop/products/'
+    | '/api/partners/v1/routes/$routeCode/order-schema'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1229,6 +1254,7 @@ export interface RootRouteChildren {
   ApiPublicAiResolveWechatCustomerRoute: typeof ApiPublicAiResolveWechatCustomerRoute
   ApiPublicAiTrackRoute: typeof ApiPublicAiTrackRoute
   ApiPublicAiWarehouseScanRoute: typeof ApiPublicAiWarehouseScanRoute
+  ApiPartnersV1RoutesRoute: typeof ApiPartnersV1RoutesRouteWithChildren
   ApiPublicHooksMarkOverdueRoute: typeof ApiPublicHooksMarkOverdueRoute
   ApiPublicHooksOttpayRoute: typeof ApiPublicHooksOttpayRoute
   ApiPublicHooksOttpayCardRoute: typeof ApiPublicHooksOttpayCardRoute
@@ -1864,6 +1890,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminShopProductsProductIdRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/api/partners/v1/routes': {
+      id: '/api/partners/v1/routes'
+      path: '/api/partners/v1/routes'
+      fullPath: '/api/partners/v1/routes'
+      preLoaderRoute: typeof ApiPartnersV1RoutesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/mark-overdue': {
       id: '/api/public/hooks/mark-overdue'
       path: '/api/public/hooks/mark-overdue'
@@ -1919,6 +1952,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/intl/channel/callback/wxkf-gpt'
       preLoaderRoute: typeof IntlChannelCallbackWxkfGptRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/partners/v1/routes/$routeCode/order-schema': {
+      id: '/api/partners/v1/routes/$routeCode/order-schema'
+      path: '/$routeCode/order-schema'
+      fullPath: '/api/partners/v1/routes/$routeCode/order-schema'
+      preLoaderRoute: typeof ApiPartnersV1RoutesRouteCodeOrderSchemaRouteImport
+      parentRoute: typeof ApiPartnersV1RoutesRoute
     }
   }
 }
@@ -2079,6 +2119,18 @@ const ProductsRouteWithChildren = ProductsRoute._addFileChildren(
   ProductsRouteChildren,
 )
 
+interface ApiPartnersV1RoutesRouteChildren {
+  ApiPartnersV1RoutesRouteCodeOrderSchemaRoute: typeof ApiPartnersV1RoutesRouteCodeOrderSchemaRoute
+}
+
+const ApiPartnersV1RoutesRouteChildren: ApiPartnersV1RoutesRouteChildren = {
+  ApiPartnersV1RoutesRouteCodeOrderSchemaRoute:
+    ApiPartnersV1RoutesRouteCodeOrderSchemaRoute,
+}
+
+const ApiPartnersV1RoutesRouteWithChildren =
+  ApiPartnersV1RoutesRoute._addFileChildren(ApiPartnersV1RoutesRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
@@ -2107,6 +2159,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicAiResolveWechatCustomerRoute: ApiPublicAiResolveWechatCustomerRoute,
   ApiPublicAiTrackRoute: ApiPublicAiTrackRoute,
   ApiPublicAiWarehouseScanRoute: ApiPublicAiWarehouseScanRoute,
+  ApiPartnersV1RoutesRoute: ApiPartnersV1RoutesRouteWithChildren,
   ApiPublicHooksMarkOverdueRoute: ApiPublicHooksMarkOverdueRoute,
   ApiPublicHooksOttpayRoute: ApiPublicHooksOttpayRoute,
   ApiPublicHooksOttpayCardRoute: ApiPublicHooksOttpayCardRoute,
