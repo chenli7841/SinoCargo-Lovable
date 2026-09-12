@@ -382,6 +382,10 @@ export function renderLabel(d: LabelData | LabelData[], opts?: { size?: LabelSiz
     } catch (e) { /* storage blocked */ }
   };
   window.__applyLabelSize(current);
+  // 面单内容（含条码 SVG）在写入这个窗口前已经在父页面同步生成好了，不需要等图片/字体，
+  // 打开就直接弹打印对话框，不用操作员再点一次"打印全部"；按钮留着，供打印对话框被浏览器
+  // 拦截、或需要重打时手动触发。
+  setTimeout(function(){ window.print(); }, 60);
 })();
 </script>
 </body></html>`;
