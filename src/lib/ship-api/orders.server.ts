@@ -96,23 +96,22 @@ function normalizeItem(
 
 export type CreateOrderResult = { status: number; data: any };
 
-export async function createShipOrder(admin: any, partnerKey: string, body: any): Promise<CreateOrderResult> {
-  if (!body || typeof body !== "object") fail("INVALID_REQUEST", "请求体不是合法 JSON 对象");
+export type ResolvedShipRoute = {
+  route: any;
+  boxKnown: boolean;
+  fields: ReturnType<typeof buildItemFields>;
+  warehouseCode: string;
+};
 
-  const errors: FieldError[] = [];
-  const domesticNumber = requireStr(body, "domesticNumber", errors);
-  const externalCustomerId = requireStr(body, "externalCustomerId", errors);
-  const routeCode = requireStr(body, "routeCode", errors);
-  const schemaVersion = requireStr(body, "schemaVersion", errors);
-  const destination = requireStr(body, "destination", errors);
-  const remark = str(body.remark) || null;
-  const warehouseCodeIn = str(body.warehouseCode) || null;
-  if (errors.length) fail("VALIDATION_FAILED", "请求缺少必填字段", errors);
-
-  const recipient = normalizeAddress(body.recipient, "recipient", errors);
-  if (errors.length) fail("VALIDATION_FAILED", "收件地址不完整", errors);
-
-  // ---------- 线路校验 ----------
+// 线路解析 + schemaVersion 校验 + 唯一起点仓推导——create 和 update 共用，保证两个
+// 接口对"这条线路现在是什么规则"的判断完全一致。
+export async function resolveShipRoute(
+  admin: any,
+  routeCode: string,
+  schemaVersion: string,
+  destination: string,
+  warehouseCodeIn: string | null,
+): Promise<ResolvedShipRoute> {
   const { data: route, error: routeErr } = await admin
     .from("shipping_routes")
     .select(
@@ -137,10 +136,17 @@ export async function createShipOrder(admin: any, partnerKey: string, body: any)
   }
   if (!warehouseCode) fail("VALIDATION_FAILED", "该线路需要 warehouseCode", [{ path: "warehouseCode", message: "必填" }]);
 
-  const boxKnown = isBoxCountKnownRoute(route);
-  const fields = buildItemFields(route);
+  return { route, boxKnown: isBoxCountKnownRoute(route), fields: buildItemFields(route), warehouseCode };
+}
 
-  // ---------- 箱数已知 / 未知两种请求形状分别校验 ----------
+export type ValidatedItemsPayload = {
+  normalizedPackages: { clientPackageId: string; items: NormalizedItem[] }[];
+  normalizedItems: NormalizedItem[];
+};
+
+// 箱数已知 / 未知两种请求形状分别校验——create 和 update 共用。
+export function validateItemsPayload(body: any, boxKnown: boolean, fields: ReturnType<typeof buildItemFields>): ValidatedItemsPayload {
+  const errors: FieldError[] = [];
   let normalizedPackages: { clientPackageId: string; items: NormalizedItem[] }[] = [];
   let normalizedItems: NormalizedItem[] = [];
 
@@ -180,6 +186,27 @@ export async function createShipOrder(admin: any, partnerKey: string, body: any)
     normalizedItems = itemsRaw!.map((it: any, i: number) => normalizeItem(it, fields, `items[${i}]`, errors));
   }
   if (errors.length) fail("VALIDATION_FAILED", "请求物品/箱子信息不完整", errors);
+  return { normalizedPackages, normalizedItems };
+}
+
+export async function createShipOrder(admin: any, partnerKey: string, body: any): Promise<CreateOrderResult> {
+  if (!body || typeof body !== "object") fail("INVALID_REQUEST", "请求体不是合法 JSON 对象");
+
+  const errors: FieldError[] = [];
+  const domesticNumber = requireStr(body, "domesticNumber", errors);
+  const externalCustomerId = requireStr(body, "externalCustomerId", errors);
+  const routeCode = requireStr(body, "routeCode", errors);
+  const schemaVersion = requireStr(body, "schemaVersion", errors);
+  const destination = requireStr(body, "destination", errors);
+  const remark = str(body.remark) || null;
+  const warehouseCodeIn = str(body.warehouseCode) || null;
+  if (errors.length) fail("VALIDATION_FAILED", "请求缺少必填字段", errors);
+
+  const recipient = normalizeAddress(body.recipient, "recipient", errors);
+  if (errors.length) fail("VALIDATION_FAILED", "收件地址不完整", errors);
+
+  const { boxKnown, fields, warehouseCode } = await resolveShipRoute(admin, routeCode, schemaVersion, destination, warehouseCodeIn);
+  const { normalizedPackages, normalizedItems } = validateItemsPayload(body, boxKnown, fields);
 
   // ---------- 客户身份：已建档直接复用，否则用 customerProfile 建一条新档案 ----------
   const { data: existingMapping } = await admin
