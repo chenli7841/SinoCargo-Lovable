@@ -11,6 +11,7 @@ export type AppRole =
   | "driver"
   | "pickup_point"
   | "sales"
+  | "sales_rep"
   | "support"
   | "customer";
 
@@ -25,6 +26,7 @@ const ROLE_SORT_ORDER: AppRole[] = [
   "driver",
   "pickup_point",
   "sales",
+  "sales_rep",
   "support",
   "customer",
 ];
@@ -407,7 +409,9 @@ export const setUserRoles = createServerFn({ method: "POST" })
     const desired = Array.from(new Set([...data.roles, "customer"])) as AppRole[];
     await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId);
     const rows = desired.map((role) => ({ user_id: data.userId, role }));
-    const { error } = await supabaseAdmin.from("user_roles").insert(rows);
+    // sales_rep 还没进生成的 types.ts（新枚举值），insert 类型推断会拒绝它——转 any
+    // 绕过，数据库这边枚举已经加了这个值（见 20260914110000 迁移）。
+    const { error } = await supabaseAdmin.from("user_roles").insert(rows as any);
     if (error) throw new Error(error.message);
     await recordAdminLog(supabaseAdmin, {
       entity_type: "user",

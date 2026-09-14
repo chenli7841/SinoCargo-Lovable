@@ -11,13 +11,35 @@ import { getFxCadPerCny, computeMyBatchesForUser } from "@/lib/orders.functions"
 // table/shape src/lib/orders.functions.ts already uses for staff actions.
 // The nav hides this from everyone else, but that's client-side only —
 // this check is what actually enforces it.
-const CUSTOMER_VIEW_ROLES = ["owner", "warehouse_cn", "warehouse_ca", "support", "sales"] as const;
-async function assertCustomerViewAccess(supabase: any, userId: string) {
+const CUSTOMER_VIEW_ROLES = ["owner", "warehouse_cn", "warehouse_ca", "support", "sales", "sales_rep"] as const;
+// targetUserId 传了才做"归属"这层额外限制——只对纯 sales_rep（不同时是
+// owner/manager）生效；sales/warehouse_*/support 这些原有角色保持不受限，
+// 这次只加新角色的限制，不收紧老角色。
+async function assertCustomerViewAccess(supabase: any, userId: string, targetUserId?: string) {
   const results = await Promise.all(
     CUSTOMER_VIEW_ROLES.map((role) => supabase.rpc("has_role", { _user_id: userId, _role: role })),
   );
   for (const { error } of results) if (error) throw new Error(error.message);
   if (!results.some((r) => r.data)) throw new Error("Forbidden: no customer-view access");
+
+  if (!targetUserId) return;
+  const [{ data: isSalesRep, error: srErr }, { data: isOwner, error: ownerErr }, { data: isManager, error: mgrErr }] =
+    await Promise.all([
+      supabase.rpc("has_role", { _user_id: userId, _role: "sales_rep" }),
+      supabase.rpc("has_role", { _user_id: userId, _role: "owner" }),
+      supabase.rpc("has_role", { _user_id: userId, _role: "manager" }),
+    ]);
+  if (srErr) throw new Error(srErr.message);
+  if (ownerErr) throw new Error(ownerErr.message);
+  if (mgrErr) throw new Error(mgrErr.message);
+  if (!isSalesRep || isOwner || isManager) return;
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: target } = await (supabaseAdmin as any)
+    .from("profiles")
+    .select("sales_rep_id")
+    .eq("id", targetUserId)
+    .maybeSingle();
+  if (!target || target.sales_rep_id !== userId) throw new Error("Forbidden: not your assigned customer");
 }
 
 async function getOperatorName(admin: any, userId: string): Promise<string> {
@@ -55,19 +77,29 @@ export const findCustomerByCode = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { code: string }) => d)
   .handler(async ({ data, context }) => {
+    // 这里还不知道目标客户是谁（正在按客户号查），先只做"有没有客户视图访问权"这层
+    // 基础检查；查到人以后再补"归属"这层检查——sales_rep 查到不是自己客户的号，
+    // 按"查无此客户"处理（跟真的没查到一个返回形状），不是一个吓人的权限报错。
     await assertCustomerViewAccess(context.supabase, context.userId);
     const code = data.code.trim();
     if (!code) throw new Error("请输入客户号");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: profile, error } = await supabaseAdmin
+    // sales_rep_id 还没进生成的 types.ts（新迁移列），select 串带上它会让整行的类型
+    // 推断塌成 SelectQueryError——这里转 any 绕过，运行时字段是真实存在的。
+    const { data: profile, error } = (await supabaseAdmin
       .from("profiles")
       .select(
-        "id, customer_code, full_name, email, phone, username, preferred_lang, vip_level, points, is_blacklisted, blacklist_reason, created_at",
+        "id, customer_code, full_name, email, phone, username, preferred_lang, vip_level, points, is_blacklisted, blacklist_reason, created_at, sales_rep_id",
       )
       .ilike("customer_code", code)
-      .maybeSingle();
+      .maybeSingle()) as any;
     if (error) throw new Error(error.message);
     if (!profile) return { profile: null, roles: [] as string[] };
+    try {
+      await assertCustomerViewAccess(context.supabase, context.userId, profile.id);
+    } catch {
+      return { profile: null, roles: [] as string[] };
+    }
     const { data: roleRows } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", profile.id);
     return { profile, roles: (roleRows ?? []).map((r: any) => r.role as string) };
   });
@@ -77,7 +109,7 @@ export const getCustomerOverview = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertCustomerViewAccess(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [{ data: wallet }, { data: orders }, { data: fwd }, { data: unpaidInv }] = await Promise.all([
       supabaseAdmin.from("wallets").select("balance_cad").eq("user_id", data.userId).maybeSingle(),
@@ -135,7 +167,7 @@ export const saveCustomerProfile = createServerFn({ method: "POST" })
     }) => d,
   )
   .handler(async ({ data, context }) => {
-    await assertCustomerViewAccess(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
     const { userId, username, ...rest } = data;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: before } = await supabaseAdmin.from("profiles").select("*").eq("id", userId).maybeSingle();
@@ -174,12 +206,85 @@ export const saveCustomerProfile = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// ============ 客户归属销售代表 ============
+async function assertOwnerOrManager(supabase: any, userId: string) {
+  const [{ data: isOwner, error: e1 }, { data: isManager, error: e2 }] = await Promise.all([
+    supabase.rpc("has_role", { _user_id: userId, _role: "owner" }),
+    supabase.rpc("has_role", { _user_id: userId, _role: "manager" }),
+  ]);
+  if (e1) throw new Error(e1.message);
+  if (e2) throw new Error(e2.message);
+  if (!isOwner && !isManager) throw new Error("Forbidden: owner/manager only");
+}
+
+// 分配下拉框的候选名单——持有 sales_rep 角色的员工账号。任何有客户视图访问权的人
+// 都能读（好显示"当前归属：xxx"），实际改归属另外由 assertOwnerOrManager 把关。
+export const listSalesReps = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertCustomerViewAccess(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: roleRows, error } = (await (supabaseAdmin as any)
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "sales_rep")) as { data: { user_id: string }[] | null; error: any };
+    if (error) throw new Error(error.message);
+    const ids: string[] = Array.from(new Set((roleRows ?? []).map((r) => r.user_id)));
+    if (!ids.length) return { items: [] as { id: string; full_name: string | null; email: string | null }[] };
+    const { data: profs } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", ids)
+      .order("full_name", { ascending: true });
+    return { items: (profs ?? []) as { id: string; full_name: string | null; email: string | null }[] };
+  });
+
+// 改客户归属——只有 owner/manager 能操作，销售代表自己不能改自己名下有哪些客户。
+export const assignCustomerSalesRep = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string; salesRepId: string | null }) => d)
+  .handler(async ({ data, context }) => {
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
+    await assertOwnerOrManager(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const salesRepId = data.salesRepId || null;
+    if (salesRepId) {
+      const { data: isRep, error } = await context.supabase.rpc("has_role", {
+        _user_id: salesRepId,
+        _role: "sales_rep" as any,
+      });
+      if (error) throw new Error(error.message);
+      if (!isRep) throw new Error("指定的账号不是销售代表角色");
+    }
+    const { data: before } = await supabaseAdmin
+      .from("profiles")
+      .select("sales_rep_id" as any)
+      .eq("id", data.userId)
+      .maybeSingle();
+    const { error: updErr } = await (supabaseAdmin as any)
+      .from("profiles")
+      .update({ sales_rep_id: salesRepId })
+      .eq("id", data.userId);
+    if (updErr) throw new Error(updErr.message);
+    const operator_name = await getOperatorName(supabaseAdmin, context.userId);
+    await recordLog(supabaseAdmin, {
+      entity_type: "customer_profile",
+      entity_id: data.userId,
+      action: "assign_sales_rep",
+      before: { sales_rep_id: (before as any)?.sales_rep_id ?? null },
+      after: { sales_rep_id: salesRepId },
+      operator_id: context.userId,
+      operator_name,
+    });
+    return { ok: true };
+  });
+
 // ============ Addresses: full CRUD on behalf of the customer ============
 export const listCustomerAddresses = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertCustomerViewAccess(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: rows, error } = await supabaseAdmin
       .from("addresses")
@@ -194,7 +299,7 @@ export const saveCustomerAddress = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string; address: any }) => d)
   .handler(async ({ data, context }) => {
-    await assertCustomerViewAccess(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { id, ...rest } = data.address ?? {};
     if (rest.is_default) {
@@ -223,7 +328,7 @@ export const deleteCustomerAddress = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string; addressId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertCustomerViewAccess(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin
       .from("addresses")
@@ -248,7 +353,7 @@ export const listCustomerItems = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertCustomerViewAccess(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: rows, error } = await supabaseAdmin
       .from("my_items")
@@ -281,7 +386,7 @@ export const saveCustomerItem = createServerFn({ method: "POST" })
     }) => d,
   )
   .handler(async ({ data, context }) => {
-    await assertCustomerViewAccess(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
     if (!data.name.trim()) throw new Error("请填写物品名称");
     if (!data.hs_code.trim()) throw new Error("请填写 HS 编码");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -336,7 +441,7 @@ export const deleteCustomerItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string; itemId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertCustomerViewAccess(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("my_items").delete().eq("id", data.itemId).eq("user_id", data.userId);
     if (error) throw new Error(error.message);
@@ -360,7 +465,7 @@ export const getCustomerOrders = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertCustomerViewAccess(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [{ data: orders, error: oErr }, { data: fwds, error: fErr }] = await Promise.all([
       supabaseAdmin
@@ -416,7 +521,7 @@ export const getCustomerInventory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertCustomerViewAccess(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: wbRows, error } = await supabaseAdmin
       .from("waybills")
@@ -453,6 +558,7 @@ export const getCustomerInventory = createServerFn({ method: "POST" })
 export const listShippingOptions = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    // 通用参考数据（仓库/线路），不是某个客户的资料，不需要按归属再筛一遍。
     await assertCustomerViewAccess(context.supabase, context.userId);
     const [{ data: warehouses }, { data: routes }] = await Promise.all([
       context.supabase.from("warehouses").select("id,code,name_zh,name_en").eq("is_active", true).order("sort_order"),
@@ -479,7 +585,7 @@ export const previewCustomerStorageFee = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertCustomerViewAccess(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
     const { data: result, error } = await context.supabase.rpc("preview_storage_fees", {
       _target_user_id: data.userId,
     });
@@ -491,7 +597,7 @@ export const payCustomerStorageFee = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertCustomerViewAccess(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
     const { data: result, error } = await context.supabase.rpc("pay_storage_fees", {
       _target_user_id: data.userId,
     });
@@ -509,7 +615,7 @@ export const createCustomerForwarding = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string; payload: any }) => d)
   .handler(async ({ data, context }) => {
-    await assertCustomerViewAccess(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
     // Auto-fill HS code / material / origin from the customer's saved items when
     // staff typed a品名 without picking it from the library — place_forwarding
     // rejects rows missing route-required fields like hscode.
@@ -583,7 +689,7 @@ export const getCustomerBatches = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { userId: string }) => d)
   .handler(async ({ data, context }) => {
-    await assertCustomerViewAccess(context.supabase, context.userId);
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     return computeMyBatchesForUser(supabaseAdmin, data.userId);
   });

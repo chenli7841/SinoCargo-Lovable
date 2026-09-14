@@ -160,7 +160,7 @@ const DEFAULT_NAV_GROUPS: NavGroup[] = [
         to: "/admin/customer-view",
         label: "客户视图",
         icon: UserSearch,
-        roles: ["owner", "warehouse_cn", "warehouse_ca", "support", "sales"],
+        roles: ["owner", "warehouse_cn", "warehouse_ca", "support", "sales", "sales_rep"],
       },
       { to: "/admin/users", label: "用户管理", icon: Users },
       { to: "/admin/messages", label: "留言信息", icon: Mail },

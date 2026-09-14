@@ -19,8 +19,11 @@ import {
   previewCustomerStorageFee,
   payCustomerStorageFee,
   createCustomerForwarding,
+  listSalesReps,
+  assignCustomerSalesRep,
 } from "@/lib/admin-customer-view.functions";
 import { deductWalletForBatch } from "@/lib/orders.functions";
+import { getMyRoles } from "@/lib/admin.functions";
 import { ROLE_LABEL, ROLE_COLOR } from "@/lib/admin-roles";
 import { VIP_LABEL, VIP_COLOR } from "@/lib/vip-levels";
 import {
@@ -940,6 +943,43 @@ function ProfileTab({ userId, initial }: { userId: string; initial: any }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
+  // 客户归属销售代表——独立的一段，走 assignCustomerSalesRep（不是上面的
+  // saveCustomerProfile），只有 owner/manager 能真的改成功；其它角色这里显示只读。
+  // 跟 /admin route.tsx 的 AdminLayout 复用同一个 query key，命中缓存不用再请求一次。
+  const fetchRoles = useServerFn(getMyRoles);
+  const rolesQ = useQuery({
+    queryKey: ["my-roles"],
+    queryFn: () => fetchRoles(),
+    staleTime: 30 * 60_000,
+  });
+  const myRoles = (rolesQ.data as any)?.roles ?? [];
+  const canAssignSalesRep = myRoles.includes("owner") || myRoles.includes("manager");
+
+  // 任何有客户视图访问权的人都能读这份名单（哪怕自己不能改，也要能显示"当前归属"）。
+  const fetchReps = useServerFn(listSalesReps);
+  const repsQ = useQuery({ queryKey: ["sales-reps"], queryFn: () => fetchReps() });
+  const reps = ((repsQ.data as any)?.items ?? []) as { id: string; full_name: string | null; email: string | null }[];
+
+  const assignRep = useServerFn(assignCustomerSalesRep);
+  const [salesRepId, setSalesRepId] = useState<string>(initial.sales_rep_id ?? "");
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignMsg, setAssignMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const currentRepName = reps.find((r) => r.id === (initial.sales_rep_id ?? ""))?.full_name;
+
+  const onAssign = async () => {
+    setAssignBusy(true);
+    setAssignMsg(null);
+    try {
+      await assignRep({ data: { userId, salesRepId: salesRepId || null } });
+      await qc.invalidateQueries({ queryKey: ["admin-customer-view"] });
+      setAssignMsg({ kind: "ok", text: "已保存" });
+    } catch (e: any) {
+      setAssignMsg({ kind: "err", text: e?.message ?? "保存失败" });
+    } finally {
+      setAssignBusy(false);
+    }
+  };
+
   const onSave = async () => {
     setBusy(true);
     setMsg(null);
@@ -955,6 +995,7 @@ function ProfileTab({ userId, initial }: { userId: string; initial: any }) {
   };
 
   return (
+    <div className="space-y-4">
     <section className="rounded-2xl border border-white/5 bg-white/[0.03] p-5">
       <h3 className="font-display text-base font-bold">基本资料</h3>
       <p className="mt-1 text-xs text-slate-400">
@@ -1012,6 +1053,46 @@ function ProfileTab({ userId, initial }: { userId: string; initial: any }) {
         保存修改
       </button>
     </section>
+
+    <section className="rounded-2xl border border-white/5 bg-white/[0.03] p-5">
+      <h3 className="font-display text-base font-bold">客户归属</h3>
+      <p className="mt-1 text-xs text-slate-400">
+        分配给哪个销售代表账号（角色 sales_rep）——该销售代表登录后台后，客户视图只能查到分配给自己的客户。
+        {!canAssignSalesRep && " 只有总负责人/主管能修改这里，你当前是只读。"}
+      </p>
+      <div className="mt-3 max-w-xs">
+        {canAssignSalesRep ? (
+          <select value={salesRepId} onChange={(e) => setSalesRepId(e.target.value)} className={inputCls}>
+            <option value="">未分配</option>
+            {reps.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.full_name || r.email || r.id}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div className="text-sm text-slate-300">{initial.sales_rep_id ? currentRepName || "（已分配，姓名未知）" : "未分配"}</div>
+        )}
+      </div>
+      {assignMsg && (
+        <div
+          className={`mt-3 rounded-md border px-3 py-1.5 text-xs ${assignMsg.kind === "ok" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-rose-500/30 bg-rose-500/10 text-rose-300"}`}
+        >
+          {assignMsg.text}
+        </div>
+      )}
+      {canAssignSalesRep && (
+        <button
+          onClick={onAssign}
+          disabled={assignBusy}
+          className="mt-4 inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand/90 disabled:opacity-50"
+        >
+          {assignBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          保存归属
+        </button>
+      )}
+    </section>
+    </div>
   );
 }
 
