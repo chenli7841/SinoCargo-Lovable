@@ -18,6 +18,16 @@ export const SHIP_API_SCOPES: ShipApiScope[] = [
   "orders:fees:read",
 ];
 
+// ship API 对外根地址——凭证管理页面复制"对接信息"时用。跟 OTTPAY_PUBLIC_ORIGIN /
+// WECHAT_REDIRECT_ORIGIN 是同一种"每个对外功能各自一个环境变量"的做法，但这里
+// 不给兜底域名：这个仓库会被部署到不同域名，猜一个默认值一旦猜错，交付给合作方
+// 的地址就是错的——没配置就必须显式告诉管理员"尚未配置"，不能编一个出来。
+export function getShipApiPublicOrigin(): string | null {
+  const raw = process.env.SHIP_API_PUBLIC_ORIGIN?.trim();
+  if (!raw) return null;
+  return raw.replace(/\/+$/, "");
+}
+
 export type ShipApiErrorCode =
   | "INVALID_REQUEST"
   | "UNAUTHORIZED"

@@ -29,6 +29,7 @@ import { Route as AuthenticatedAccountRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedCheckoutRouteImport } from './routes/_authenticated/checkout'
 import { Route as AuthenticatedInvoicesRouteImport } from './routes/_authenticated/invoices'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminApiTokensRouteImport } from './routes/admin/api-tokens'
 import { Route as AdminCargoTypesRouteImport } from './routes/admin/cargo-types'
 import { Route as AdminCustomerViewRouteImport } from './routes/admin/customer-view'
 import { Route as AdminDestinationsRouteImport } from './routes/admin/destinations'
@@ -211,6 +212,11 @@ const AuthenticatedInvoicesRoute = AuthenticatedInvoicesRouteImport.update({
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminApiTokensRoute = AdminApiTokensRouteImport.update({
+  id: '/api-tokens',
+  path: '/api-tokens',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminCargoTypesRoute = AdminCargoTypesRouteImport.update({
@@ -664,6 +670,7 @@ export interface FileRoutesByFullPath {
   '/account': typeof AuthenticatedAccountRoute
   '/checkout': typeof AuthenticatedCheckoutRoute
   '/invoices': typeof AuthenticatedInvoicesRoute
+  '/admin/api-tokens': typeof AdminApiTokensRoute
   '/admin/cargo-types': typeof AdminCargoTypesRoute
   '/admin/customer-view': typeof AdminCustomerViewRoute
   '/admin/destinations': typeof AdminDestinationsRoute
@@ -765,6 +772,7 @@ export interface FileRoutesByTo {
   '/account': typeof AuthenticatedAccountRoute
   '/checkout': typeof AuthenticatedCheckoutRoute
   '/invoices': typeof AuthenticatedInvoicesRoute
+  '/admin/api-tokens': typeof AdminApiTokensRoute
   '/admin/cargo-types': typeof AdminCargoTypesRoute
   '/admin/customer-view': typeof AdminCustomerViewRoute
   '/admin/destinations': typeof AdminDestinationsRoute
@@ -870,6 +878,7 @@ export interface FileRoutesById {
   '/_authenticated/account': typeof AuthenticatedAccountRoute
   '/_authenticated/checkout': typeof AuthenticatedCheckoutRoute
   '/_authenticated/invoices': typeof AuthenticatedInvoicesRoute
+  '/admin/api-tokens': typeof AdminApiTokensRoute
   '/admin/cargo-types': typeof AdminCargoTypesRoute
   '/admin/customer-view': typeof AdminCustomerViewRoute
   '/admin/destinations': typeof AdminDestinationsRoute
@@ -975,6 +984,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/checkout'
     | '/invoices'
+    | '/admin/api-tokens'
     | '/admin/cargo-types'
     | '/admin/customer-view'
     | '/admin/destinations'
@@ -1076,6 +1086,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/checkout'
     | '/invoices'
+    | '/admin/api-tokens'
     | '/admin/cargo-types'
     | '/admin/customer-view'
     | '/admin/destinations'
@@ -1180,6 +1191,7 @@ export interface FileRouteTypes {
     | '/_authenticated/account'
     | '/_authenticated/checkout'
     | '/_authenticated/invoices'
+    | '/admin/api-tokens'
     | '/admin/cargo-types'
     | '/admin/customer-view'
     | '/admin/destinations'
@@ -1445,6 +1457,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/api-tokens': {
+      id: '/admin/api-tokens'
+      path: '/api-tokens'
+      fullPath: '/admin/api-tokens'
+      preLoaderRoute: typeof AdminApiTokensRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/cargo-types': {
@@ -2049,6 +2068,7 @@ const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
 interface AdminRouteRouteChildren {
+  AdminApiTokensRoute: typeof AdminApiTokensRoute
   AdminCargoTypesRoute: typeof AdminCargoTypesRoute
   AdminCustomerViewRoute: typeof AdminCustomerViewRoute
   AdminDestinationsRoute: typeof AdminDestinationsRoute
@@ -2106,6 +2126,7 @@ interface AdminRouteRouteChildren {
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
+  AdminApiTokensRoute: AdminApiTokensRoute,
   AdminCargoTypesRoute: AdminCargoTypesRoute,
   AdminCustomerViewRoute: AdminCustomerViewRoute,
   AdminDestinationsRoute: AdminDestinationsRoute,
