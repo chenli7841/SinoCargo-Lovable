@@ -1497,7 +1497,28 @@ function BatchesTab({ onJump }: { onJump: (t: Tab) => void }) {
         load();
         return;
       }
-      return toast.error(tr("付款失败", "Payment failed"));
+      // 除了上面两种，payMyBatch 链路还会返回好几种别的失败原因（customer_not_found /
+      // no_frozen_invoice / nothing_to_pay / freeze_failed / settle_failed），外加"批次
+      // 尚未发出"/"费用尚未确认"这两种直接 throw 出来的、本身已经是完整中文句子的错误——
+      // 这里不能再统一收成一句"付款失败"，那样客户和客服都不知道到底卡在哪一步，
+      // 只会反馈"无法扣款"却查不出原因。已知原因给出对应提示，其余（多半是上面那两种
+      // 已经写好中文的 throw）直接把原始文案显示出来，总比什么都不说强。
+      const REASON_MSG: Record<string, [string, string]> = {
+        customer_not_found: ["客户信息异常，请联系客服", "Account issue — please contact support"],
+        no_frozen_invoice: [
+          "账单生成异常，请稍后重试或联系客服",
+          "Invoice not ready — please retry shortly or contact support",
+        ],
+        nothing_to_pay: ["该批次无需付款", "Nothing to pay for this batch"],
+        freeze_failed: ["账单生成失败，请联系客服", "Failed to generate invoice — please contact support"],
+        settle_failed: ["结算失败，请稍后重试", "Settlement failed — please try again"],
+      };
+      const known = data?.reason ? REASON_MSG[data.reason as string] : undefined;
+      if (known) return toast.error(tr(known[0], known[1]));
+      return toast.error(
+        (typeof data?.reason === "string" && data.reason) ||
+          tr("付款失败，请稍后重试或联系客服", "Payment failed — please try again or contact support"),
+      );
     }
     const pointsMsg =
       data.points_earned > 0 ? tr(`，获得 ${data.points_earned} 积分`, `, earned ${data.points_earned} points`) : "";
