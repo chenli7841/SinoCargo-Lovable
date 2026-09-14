@@ -181,11 +181,20 @@ export const getPublicProduct = createServerFn({ method: "POST" })
         .eq("is_active", true)
         .order("price_cny", { ascending: true })
         .order("created_at", { ascending: true });
+    // image_url ships in migration 20260914120000 — same not-yet-deployed fallback pattern.
+    // Each retry re-captures its own error so the next check reflects that attempt, not
+    // the first one — a stale shared varErr would make the last fallback always fire.
     let { data: variants, error: varErr } = await buildVariants(
-      `id,sku,attrs,price_cny,stock,is_active,created_at,${VARIANT_FREIGHT_COLS}`,
+      `id,sku,attrs,price_cny,stock,is_active,created_at,image_url,${VARIANT_FREIGHT_COLS}`,
     );
-    if (isMissingNewColumn(varErr))
+    if (isMissingNewColumn(varErr)) {
+      ({ data: variants, error: varErr } = await buildVariants(
+        `id,sku,attrs,price_cny,stock,is_active,created_at,${VARIANT_FREIGHT_COLS}`,
+      ));
+    }
+    if (isMissingNewColumn(varErr)) {
       ({ data: variants } = await buildVariants("id,sku,attrs,price_cny,stock,is_active,created_at"));
+    }
     const cat = (product as any).category?.slug as string | undefined;
     let related: PublicProduct[] = [];
     if (cat) {

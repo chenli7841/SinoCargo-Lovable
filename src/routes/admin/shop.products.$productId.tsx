@@ -611,6 +611,10 @@ function ProductEdit() {
                       className="rounded-xl border-2 border-dashed border-brand/40 bg-brand/5 px-3 py-2 text-xs"
                     >
                       <div className="flex flex-wrap items-center gap-1.5">
+                        <VariantImageThumb
+                          value={v.image_url ?? ""}
+                          onChange={(url) => updateVariant(i, { image_url: url })}
+                        />
                         <input
                           value={v.attrs?.color ?? ""}
                           onChange={(e) => updateVariant(i, { attrs: { ...v.attrs, color: e.target.value } })}
@@ -1394,6 +1398,54 @@ function VariantNum({
       placeholder={placeholder}
       className="w-full rounded-md border border-border bg-surface px-1.5 py-1 text-[11px] focus:border-brand focus:outline-none"
     />
+  );
+}
+
+// 每个规格（SKU）自己的一张图——常驻显示在规格行里（不藏进"展开"面板），
+// 点缩略图直接换图，右上角小 X 清空（清空后前台回退到商品封面图）。
+function VariantImageThumb({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const handle = async (f: File | undefined) => {
+    if (!f) return;
+    setBusy(true);
+    try {
+      onChange(await uploadShopMedia(f));
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="group relative h-9 w-9 shrink-0 overflow-hidden rounded-md border border-border bg-surface">
+      <input ref={ref} type="file" accept="image/*" className="hidden" onChange={(e) => handle(e.target.files?.[0])} />
+      <button
+        type="button"
+        onClick={() => ref.current?.click()}
+        disabled={busy}
+        title={value ? "更换 SKU 图片" : "上传 SKU 图片"}
+        className="grid h-full w-full place-items-center"
+      >
+        {busy ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-ink-soft" />
+        ) : value ? (
+          <img src={value} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <ImageIcon className="h-3.5 w-3.5 text-ink-soft" />
+        )}
+      </button>
+      {value && !busy && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          title="清空 SKU 图片"
+          className="absolute right-0 top-0 hidden h-3.5 w-3.5 place-items-center rounded-bl bg-black/60 text-white group-hover:grid"
+        >
+          <X className="h-2.5 w-2.5" />
+        </button>
+      )}
+    </div>
   );
 }
 

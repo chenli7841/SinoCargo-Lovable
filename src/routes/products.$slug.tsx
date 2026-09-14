@@ -19,6 +19,7 @@ import {
   Anchor,
   Layers,
   Tag,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getPublicProduct, listPublicRoutes } from "@/lib/shop-public.functions";
@@ -218,6 +219,9 @@ function ProductDetail() {
   const gallery = [dp.cover_url, ...(Array.isArray(dp.images) ? dp.images : [])].filter(Boolean) as string[];
   const [activeImg, setActiveImg] = useState(0);
   const currentImg = gallery[activeImg];
+  // 选中的 SKU 有自己的图就优先显示；没有就还是走商品封面/画廊那一套，不受影响。
+  const displayImg = selVariant?.image_url || currentImg;
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   const totalCustomsRate =
     Number(dp.customs_mfn_rate ?? 0) + Number(dp.customs_gst_rate ?? 0) + Number(dp.customs_antidumping_rate ?? 0);
@@ -310,8 +314,15 @@ function ProductDetail() {
             exactly where the row ends — never overlaps "商品详情" below). */}
         <div className="lg:sticky lg:top-24">
           <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-accent via-surface to-accent">
-            {currentImg ? (
-              <img src={currentImg} alt={product.name[lang]} className="aspect-square h-full w-full object-cover" />
+            {displayImg ? (
+              <button
+                type="button"
+                onClick={() => setLightboxSrc(displayImg)}
+                className="block aspect-square h-full w-full cursor-zoom-in"
+                title={lang === "zh" ? "点击放大" : "Click to enlarge"}
+              >
+                <img src={displayImg} alt={product.name[lang]} className="h-full w-full object-cover" />
+              </button>
             ) : (
               <div className="grid aspect-square place-items-center text-[12rem]">{product.image}</div>
             )}
@@ -658,9 +669,15 @@ function ProductDetail() {
             {dp.detail_blocks.map((b: any, i: number) => {
               if (b.type === "image" && b.url)
                 return (
-                  <div key={i} className="overflow-hidden rounded-2xl border border-border bg-surface">
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setLightboxSrc(b.url)}
+                    className="cursor-zoom-in overflow-hidden rounded-2xl border border-border bg-surface"
+                    title={lang === "zh" ? "点击放大" : "Click to enlarge"}
+                  >
                     <img src={b.url} alt="" className="aspect-[3/4] w-full object-contain" />
-                  </div>
+                  </button>
                 );
               if (b.type === "video" && b.url)
                 return (
@@ -737,6 +754,8 @@ function ProductDetail() {
           </div>
         </section>
       )}
+
+      <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     </div>
   );
 }
@@ -757,6 +776,42 @@ function QRow({ k, v }: { k: string; v: string }) {
     <div>
       <dt className="text-[10px] uppercase tracking-wider text-ink-soft">{k}</dt>
       <dd className="font-semibold">{v}</dd>
+    </div>
+  );
+}
+
+// 简单遮罩放大图——不支持拖拽/滚轮缩放，图片按屏幕大小自适应铺满，点遮罩/右上角
+// X/Esc 关闭。SKU 主图和"商品详情"图片区都用它，同一个组件。
+function Lightbox({ src, onClose }: { src: string | null; onClose: () => void }) {
+  useEffect(() => {
+    if (!src) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [src, onClose]);
+  if (!src) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+      >
+        <X className="h-5 w-5" />
+      </button>
+      <img
+        src={src}
+        alt=""
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[90vh] max-w-[90vw] cursor-default rounded-lg object-contain"
+      />
     </div>
   );
 }
