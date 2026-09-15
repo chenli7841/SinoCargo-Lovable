@@ -35,11 +35,12 @@ export const Route = createFileRoute("/_authenticated/forwarding/$forwardingId")
 
 const sb = supabase as any;
 
-function volumetricWeightKg(w: any) {
+// 只读后端算好存下来的快照值——不在前端猜一个除数现算。线路的体积重除数是
+// 可配置的（不一定是 6000），前端猜错了会显示一个跟最终计费对不上的数字，
+// 不如老实显示"还没算出来"。快照还没生成时返回 null，调用方自己决定怎么显示。
+function volumetricWeightKg(w: any): number | null {
   const saved = Number(w?.weight_snapshot?.volumetric_weight ?? 0);
-  if (saved > 0) return saved;
-  const l = Number(w?.length_cm ?? 0), width = Number(w?.width_cm ?? 0), h = Number(w?.height_cm ?? 0);
-  return l && width && h ? (l * width * h) / 6000 : 0;
+  return saved > 0 ? saved : null;
 }
 
 function ForwardingDetailPage() {
@@ -183,7 +184,12 @@ function ForwardingDetailPage() {
       h = Number(w.height_cm ?? 0);
     return a + (l && wd && h ? (l * wd * h) / 1_000_000 : 0);
   }, 0);
-  const totalVolumetricWeight = waybills.reduce((sum, w) => sum + volumetricWeightKg(w), 0);
+  // 只要有一张运单的体积重快照还没生成，总数就不该显示一个悄悄偏小的部分和——
+  // 那样看起来是个完整数字，其实是错的。宁可整体显示"计算中"。
+  const perWaybillVolWeights = waybills.map((w) => volumetricWeightKg(w));
+  const totalVolumetricWeight = perWaybillVolWeights.some((v) => v === null)
+    ? null
+    : (perWaybillVolWeights as number[]).reduce((sum, v) => sum + v, 0);
   // CAD is source of truth. total_cad is authoritative — it's what the admin list "费用" shows,
   // computed server-side as: freight + duty + (insured ? insurance : 0) + surcharges (CNY×fx).
   const snap: any = fo.freight_snapshot ?? null;
@@ -328,7 +334,9 @@ function ForwardingDetailPage() {
                   }
                   value={
                     totalVolume > 0
-                      ? `${totalVolume.toFixed(3)} m³ / ${totalVolumetricWeight.toFixed(2)} kg ${tr("体积重", "vol. wt.")}`
+                      ? totalVolumetricWeight !== null
+                        ? `${totalVolume.toFixed(3)} m³ / ${totalVolumetricWeight.toFixed(2)} kg ${tr("体积重", "vol. wt.")}`
+                        : `${totalVolume.toFixed(3)} m³ / ${tr("体积重计算中", "vol. wt. pending")}`
                       : "—"
                   }
                 />
@@ -443,7 +451,13 @@ function ForwardingDetailPage() {
                         <td className="px-3 py-2">{w.weight_kg ? `${Number(w.weight_kg).toFixed(2)} kg` : "—"}</td>
                         <td className="px-3 py-2 font-mono">
                           {w.length_cm && w.width_cm && w.height_cm
-                            ? `${w.length_cm}×${w.width_cm}×${w.height_cm} cm / ${volumetricWeightKg(w).toFixed(2)} kg ${tr("体积重", "vol. wt.")}`
+                            ? (() => {
+                                const vw = volumetricWeightKg(w);
+                                const dims = `${w.length_cm}×${w.width_cm}×${w.height_cm} cm`;
+                                return vw !== null
+                                  ? `${dims} / ${vw.toFixed(2)} kg ${tr("体积重", "vol. wt.")}`
+                                  : `${dims} / ${tr("体积重计算中", "vol. wt. pending")}`;
+                              })()
                             : "—"}
                         </td>
                       </tr>
