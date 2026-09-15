@@ -2998,7 +2998,7 @@ export const listBatches = createServerFn({ method: "GET" })
       .limit(200);
     if (error) throw new Error(error.message);
     const batchIds = (data ?? []).map((b: any) => b.id);
-    const [cartonsR, palletsR, wbR, payments] = await Promise.all([
+    const [cartonsR, palletsR, wbR, payments, settlementsR] = await Promise.all([
       supabaseAdmin
         .from("cartons")
         .select("id, batch_id")
@@ -3014,6 +3014,13 @@ export const listBatches = createServerFn({ method: "GET" })
           return ps as string;
         }),
       ),
+      // 账单快照/价格确认状态：batch_settlements 里这个批次已经出现过的客户
+      // （不管当前是不是 confirmed）——一次批量查询，不逐批次现算全量客户，
+      // 保持列表页轻量。
+      supabaseAdmin
+        .from("batch_settlements")
+        .select("batch_id, confirmed")
+        .in("batch_id", batchIds.length ? batchIds : ["00000000-0000-0000-0000-000000000000"]),
     ]);
     const cartonBatch = new Map<string, string>();
     for (const c of cartonsR.data ?? []) if (c.batch_id) cartonBatch.set(c.id, c.batch_id);
@@ -3028,12 +3035,26 @@ export const listBatches = createServerFn({ method: "GET" })
         (w.pallet_id && palletBatch.get(w.pallet_id));
       if (bid) totals.set(bid, (totals.get(bid) ?? 0) + 1);
     }
-    const batches = (data ?? []).map((b: any, i: number) => ({
-      ...b,
-      payment_status: payments[i],
-      waybill_total: totals.get(b.id) ?? 0,
-      grand_total_cny: Number(b.grand_total_cny ?? 0),
-    }));
+    const settleStats = new Map<string, { total: number; confirmed: number }>();
+    for (const s of (settlementsR.data ?? []) as any[]) {
+      const cur = settleStats.get(s.batch_id) ?? { total: 0, confirmed: 0 };
+      cur.total += 1;
+      if (s.confirmed) cur.confirmed += 1;
+      settleStats.set(s.batch_id, cur);
+    }
+    const batches = (data ?? []).map((b: any, i: number) => {
+      const st = settleStats.get(b.id) ?? { total: 0, confirmed: 0 };
+      return {
+        ...b,
+        payment_status: payments[i],
+        waybill_total: totals.get(b.id) ?? 0,
+        grand_total_cny: Number(b.grand_total_cny ?? 0),
+        // settlement_total = 0 → 从没确认过（这个批次从没出过账单快照）。
+        // settlement_confirmed < settlement_total → 有客户被取消确认过（部分）。
+        settlement_total: st.total,
+        settlement_confirmed: st.confirmed,
+      };
+    });
     return { batches };
   });
 

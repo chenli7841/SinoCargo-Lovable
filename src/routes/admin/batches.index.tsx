@@ -2,7 +2,15 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { listBatches, createBatch, updateBatchStatus, type BatchMethod, type BatchStatus } from "@/lib/orders.functions";
+import {
+  listBatches,
+  createBatch,
+  updateBatchStatus,
+  confirmAllBatchPrices,
+  type BatchMethod,
+  type BatchStatus,
+} from "@/lib/orders.functions";
+import { toast } from "sonner";
 import { getContainerLabelData } from "@/lib/cartons.functions";
 import { listCargoTypes, listDestinations } from "@/lib/presets.functions";
 import { listRoutes } from "@/lib/settings.functions";
@@ -32,6 +40,8 @@ function BatchesPage() {
   const fetchLabel = useServerFn(getContainerLabelData);
   const delBatch = useServerFn(deleteBatchRecord);
   const canDelete = useCanDelete();
+  const confirmAllPrices = useServerFn(confirmAllBatchPrices);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   // Preset lists are only needed by the "new batch" dialog — load them lazily
   // so opening the batch list doesn't wait on three extra round-trips.
@@ -55,6 +65,39 @@ function BatchesPage() {
   }, [routesQ.data]);
 
   const onPrint = async (id: string) => { const d = await fetchLabel({ data: { kind: "batch", id } }); renderLabel(d as any); };
+
+  // 批量确认这个批次下所有客户的价格——跟详情页那个"批量确认价格"按钮调的是
+  // 同一个函数，这里只是给列表页开个直达入口，不用先点进详情页。
+  const onConfirmAll = async (b: any) => {
+    if (
+      !confirm(`确认批量确认批次 ${b.batch_no} 下所有客户的价格？会为每位客户生成/刷新未付账单快照，不会执行扣款。`)
+    )
+      return;
+    setConfirmingId(b.id);
+    try {
+      const result: any = await confirmAllPrices({ data: { batchId: b.id } });
+      if (result.invoice_failed?.length) {
+        toast.error(
+          `已确认 ${result.confirmed_count} 位，但 ${result.invoice_failed.length} 位账单生成失败：${result.invoice_failed
+            .map((f: any) => `${f.customer_code}(${f.error})`)
+            .join("、")}`,
+          { duration: 10000 },
+        );
+      } else {
+        toast.success(`已批量确认 ${result.confirmed_count} 位客户并生成账单，未执行扣款`);
+      }
+      if (result.snapshot_ok === false) {
+        toast.error(`客户端快照刷新失败：${result.snapshot_error ?? "未知错误"}，请进入批次详情页重试`, {
+          duration: 10000,
+        });
+      }
+      await qc.invalidateQueries({ queryKey: ["admin-batches"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "批量确认失败");
+    } finally {
+      setConfirmingId(null);
+    }
+  };
 
   const [page, setPage] = useState(1); const pageSize = 10;
   const allBatches = (q.data?.batches ?? []) as any[];
@@ -91,6 +134,7 @@ function BatchesPage() {
               <th className="px-4 py-2.5">货物 / 目的地</th>
               <th className="px-4 py-2.5">运单数</th>
               <th className="px-4 py-2.5 text-right">总收费</th>
+              <th className="px-4 py-2.5">账单快照</th>
               <th className="px-4 py-2.5">付款</th>
               <th className="px-4 py-2.5">状态</th>
               <th className="px-4 py-2.5">创建</th>
@@ -98,8 +142,8 @@ function BatchesPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {q.isLoading && <tr><td colSpan={10} className="py-10 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-slate-500"/></td></tr>}
-            {q.data?.batches.length === 0 && <tr><td colSpan={10} className="py-10 text-center text-slate-500">暂无批次</td></tr>}
+            {q.isLoading && <tr><td colSpan={11} className="py-10 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-slate-500"/></td></tr>}
+            {q.data?.batches.length === 0 && <tr><td colSpan={11} className="py-10 text-center text-slate-500">暂无批次</td></tr>}
             {pageItems.map((b: any) => {
               const pmap: Record<string, string> = { paid: "text-emerald-300", partial: "text-amber-300", unpaid: "text-rose-300", empty: "text-slate-500" };
               const plabel: Record<string, string> = { paid: "已付", partial: "部分", unpaid: "未付", empty: "—" };
@@ -118,6 +162,35 @@ function BatchesPage() {
                   {b.status === "draft"
                     ? <span className="text-slate-500" title="草稿状态不结算总额，锁定后写入">—（草稿）</span>
                     : <span className="font-semibold text-emerald-300">CA${grand.toFixed(2)}</span>}
+                </td>
+                <td className="px-4 py-2.5">
+                  {(() => {
+                    const total = Number(b.settlement_total ?? 0);
+                    const confirmed = Number(b.settlement_confirmed ?? 0);
+                    const label =
+                      total === 0 ? "未确认" : confirmed === total ? `已确认 (${confirmed})` : `部分确认 (${confirmed}/${total})`;
+                    const cls =
+                      total === 0
+                        ? "bg-slate-500/10 text-slate-400"
+                        : confirmed === total
+                          ? "bg-emerald-500/10 text-emerald-300"
+                          : "bg-amber-500/10 text-amber-300";
+                    return canEdit ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onConfirmAll(b);
+                        }}
+                        disabled={confirmingId === b.id}
+                        title="点击批量确认这个批次下所有客户的价格"
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold hover:brightness-110 disabled:opacity-50 ${cls}`}
+                      >
+                        {confirmingId === b.id ? "确认中…" : label}
+                      </button>
+                    ) : (
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{label}</span>
+                    );
+                  })()}
                 </td>
                 <td className={`px-4 py-2.5 text-sm ${pmap[b.payment_status] ?? ""}`}>{plabel[b.payment_status] ?? "—"}</td>
                 <td className="px-4 py-2.5">
