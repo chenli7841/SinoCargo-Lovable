@@ -2986,6 +2986,36 @@ async function enrichAfterBatchSettle(
   }
 }
 
+// 批次列表页"客户号"搜索用——按客户号找这个客户名下所有运单实际挂在哪些批次，
+// 前端拿这份 batch id 集合去跟方式/目的地这两个纯前端筛选条件取交集。跟
+// findCustomerByCode 一样用 .ilike 不带通配符（大小写不敏感的精确匹配）。
+export const findBatchIdsForCustomerCode = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { customerCode: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.supabase, context.userId);
+    const code = data.customerCode.trim();
+    if (!code) return { batchIds: [] as string[] };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const [oR, fR] = await Promise.all([
+      supabaseAdmin.from("orders").select("id").ilike("customer_code", code),
+      supabaseAdmin.from("forwarding_orders").select("id").ilike("customer_code", code),
+    ]);
+    const oIds = ((oR.data ?? []) as any[]).map((o) => o.id);
+    const fIds = ((fR.data ?? []) as any[]).map((f) => f.id);
+    if (!oIds.length && !fIds.length) return { batchIds: [] as string[] };
+    const filters: string[] = [];
+    if (oIds.length) filters.push(`order_id.in.(${oIds.join(",")})`);
+    if (fIds.length) filters.push(`forwarding_id.in.(${fIds.join(",")})`);
+    const { data: wbs } = await supabaseAdmin
+      .from("waybills")
+      .select("assigned_batch_id")
+      .not("assigned_batch_id", "is", null)
+      .or(filters.join(","));
+    const batchIds = Array.from(new Set(((wbs ?? []) as any[]).map((w) => w.assigned_batch_id).filter(Boolean)));
+    return { batchIds: batchIds as string[] };
+  });
+
 export const listBatches = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {

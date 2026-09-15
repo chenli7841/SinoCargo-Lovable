@@ -1,12 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   listBatches,
   createBatch,
   updateBatchStatus,
   confirmAllBatchPrices,
+  findBatchIdsForCustomerCode,
   type BatchMethod,
   type BatchStatus,
 } from "@/lib/orders.functions";
@@ -21,7 +22,7 @@ import { DateInput } from "@/components/admin/DateInput";
 import { Pagination } from "@/components/admin/Pagination";
 import { DeleteRowButton, useCanDelete } from "@/components/admin/DeleteRowButton";
 import { deleteBatchRecord } from "@/lib/admin-delete.functions";
-import { Plus, Loader2, X, ArrowRight, Truck, Printer } from "lucide-react";
+import { Plus, Loader2, X, ArrowRight, Truck, Printer, Search } from "lucide-react";
 
 export const Route = createFileRoute("/admin/batches/")({ component: BatchesPage });
 
@@ -100,8 +101,72 @@ function BatchesPage() {
   };
 
   const [page, setPage] = useState(1); const pageSize = 10;
-  const allBatches = (q.data?.batches ?? []) as any[];
-  const pageItems = allBatches.slice((page - 1) * pageSize, page * pageSize);
+  const allBatches = useMemo(() => (q.data?.batches ?? []) as any[], [q.data]);
+
+  // 筛选：方式/目的地都是纯前端过滤（数据已经在列表里），某一类里啥都不勾 = 不按
+  // 这类过滤，全部显示；勾了就是"或"（勾海运+空运→两个都显示），几类之间是"且"
+  // （海运 + tor → 只显示去 tor 的海运）。客户号需要查库，单独一个查询取交集。
+  const [methodFilter, setMethodFilter] = useState<Set<BatchMethod>>(new Set());
+  const [destFilter, setDestFilter] = useState<Set<string>>(new Set());
+  const [customerCodeInput, setCustomerCodeInput] = useState("");
+  const [debouncedCode, setDebouncedCode] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedCode(customerCodeInput.trim()), 400);
+    return () => clearTimeout(t);
+  }, [customerCodeInput]);
+
+  const fetchBatchIdsForCode = useServerFn(findBatchIdsForCustomerCode);
+  const codeQ = useQuery({
+    queryKey: ["admin-batches-by-customer-code", debouncedCode],
+    queryFn: () => fetchBatchIdsForCode({ data: { customerCode: debouncedCode } }),
+    enabled: !!debouncedCode,
+  });
+  const customerBatchIds = useMemo(
+    () => (debouncedCode ? new Set(((codeQ.data as any)?.batchIds ?? []) as string[]) : null),
+    [debouncedCode, codeQ.data],
+  );
+
+  const availableDestinations = useMemo(
+    () => Array.from(new Set(allBatches.map((b) => b.destination_code).filter(Boolean))).sort(),
+    [allBatches],
+  );
+
+  const filteredBatches = useMemo(() => {
+    return allBatches.filter((b) => {
+      if (methodFilter.size > 0 && !methodFilter.has(b.shipping_method)) return false;
+      if (destFilter.size > 0 && !destFilter.has(b.destination_code)) return false;
+      // 客户号搜索还没查回来之前，宁可先不显示（避免一瞬间闪出一批不该显示的批次），
+      // 查询失败也当作"查不到"处理，不当无过滤放行。
+      if (debouncedCode) {
+        if (codeQ.isLoading || !customerBatchIds) return false;
+        if (!customerBatchIds.has(b.id)) return false;
+      }
+      return true;
+    });
+  }, [allBatches, methodFilter, destFilter, debouncedCode, customerBatchIds, codeQ.isLoading]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [methodFilter, destFilter, debouncedCode]);
+
+  const toggleMethod = (m: BatchMethod) => {
+    setMethodFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(m)) next.delete(m);
+      else next.add(m);
+      return next;
+    });
+  };
+  const toggleDest = (d: string) => {
+    setDestFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(d)) next.delete(d);
+      else next.add(d);
+      return next;
+    });
+  };
+
+  const pageItems = filteredBatches.slice((page - 1) * pageSize, page * pageSize);
 
   const [form, setForm] = useState({ display_name: "", planned_ship_date: "", shipping_method: "air" as BatchMethod, cargo_type: "", destination_code: "", notes: "" });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
@@ -117,13 +182,79 @@ function BatchesPage() {
   };
 
   return (
-    <Page title="批次管理" subtitle={q.data ? `共 ${q.data.batches.length} 个批次` : "加载中…"}
+    <Page title="批次管理" subtitle={
+      q.data
+        ? filteredBatches.length === allBatches.length
+          ? `共 ${allBatches.length} 个批次`
+          : `筛选出 ${filteredBatches.length} / ${allBatches.length} 个批次`
+        : "加载中…"
+    }
       action={canCreate && (
         <button onClick={() => { setForm(f => ({ ...f, shipping_method: availableMethods[0] ?? "air" })); setShowForm(true); }}
           className="inline-flex items-center gap-1.5 rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90">
           <Plus className="h-4 w-4"/>新建批次
         </button>
       )}>
+      <div className="mb-4 flex flex-wrap items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-[11px] uppercase tracking-wider text-slate-500">方式</span>
+          {BATCH_METHODS.map((m) => (
+            <label
+              key={m}
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition ${methodFilter.has(m) ? "border-brand bg-brand/10 text-brand" : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20"}`}
+            >
+              <input type="checkbox" checked={methodFilter.has(m)} onChange={() => toggleMethod(m)} className="hidden" />
+              {METHOD_LABEL[m] ?? m}
+            </label>
+          ))}
+        </div>
+        {availableDestinations.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-[11px] uppercase tracking-wider text-slate-500">目的地</span>
+            {availableDestinations.map((d) => (
+              <label
+                key={d}
+                className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition ${destFilter.has(d) ? "border-brand bg-brand/10 text-brand" : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20"}`}
+              >
+                <input type="checkbox" checked={destFilter.has(d)} onChange={() => toggleDest(d)} className="hidden" />
+                {d}
+              </label>
+            ))}
+          </div>
+        )}
+        <div className="relative ml-auto">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+          <input
+            value={customerCodeInput}
+            onChange={(e) => setCustomerCodeInput(e.target.value)}
+            placeholder="客户号"
+            className="w-40 rounded-md border border-white/10 bg-white/5 py-1.5 pl-8 pr-7 text-xs text-slate-100 placeholder:text-slate-500 focus:border-brand focus:outline-none"
+          />
+          {debouncedCode && codeQ.isLoading && (
+            <Loader2 className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-slate-500" />
+          )}
+          {customerCodeInput && !codeQ.isLoading && (
+            <button
+              onClick={() => setCustomerCodeInput("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        {(methodFilter.size > 0 || destFilter.size > 0 || customerCodeInput) && (
+          <button
+            onClick={() => {
+              setMethodFilter(new Set());
+              setDestFilter(new Set());
+              setCustomerCodeInput("");
+            }}
+            className="text-xs text-slate-500 hover:text-slate-300"
+          >
+            清空筛选
+          </button>
+        )}
+      </div>
       <div className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02]">
         <table className="w-full text-sm">
           <thead className="bg-white/[0.03] text-left text-[11px] uppercase tracking-wider text-slate-400">
@@ -143,7 +274,8 @@ function BatchesPage() {
           </thead>
           <tbody className="divide-y divide-white/5">
             {q.isLoading && <tr><td colSpan={11} className="py-10 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-slate-500"/></td></tr>}
-            {q.data?.batches.length === 0 && <tr><td colSpan={11} className="py-10 text-center text-slate-500">暂无批次</td></tr>}
+            {!q.isLoading && q.data?.batches.length === 0 && <tr><td colSpan={11} className="py-10 text-center text-slate-500">暂无批次</td></tr>}
+            {!q.isLoading && allBatches.length > 0 && filteredBatches.length === 0 && <tr><td colSpan={11} className="py-10 text-center text-slate-500">没有符合筛选条件的批次</td></tr>}
             {pageItems.map((b: any) => {
               const pmap: Record<string, string> = { paid: "text-emerald-300", partial: "text-amber-300", unpaid: "text-rose-300", empty: "text-slate-500" };
               const plabel: Record<string, string> = { paid: "已付", partial: "部分", unpaid: "未付", empty: "—" };
@@ -216,7 +348,7 @@ function BatchesPage() {
           </tbody>
         </table>
       </div>
-      <Pagination page={page} pageSize={pageSize} total={allBatches.length} onChange={setPage}/>
+      <Pagination page={page} pageSize={pageSize} total={filteredBatches.length} onChange={setPage}/>
 
 
 
