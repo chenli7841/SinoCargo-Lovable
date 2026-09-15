@@ -3267,10 +3267,12 @@ export const deductWalletForBatch = createServerFn({ method: "POST" })
       enforceBalance: false,
       awardPoints: false,
     });
-    if (!r.ok) {
-      if (r.reason === "already_paid") return { ok: false, reason: "already_paid" as const };
-      throw new Error(r.reason ?? "扣款失败");
-    }
+    // 之前这里只认字面量 "already_paid"，其它原因（no_waybills / nothing_to_bill /
+    // no_frozen_invoice 等）一律 throw new Error(r.reason ?? ...)——throw 出去的就是
+    // 内部原因代码本身（比如字面上的 "no_waybills"），到了 customer-view.tsx 的
+    // catch 块直接当错误文案显示，员工看到的是一串看不懂的英文代码，查不出真实情况。
+    // 现在原样透传全部原因，不再 throw，让前端按具体原因分别给出人话提示。
+    if (!r.ok) return { ok: false, reason: r.reason ?? "settle_failed" };
     return {
       ok: true,
       invoice_id: r.invoice_id,
@@ -3319,10 +3321,9 @@ export const deductBatchOffline = createServerFn({ method: "POST" })
       enforceBalance: false,
       awardPoints: false,
     });
-    if (!r.ok) {
-      if (r.reason === "already_paid") return { ok: false, reason: "already_paid" as const };
-      throw new Error(r.reason ?? "登记收款失败");
-    }
+    // 同 deductWalletForBatch 的问题：以前只认 already_paid，其它原因直接 throw
+    // 内部代码本身，员工看到的是查不出所以然的字符串。现在原样透传。
+    if (!r.ok) return { ok: false, reason: r.reason ?? "settle_failed" };
     return {
       ok: true,
       invoice_id: r.invoice_id,

@@ -791,11 +791,22 @@ function BatchesTab({ userId }: { userId: string }) {
     try {
       const r: any = await doPay({ data: { batchId, userId, amountCad } });
       if (!r?.ok) {
-        if (r?.reason === "already_paid") {
-          setMsg({ kind: "ok", text: "该批次已结清" });
-        } else {
-          setMsg({ kind: "err", text: r?.reason ?? "付款失败" });
-        }
+        // deductWalletForBatch 现在会原样透传 settleBatchForCustomer 的失败原因（不再
+        // throw 内部代码字符串），这里对应给出人话——尤其 no_waybills，很可能是这个
+        // 客户的 customer_code 跟订单/集运单上记录的对不上，需要联系开发排查数据，
+        // 不是"已经付过"，不能用同一句话。
+        const REASON_MSG: Record<string, string> = {
+          already_paid: "该批次已结清",
+          no_waybills: "按该客户号查不到这个批次下的订单/集运单，可能是客户号跟订单记录对不上，需要排查数据",
+          nothing_to_bill: "该批次费用计算为 0，无需付款",
+          customer_not_found: "客户信息异常",
+          no_frozen_invoice: "账单生成异常，请稍后重试",
+          nothing_to_pay: "该批次无需付款",
+          freeze_failed: "账单生成失败",
+          settle_failed: "结算失败，请稍后重试",
+        };
+        const known = r?.reason ? REASON_MSG[r.reason as string] : undefined;
+        setMsg({ kind: r?.reason === "already_paid" || r?.reason === "nothing_to_pay" ? "ok" : "err", text: known ?? r?.reason ?? "付款失败" });
       } else {
         setMsg({ kind: "ok", text: `付款成功 CA$${r.deducted_cad}，账单已生成` });
       }
