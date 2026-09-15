@@ -2811,8 +2811,12 @@ async function settleBatchForCustomer(
       operatorId: params.operatorId,
     });
     if (!ens.ok) {
-      // no unpaid waybills / nothing to bill → same "no-op" outcome the old inline path returned
-      if (["already_paid", "no_waybills", "nothing_to_bill"].includes(ens.reason ?? "")) {
+      // 这三种以前统一收成 "already_paid" 返回，前端一律显示"已结清"——但
+      // no_waybills（按 customer_code 一条订单/集运单都查不到，很可能是
+      // customer_code 跟运单实际归属对不上）和 nothing_to_bill（算出来是
+      // 0 元）跟"真的已经付过"是完全不同的情况，混在一起会让客户和客服都
+      // 误以为已结清、查不出真实原因。这里如实透传，前端各自给出对应提示。
+      if (ens.reason === "already_paid") {
         return { ok: false, reason: "already_paid" };
       }
       return { ok: false, reason: ens.reason ?? "freeze_failed" };

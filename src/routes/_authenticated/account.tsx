@@ -1510,6 +1510,14 @@ function BatchesTab({ onJump }: { onJump: (t: Tab) => void }) {
           "Invoice not ready — please retry shortly or contact support",
         ],
         nothing_to_pay: ["该批次无需付款", "Nothing to pay for this batch"],
+        // no_waybills：按你的客户信息一条订单/集运单都查不到，多半是客户信息有误
+        // 或对不上，不是"已经付过"——不能跟 already_paid 用同一句"已结清"，那样反而
+        // 让人以为不用付钱，看不出这其实是个需要联系客服核实的数据问题。
+        no_waybills: [
+          "查不到该批次下属于你的订单记录，请联系客服核实",
+          "Couldn't find your orders under this batch — please contact support",
+        ],
+        nothing_to_bill: ["该批次费用计算为 0，无需付款", "This batch totals CA$0 — nothing to pay"],
         freeze_failed: ["账单生成失败，请联系客服", "Failed to generate invoice — please contact support"],
         settle_failed: ["结算失败，请稍后重试", "Settlement failed — please try again"],
       };
