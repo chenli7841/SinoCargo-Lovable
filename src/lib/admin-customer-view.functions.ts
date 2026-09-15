@@ -279,6 +279,80 @@ export const assignCustomerSalesRep = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// ============ 账号安全：免密登录链接 / 重置密码 ============
+// 都只有 owner/manager 能用——这两个操作比"客户视图"本身的只读代客操作权限
+// 大得多（能让操作者直接以客户身份登录，或者让客户原密码失效），复用
+// assertCustomerViewAccess(...,targetUserId) 不够，单独再叠一层
+// assertOwnerOrManager，跟客户归属那边同一个权限模型。
+
+// 免密登录链接——生成一次性 magiclink，谁拿到这个链接谁就能以这个客户身份登录，
+// 不改客户原密码、客户完全无感知。跟微信登录回调（wechat.callback.ts）用的是
+// 同一个 supabaseAdmin.auth.admin.generateLink 写法。链接本身很敏感，只在这次
+// 响应里返回一次，前端不做任何持久化存储。
+export const generateCustomerLoginLink = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
+    await assertOwnerOrManager(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("id, email, customer_code")
+      .eq("id", data.userId)
+      .maybeSingle();
+    if (!profile || !(profile as any).email) throw new Error("客户没有可用的登录邮箱");
+    const origin = (process.env.WECHAT_REDIRECT_ORIGIN || "https://shopper.epluscanada.com").replace(/\/+$/, "");
+    const { data: link, error } = await (supabaseAdmin as any).auth.admin.generateLink({
+      type: "magiclink",
+      email: (profile as any).email,
+      options: { redirectTo: `${origin}/account` },
+    });
+    if (error || !link?.properties?.action_link) throw new Error(error?.message ?? "生成登录链接失败");
+    const operator_name = await getOperatorName(supabaseAdmin, context.userId);
+    // 日志不记链接本身——记了等于把这个敏感凭证永久存进了日志表。
+    await recordLog(supabaseAdmin, {
+      entity_type: "customer_profile",
+      entity_id: data.userId,
+      action: "generate_login_link",
+      operator_id: context.userId,
+      operator_name,
+      note: `生成免密登录链接（客户 ${(profile as any).customer_code ?? data.userId}）`,
+    });
+    return { ok: true, link: link.properties.action_link as string };
+  });
+
+// 重置密码——生成一个新的随机密码直接写进去，客户原密码立即失效。密码明文只在
+// 这次响应里返回一次，服务端和日志都不留底，需要员工自己通过其它渠道转告客户。
+export const resetCustomerPassword = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { userId: string }) => d)
+  .handler(async ({ data, context }) => {
+    await assertCustomerViewAccess(context.supabase, context.userId, data.userId);
+    await assertOwnerOrManager(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("id, customer_code")
+      .eq("id", data.userId)
+      .maybeSingle();
+    if (!profile) throw new Error("客户不存在");
+    const { randomBytes } = await import("node:crypto");
+    const newPassword = randomBytes(12).toString("base64url"); // 16 字符，够强，也够短方便口述/转告
+    const { error } = await (supabaseAdmin as any).auth.admin.updateUserById(data.userId, { password: newPassword });
+    if (error) throw new Error(error.message);
+    const operator_name = await getOperatorName(supabaseAdmin, context.userId);
+    await recordLog(supabaseAdmin, {
+      entity_type: "customer_profile",
+      entity_id: data.userId,
+      action: "reset_password",
+      operator_id: context.userId,
+      operator_name,
+      note: `重置登录密码（客户 ${(profile as any).customer_code ?? data.userId}），新密码未记录在日志中`,
+    });
+    return { ok: true, password: newPassword };
+  });
+
 // ============ Addresses: full CRUD on behalf of the customer ============
 export const listCustomerAddresses = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

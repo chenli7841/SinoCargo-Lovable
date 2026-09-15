@@ -21,6 +21,8 @@ import {
   createCustomerForwarding,
   listSalesReps,
   assignCustomerSalesRep,
+  generateCustomerLoginLink,
+  resetCustomerPassword,
 } from "@/lib/admin-customer-view.functions";
 import { deductWalletForBatch } from "@/lib/orders.functions";
 import { getMyRoles } from "@/lib/admin.functions";
@@ -53,7 +55,10 @@ import {
   AlertTriangle,
   Send,
   ChevronDown,
-
+  KeyRound,
+  LogIn,
+  Copy,
+  X,
 } from "lucide-react";
 import { CustomerForwardingForm } from "@/components/admin/CustomerForwardingForm";
 
@@ -964,7 +969,7 @@ function ProfileTab({ userId, initial }: { userId: string; initial: any }) {
     staleTime: 30 * 60_000,
   });
   const myRoles = (rolesQ.data as any)?.roles ?? [];
-  const canAssignSalesRep = myRoles.includes("owner") || myRoles.includes("manager");
+  const isOwnerOrManager = myRoles.includes("owner") || myRoles.includes("manager");
 
   // 任何有客户视图访问权的人都能读这份名单（哪怕自己不能改，也要能显示"当前归属"）。
   const fetchReps = useServerFn(listSalesReps);
@@ -988,6 +993,53 @@ function ProfileTab({ userId, initial }: { userId: string; initial: any }) {
       setAssignMsg({ kind: "err", text: e?.message ?? "保存失败" });
     } finally {
       setAssignBusy(false);
+    }
+  };
+
+  // 账号安全：免密登录链接 / 重置密码——都是敏感操作，明文/链接只在这次响应里出现
+  // 一次，state 清空就是真清空，不写 localStorage/sessionStorage，也不在这个组件外
+  // 传递。
+  const genLink = useServerFn(generateCustomerLoginLink);
+  const resetPw = useServerFn(resetCustomerPassword);
+  const [loginLink, setLoginLink] = useState<string | null>(null);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [newPassword, setNewPassword] = useState<string | null>(null);
+  const [pwBusy, setPwBusy] = useState(false);
+  const [secMsg, setSecMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  const onGenLink = async () => {
+    setLinkBusy(true);
+    setSecMsg(null);
+    try {
+      const r: any = await genLink({ data: { userId } });
+      setLoginLink(r.link);
+    } catch (e: any) {
+      setSecMsg({ kind: "err", text: e?.message ?? "生成失败" });
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+
+  const onResetPw = async () => {
+    if (!confirm("确认重置该客户的登录密码？重置后客户原密码立即失效，需要你另行把新密码转告客户。")) return;
+    setPwBusy(true);
+    setSecMsg(null);
+    try {
+      const r: any = await resetPw({ data: { userId } });
+      setNewPassword(r.password);
+    } catch (e: any) {
+      setSecMsg({ kind: "err", text: e?.message ?? "重置失败" });
+    } finally {
+      setPwBusy(false);
+    }
+  };
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setSecMsg({ kind: "ok", text: "已复制" });
+    } catch {
+      setSecMsg({ kind: "err", text: "复制失败，请手动选中文本复制" });
     }
   };
 
@@ -1069,10 +1121,10 @@ function ProfileTab({ userId, initial }: { userId: string; initial: any }) {
       <h3 className="font-display text-base font-bold">客户归属</h3>
       <p className="mt-1 text-xs text-slate-400">
         分配给哪个销售代表账号（角色 sales_rep）——该销售代表登录后台后，客户视图只能查到分配给自己的客户。
-        {!canAssignSalesRep && " 只有总负责人/主管能修改这里，你当前是只读。"}
+        {!isOwnerOrManager && " 只有总负责人/主管能修改这里，你当前是只读。"}
       </p>
       <div className="mt-3 max-w-xs">
-        {canAssignSalesRep ? (
+        {isOwnerOrManager ? (
           <select value={salesRepId} onChange={(e) => setSalesRepId(e.target.value)} className={inputCls}>
             <option value="">未分配</option>
             {reps.map((r) => (
@@ -1092,7 +1144,7 @@ function ProfileTab({ userId, initial }: { userId: string; initial: any }) {
           {assignMsg.text}
         </div>
       )}
-      {canAssignSalesRep && (
+      {isOwnerOrManager && (
         <button
           onClick={onAssign}
           disabled={assignBusy}
@@ -1103,6 +1155,81 @@ function ProfileTab({ userId, initial }: { userId: string; initial: any }) {
         </button>
       )}
     </section>
+
+    {isOwnerOrManager && (
+      <section className="rounded-2xl border border-white/5 bg-white/[0.03] p-5">
+        <h3 className="font-display text-base font-bold">账号安全</h3>
+        <p className="mt-1 text-xs text-slate-400">
+          这两个操作都很敏感——免密登录链接谁拿到都能以这个客户身份登录；重置密码会让客户原密码立即失效。只有总负责人/主管能用，每次操作都会记录到操作日志（不含链接/密码本身）。
+        </p>
+        {secMsg && (
+          <div
+            className={`mt-3 rounded-md border px-3 py-1.5 text-xs ${secMsg.kind === "ok" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-rose-500/30 bg-rose-500/10 text-rose-300"}`}
+          >
+            {secMsg.text}
+          </div>
+        )}
+
+        {loginLink ? (
+          <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+            <div className="mb-2 flex items-center justify-between text-xs font-semibold text-amber-300">
+              <span>一次性登录链接 — 关闭后无法再次查看，需要重新生成</span>
+              <button onClick={() => setLoginLink(null)} className="text-amber-300/70 hover:text-amber-200">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="select-all break-all rounded-md border border-white/10 bg-white/5 px-2 py-2 font-mono text-[11px] text-slate-100">
+              {loginLink}
+            </div>
+            <button
+              onClick={() => copyText(loginLink)}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-brand"
+            >
+              <Copy className="h-3 w-3" />
+              复制链接
+            </button>
+          </div>
+        ) : newPassword ? (
+          <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+            <div className="mb-2 flex items-center justify-between text-xs font-semibold text-amber-300">
+              <span>新密码 — 关闭后无法再次查看，客户原密码已失效</span>
+              <button onClick={() => setNewPassword(null)} className="text-amber-300/70 hover:text-amber-200">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="select-all break-all rounded-md border border-white/10 bg-white/5 px-2 py-2 font-mono text-sm text-slate-100">
+              {newPassword}
+            </div>
+            <button
+              onClick={() => copyText(newPassword)}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-brand"
+            >
+              <Copy className="h-3 w-3" />
+              复制密码
+            </button>
+          </div>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              onClick={onGenLink}
+              disabled={linkBusy}
+              className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-brand disabled:opacity-50"
+            >
+              {linkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
+              生成免密登录链接
+            </button>
+            <button
+              onClick={onResetPw}
+              disabled={pwBusy}
+              className="inline-flex items-center gap-1.5 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
+            >
+              {pwBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+              重置密码
+            </button>
+          </div>
+        )}
+      </section>
+    )}
     </div>
   );
 }
